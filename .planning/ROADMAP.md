@@ -37,10 +37,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 7 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Twilio WhatsApp template submission (WHAT-04)
-- [ ] 01-02-PLAN.md — Dev environment setup + test scaffolding (Wave 0)
-- [ ] 01-03-PLAN.md — pydantic-settings config, SQLAlchemy async engine, all 6 models
-- [ ] 01-04-PLAN.md — Alembic async init, initial schema migration, apply to Neon
+- [x] 01-01-PLAN.md — Twilio WhatsApp template submission (WHAT-04)
+- [x] 01-02-PLAN.md — Dev environment setup + test scaffolding (Wave 0)
+- [x] 01-03-PLAN.md — pydantic-settings config, SQLAlchemy async engine, all 6 models
+- [x] 01-04-PLAN.md — Alembic async init, initial schema migration, apply to Neon
 - [ ] 01-05-PLAN.md — FastAPI backend skeleton, /health endpoint, Railway config
 - [ ] 01-06-PLAN.md — APScheduler worker skeleton, advisory lock, Railway config
 - [ ] 01-07-PLAN.md — Railway deployment verification, .env.example
@@ -147,7 +147,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure and Foundation | 0/7 | Planned    |  |
+| 1. Infrastructure and Foundation | 4/7 | In Progress|  |
 | 2. FastAPI Backend | 0/TBD | Not started | - |
 | 3. React Approval Dashboard | 0/TBD | Not started | - |
 | 4. Twitter Agent | 0/TBD | Not started | - |

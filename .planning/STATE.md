@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Phase 1 execution - Wave 3 (Plan 01-04 Alembic) agent running in background
-last_updated: "2026-03-31T03:30:35.353Z"
+stopped_at: Completed 01-06-PLAN.md (APScheduler worker skeleton)
+last_updated: "2026-03-31T16:30:19.498Z"
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 7
-  completed_plans: 1
+  completed_plans: 4
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 01 (infrastructure-and-foundation) — EXECUTING
-Plan: 2 of 7
+Plan: 4 of 7
 
 ## Performance Metrics
 
@@ -47,6 +47,9 @@ Plan: 2 of 7
 
 *Updated after each plan completion*
 | Phase 01 P02 | 279 | 3 tasks | 13 files |
+| Phase 01 P04 | 5 | 3 tasks | 8 files |
+| Phase 01 P05 | 2 | 2 tasks | 6 files |
+| Phase 01 P06 | 3 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -61,6 +64,10 @@ Recent decisions affecting current work:
 - [Pre-build]: shadcn/ui tailwind-v4 branch only — main branch targets Tailwind v3
 - [Phase 01]: pytest config embedded in pyproject.toml [tool.pytest.ini_options] — no separate pytest.ini
 - [Phase 01]: asyncio_mode=auto in both projects — eliminates need for @pytest.mark.asyncio decorator on individual tests
+- [Phase 01]: asyncpg SSL: strip sslmode=require from URL, use connect_args ssl=True — asyncpg rejects sslmode as URL param
+- [Phase 01]: FastAPI lifespan used for engine.dispose() on shutdown — cleaner than deprecated on_event pattern
+- [Phase 01]: test_schema.py skip condition checks for real neon.tech URL to prevent env var leakage from test_health.py fake DATABASE_URL
+- [Phase 01]: APScheduler 3.11.2 AsyncIOScheduler with advisory lock — numReplicas=1 is primary prevention, pg_try_advisory_lock is defense-in-depth
 
 ### Pending Todos
 
@@ -74,6 +81,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31T03:30:35.350Z
-Stopped at: Phase 1 execution - Wave 3 (Plan 01-04 Alembic) agent running in background
-Resume file: .planning/phases/01-infrastructure-and-foundation/01-04-PLAN.md
+Last session: 2026-03-31T16:30:19.496Z
+Stopped at: Completed 01-06-PLAN.md (APScheduler worker skeleton)
+Resume file: None

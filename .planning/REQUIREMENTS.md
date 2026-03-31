@@ -9,15 +9,15 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: PostgreSQL database with full schema deployed on Neon (6 tables: draft_items, content_bundles, agent_runs, daily_digests, watchlists, keywords)
-- [ ] **INFRA-02**: Indexes on status, platform, created_at, expires_at columns for query performance
-- [ ] **INFRA-03**: FastAPI backend deployed on Railway with all API endpoints operational
-- [ ] **INFRA-04**: Separate scheduler worker process deployed as second Railway service
-- [ ] **INFRA-05**: APScheduler with AsyncIOScheduler and database-level job lock to prevent duplicate runs during zero-downtime deploys
+- [x] **INFRA-01**: PostgreSQL database with full schema deployed on Neon (6 tables: draft_items, content_bundles, agent_runs, daily_digests, watchlists, keywords)
+- [x] **INFRA-02**: Indexes on status, platform, created_at, expires_at columns for query performance
+- [x] **INFRA-03**: FastAPI backend deployed on Railway with all API endpoints operational
+- [x] **INFRA-04**: Separate scheduler worker process deployed as second Railway service
+- [x] **INFRA-05**: APScheduler with AsyncIOScheduler and database-level job lock to prevent duplicate runs during zero-downtime deploys
 - [x] **INFRA-06**: Alembic migration system for schema versioning
 - [x] **INFRA-07**: Neon connection pooling configured (pool_pre_ping=True, pool_recycle=300, PgBouncer transaction-mode)
 - [x] **INFRA-08**: Environment variable configuration for all external service credentials
-- [ ] **INFRA-09**: Health check endpoints for Railway monitoring
+- [x] **INFRA-09**: Health check endpoints for Railway monitoring
 
 ### Authentication
 
@@ -186,15 +186,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
-| INFRA-05 | Phase 1 | Pending |
+| INFRA-01 | Phase 1 | Complete |
+| INFRA-02 | Phase 1 | Complete |
+| INFRA-03 | Phase 1 | Complete |
+| INFRA-04 | Phase 1 | Complete |
+| INFRA-05 | Phase 1 | Complete |
 | INFRA-06 | Phase 1 | Complete |
 | INFRA-07 | Phase 1 | Complete |
 | INFRA-08 | Phase 1 | Complete |
-| INFRA-09 | Phase 1 | Pending |
+| INFRA-09 | Phase 1 | Complete |
 | WHAT-04 | Phase 1 | Pending |
 | EXEC-03 | Phase 1 | Complete |
 | EXEC-04 | Phase 1 | Complete |
