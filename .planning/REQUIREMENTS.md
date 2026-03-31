@@ -14,9 +14,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **INFRA-03**: FastAPI backend deployed on Railway with all API endpoints operational
 - [ ] **INFRA-04**: Separate scheduler worker process deployed as second Railway service
 - [ ] **INFRA-05**: APScheduler with AsyncIOScheduler and database-level job lock to prevent duplicate runs during zero-downtime deploys
-- [ ] **INFRA-06**: Alembic migration system for schema versioning
-- [ ] **INFRA-07**: Neon connection pooling configured (pool_pre_ping=True, pool_recycle=300, PgBouncer transaction-mode)
-- [ ] **INFRA-08**: Environment variable configuration for all external service credentials
+- [x] **INFRA-06**: Alembic migration system for schema versioning
+- [x] **INFRA-07**: Neon connection pooling configured (pool_pre_ping=True, pool_recycle=300, PgBouncer transaction-mode)
+- [x] **INFRA-08**: Environment variable configuration for all external service credentials
 - [ ] **INFRA-09**: Health check endpoints for Railway monitoring
 
 ### Authentication
@@ -139,8 +139,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **EXEC-01**: Every agent run logged: agent name, start/end time, items found, items queued, items filtered, errors
 - [ ] **EXEC-02**: Agents read scoring settings from database at start of each run (no cached config)
-- [ ] **EXEC-03**: All agent functions are async (AsyncAnthropic + AsyncIOScheduler)
-- [ ] **EXEC-04**: Graceful error handling — agent failures logged and alerted, do not crash the worker process
+- [x] **EXEC-03**: All agent functions are async (AsyncAnthropic + AsyncIOScheduler)
+- [x] **EXEC-04**: Graceful error handling — agent failures logged and alerted, do not crash the worker process
 
 ## v1.x Requirements
 
@@ -191,13 +191,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-03 | Phase 1 | Pending |
 | INFRA-04 | Phase 1 | Pending |
 | INFRA-05 | Phase 1 | Pending |
-| INFRA-06 | Phase 1 | Pending |
-| INFRA-07 | Phase 1 | Pending |
-| INFRA-08 | Phase 1 | Pending |
+| INFRA-06 | Phase 1 | Complete |
+| INFRA-07 | Phase 1 | Complete |
+| INFRA-08 | Phase 1 | Complete |
 | INFRA-09 | Phase 1 | Pending |
 | WHAT-04 | Phase 1 | Pending |
-| EXEC-03 | Phase 1 | Pending |
-| EXEC-04 | Phase 1 | Pending |
+| EXEC-03 | Phase 1 | Complete |
+| EXEC-04 | Phase 1 | Complete |
 | AUTH-01 | Phase 2 | Pending |
 | AUTH-02 | Phase 2 | Pending |
 | AUTH-03 | Phase 2 | Pending |
