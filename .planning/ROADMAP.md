@@ -72,8 +72,15 @@ Plans:
   3. Operator can edit draft text inline on the card, then approve, edit+approve, or reject; rejection requires a reason; the card clears on any action
   4. One click copies the approved or edited draft text to clipboard with a toast confirmation; the source post link opens in a new tab
   5. Related cards sharing the same story across platforms are visually linked on the dashboard
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 03-01-PLAN.md — Bootstrap Vite + React 19 + Tailwind v4 + shadcn/ui, TypeScript types, API client, test infra, CORS fix
+- [ ] 03-02-PLAN.md — Zustand store, TanStack Query hooks, ApprovalCard component with draft tabs, inline editor, reject panel
+- [ ] 03-03-PLAN.md — Login page, auth flow, AppShell layout, sidebar, platform tabs, routing, page stubs
+- [ ] 03-04-PLAN.md — QueuePage wiring, content modal, related badges, empty state, database seed script
+- [ ] 03-05-PLAN.md — Human verification of complete approval dashboard (checkpoint)
 
 ### Phase 4: Twitter Agent
 **Goal**: The Twitter Agent runs on schedule, fetches qualifying gold-sector posts, scores them, drafts dual-format alternatives with a separate compliance checker, and delivers items to the dashboard — with monthly quota tracking and hard-stop logic running from day one
@@ -155,7 +162,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Infrastructure and Foundation | 4/7 | In Progress|  |
 | 2. FastAPI Backend | 3/4 | In Progress|  |
-| 3. React Approval Dashboard | 0/TBD | Not started | - |
+| 3. React Approval Dashboard | 0/5 | Not started | - |
 | 4. Twitter Agent | 0/TBD | Not started | - |
 | 5. Senior Agent Core | 0/TBD | Not started | - |
 | 6. Instagram Agent | 0/TBD | Not started | - |
