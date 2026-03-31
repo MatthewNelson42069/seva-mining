@@ -34,7 +34,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. APScheduler worker starts and acquires the DB job lock; a second instance cannot acquire the same lock simultaneously
   4. All external service credentials load from environment variables and the app starts without any hard-coded secrets
   5. Twilio WhatsApp message templates for morning digest, breaking news, and expiry alert are submitted to Meta for approval
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Twilio WhatsApp template submission (WHAT-04)
+- [ ] 01-02-PLAN.md — Dev environment setup + test scaffolding (Wave 0)
+- [ ] 01-03-PLAN.md — pydantic-settings config, SQLAlchemy async engine, all 6 models
+- [ ] 01-04-PLAN.md — Alembic async init, initial schema migration, apply to Neon
+- [ ] 01-05-PLAN.md — FastAPI backend skeleton, /health endpoint, Railway config
+- [ ] 01-06-PLAN.md — APScheduler worker skeleton, advisory lock, Railway config
+- [ ] 01-07-PLAN.md — Railway deployment verification, .env.example
 
 ### Phase 2: FastAPI Backend
 **Goal**: The API server handles authenticated requests, enforces the draft state machine with correct transitions, and can trigger outbound WhatsApp notifications — giving the dashboard a complete interface to work against before agents run
@@ -138,7 +147,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure and Foundation | 0/TBD | Not started | - |
+| 1. Infrastructure and Foundation | 0/7 | Not started | - |
 | 2. FastAPI Backend | 0/TBD | Not started | - |
 | 3. React Approval Dashboard | 0/TBD | Not started | - |
 | 4. Twitter Agent | 0/TBD | Not started | - |
