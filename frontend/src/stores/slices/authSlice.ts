@@ -5,12 +5,21 @@ export interface AuthSlice {
   clearToken: () => void
 }
 
+function getStoredToken(): string | null {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
+  } catch {
+    return null
+  }
+}
+
 export function createAuthSlice(
   set: (fn: (state: AuthSlice) => Partial<AuthSlice>, replace?: boolean) => void
 ): AuthSlice {
+  const storedToken = getStoredToken()
   return {
-    token: localStorage.getItem('access_token'),
-    isAuthenticated: !!localStorage.getItem('access_token'),
+    token: storedToken,
+    isAuthenticated: !!storedToken,
 
     setToken: (token) => {
       localStorage.setItem('access_token', token)
