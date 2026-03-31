@@ -1,7 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Platform } from '@/api/types'
 import { PlatformTabBar } from '@/components/layout/PlatformTabBar'
+import { ApprovalCard } from '@/components/approval/ApprovalCard'
+import { ContentSummaryCard } from '@/components/approval/ContentSummaryCard'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { useQueue } from '@/hooks/useQueue'
+import { useAppStore } from '@/stores/index'
+import { Button } from '@/components/ui/button'
 
 export function QueuePage() {
   const [activePlatform, setActivePlatform] = useState<Platform>('twitter')
@@ -23,6 +28,16 @@ export function QueuePage() {
   const activeQuery = { twitter: twitterQuery, instagram: instagramQuery, content: contentQuery }[activePlatform]
   const activeItems = activeQuery.data?.pages.flatMap((p) => p.items) ?? []
   const isLoading = activeQuery.isLoading
+  const hasNextPage = activeQuery.hasNextPage
+  const isFetchingNextPage = activeQuery.isFetchingNextPage
+  const fetchNextPage = activeQuery.fetchNextPage
+
+  // Clear pending timeouts on unmount to prevent leaks
+  useEffect(() => {
+    return () => {
+      useAppStore.getState().clearAllPending()
+    }
+  }, [])
 
   return (
     <div className="flex flex-col h-full">
@@ -35,30 +50,36 @@ export function QueuePage() {
       <div className="flex-1 p-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
-            <p className="text-sm text-gray-400">Loading...</p>
+            <p className="text-sm text-muted-foreground">Loading...</p>
           </div>
         ) : activeItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center mb-4">
-              <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h3 className="text-sm font-medium text-gray-900 mb-1">Queue is clear</h3>
-            <p className="text-sm text-gray-500 max-w-xs">
-              The system is monitoring and working. New items will appear here when agents find content worth reviewing.
-            </p>
-          </div>
+          <EmptyState />
         ) : (
-          <div>
-            {/* Approval cards will be rendered here in Plan 04 */}
-            <div className="space-y-4">
-              {activeItems.map((item) => (
-                <div key={item.id} className="border border-gray-100 rounded-xl p-4 text-sm text-gray-700">
-                  {item.source_text ?? item.id}
-                </div>
-              ))}
-            </div>
+          <div className="space-y-4">
+            {activeItems.map((item) =>
+              activePlatform === 'content' ? (
+                <ContentSummaryCard key={item.id} item={item} />
+              ) : (
+                <ApprovalCard
+                  key={item.id}
+                  item={item}
+                  platform={activePlatform}
+                />
+              )
+            )}
+
+            {hasNextPage && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                >
+                  {isFetchingNextPage ? 'Loading more...' : 'Load more'}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
