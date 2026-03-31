@@ -57,9 +57,9 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Dependencies, auth system (bcrypt + JWT), Pydantic schemas, edit_delta migration, auth tests
-- [ ] 02-02-PLAN.md — Queue endpoints with state machine enforcement (approve/reject/edit)
-- [ ] 02-03-PLAN.md — Supporting CRUD endpoints (watchlists, keywords, agent-runs, digests, content)
+- [x] 02-01-PLAN.md — Dependencies, auth system (bcrypt + JWT), Pydantic schemas, edit_delta migration, auth tests
+- [x] 02-02-PLAN.md — Queue endpoints with state machine enforcement (approve/reject/edit)
+- [x] 02-03-PLAN.md — Supporting CRUD endpoints (watchlists, keywords, agent-runs, digests, content)
 - [ ] 02-04-PLAN.md — WhatsApp notification service (Twilio templates), full test suite verification
 
 ### Phase 3: React Approval Dashboard
@@ -154,7 +154,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure and Foundation | 4/7 | In Progress|  |
-| 2. FastAPI Backend | 0/4 | Not started | - |
+| 2. FastAPI Backend | 3/4 | In Progress|  |
 | 3. React Approval Dashboard | 0/TBD | Not started | - |
 | 4. Twitter Agent | 0/TBD | Not started | - |
 | 5. Senior Agent Core | 0/TBD | Not started | - |

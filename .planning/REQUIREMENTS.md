@@ -21,9 +21,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication
 
-- [ ] **AUTH-01**: Operator can log in with a password on the dashboard
-- [ ] **AUTH-02**: Session persists across browser refresh (JWT token)
-- [ ] **AUTH-03**: Unauthenticated requests to dashboard and API are rejected
+- [x] **AUTH-01**: Operator can log in with a password on the dashboard
+- [x] **AUTH-02**: Session persists across browser refresh (JWT token)
+- [x] **AUTH-03**: Unauthenticated requests to dashboard and API are rejected
 
 ### Twitter Agent
 
@@ -137,7 +137,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Agent Execution
 
-- [ ] **EXEC-01**: Every agent run logged: agent name, start/end time, items found, items queued, items filtered, errors
+- [x] **EXEC-01**: Every agent run logged: agent name, start/end time, items found, items queued, items filtered, errors
 - [ ] **EXEC-02**: Agents read scoring settings from database at start of each run (no cached config)
 - [x] **EXEC-03**: All agent functions are async (AsyncAnthropic + AsyncIOScheduler)
 - [x] **EXEC-04**: Graceful error handling — agent failures logged and alerted, do not crash the worker process
@@ -198,10 +198,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WHAT-04 | Phase 1 | Pending |
 | EXEC-03 | Phase 1 | Complete |
 | EXEC-04 | Phase 1 | Complete |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
-| EXEC-01 | Phase 2 | Pending |
+| AUTH-01 | Phase 2 | Complete |
+| AUTH-02 | Phase 2 | Complete |
+| AUTH-03 | Phase 2 | Complete |
+| EXEC-01 | Phase 2 | Complete |
 | DASH-01 | Phase 3 | Pending |
 | DASH-02 | Phase 3 | Pending |
 | DASH-03 | Phase 3 | Pending |
