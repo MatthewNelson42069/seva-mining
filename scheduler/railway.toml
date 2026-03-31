@@ -1,0 +1,9 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "scheduler/Dockerfile"
+
+[deploy]
+numReplicas = 1          # CRITICAL: never set to 2+ — creates duplicate APScheduler instances
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
+# No healthcheckPath — worker has no HTTP port; Railway monitors via process status
