@@ -2,7 +2,7 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import async_engine_from_config, create_async_engine
 from sqlalchemy import pool
 
 from alembic import context
@@ -22,10 +22,13 @@ if config.config_file_name is not None:
 # Target metadata — Alembic diffs against this to generate migrations
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url from environment variable (DATABASE_URL)
-# This means alembic.ini sqlalchemy.url is a placeholder only
+# Override sqlalchemy.url from environment variable (DATABASE_URL).
+# asyncpg does not accept sslmode=require as a URL query param — strip it and
+# pass ssl=True via connect_args instead. (Pitfall: asyncpg SSL handling)
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
+    # Strip ?sslmode=require (or &sslmode=require) — asyncpg uses ssl kwarg instead
+    database_url = database_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
     config.set_main_option("sqlalchemy.url", database_url)
 
 
@@ -44,10 +47,16 @@ def run_migrations_offline() -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations in 'online' mode using an async engine."""
+    # Pass ssl=True via connect_args for Neon (asyncpg does not support sslmode= in URL)
+    connect_args = {}
+    if os.environ.get("DATABASE_URL", "").find("neon.tech") != -1:
+        connect_args["ssl"] = True
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
