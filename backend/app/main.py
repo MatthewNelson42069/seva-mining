@@ -2,6 +2,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import engine
 from app.routers.auth import router as auth_router
+from app.routers.watchlists import router as watchlists_router
+from app.routers.keywords import router as keywords_router
+from app.routers.agent_runs import router as agent_runs_router
+from app.routers.digests import router as digests_router
+from app.routers.content import router as content_router
 
 
 @asynccontextmanager
@@ -20,6 +25,11 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+app.include_router(watchlists_router)
+app.include_router(keywords_router)
+app.include_router(agent_runs_router)
+app.include_router(digests_router)
+app.include_router(content_router)
 
 
 @app.get("/health")
