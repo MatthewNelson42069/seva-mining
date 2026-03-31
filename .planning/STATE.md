@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 2
-Plan: Not started
+Plan: 3 (02-02 complete)
 
 ## Performance Metrics
 
@@ -68,6 +68,8 @@ Recent decisions affecting current work:
 - [Phase 01]: FastAPI lifespan used for engine.dispose() on shutdown — cleaner than deprecated on_event pattern
 - [Phase 01]: test_schema.py skip condition checks for real neon.tech URL to prevent env var leakage from test_health.py fake DATABASE_URL
 - [Phase 01]: APScheduler 3.11.2 AsyncIOScheduler with advisory lock — numReplicas=1 is primary prevention, pg_try_advisory_lock is defense-in-depth
+- [Phase 02-02]: Queue router uses no prefix — /queue and /items/{id}/* are separate top-level paths matching spec, not nested under /queue prefix
+- [Phase 02-02]: VALID_TRANSITIONS dict is single source of truth for state machine — only DraftStatus.pending has allowed targets
 
 ### Pending Todos
 
@@ -81,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31T17:22:34.539Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-fastapi-backend/02-CONTEXT.md
+Last session: 2026-03-31T19:11:29Z
+Stopped at: Completed 02-fastapi-backend/02-02-PLAN.md
+Resume file: .planning/phases/02-fastapi-backend/02-03-PLAN.md
