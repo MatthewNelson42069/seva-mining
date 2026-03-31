@@ -4,11 +4,11 @@ Tests for WhatsApp notification service (app.services.whatsapp).
 Uses unittest.mock to avoid real Twilio API calls.
 """
 import json
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 
 from app.config import Settings
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -40,7 +40,7 @@ def _make_settings() -> Settings:
 
 async def test_template_sid_morning_digest():
     """send_whatsapp_template('morning_digest', ...) uses the correct content_sid."""
-    from app.services.whatsapp import send_whatsapp_template, TEMPLATE_SIDS
+    from app.services.whatsapp import send_whatsapp_template
 
     mock_message = MagicMock()
     mock_message.sid = "SM123"
@@ -116,8 +116,9 @@ async def test_invalid_template_name():
 
 async def test_twilio_failure_logged_and_reraised():
     """On TwilioRestException, function logs error and re-raises after retry."""
-    from app.services.whatsapp import send_whatsapp_template
     from twilio.base.exceptions import TwilioRestException
+
+    from app.services.whatsapp import send_whatsapp_template
 
     # Simulate Twilio SDK raising an exception — create one that matches the real signature
     twilio_error = TwilioRestException(

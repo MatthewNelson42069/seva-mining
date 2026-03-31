@@ -1,8 +1,10 @@
 import asyncio
 import json
 import logging
-from twilio.rest import Client
+
 from twilio.base.exceptions import TwilioRestException
+from twilio.rest import Client
+
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
