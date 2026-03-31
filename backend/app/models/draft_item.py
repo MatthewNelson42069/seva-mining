@@ -39,6 +39,7 @@ class DraftItem(Base):
     urgency = Column(String(20))
     related_id = Column(UUID(as_uuid=True), ForeignKey("draft_items.id"), nullable=True)
     rejection_reason = Column(Text)
+    edit_delta = Column(Text)   # original draft text preserved on edited_approved (D-14)
     expires_at = Column(DateTime(timezone=True))
     decided_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
