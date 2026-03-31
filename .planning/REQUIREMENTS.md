@@ -186,13 +186,111 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (Populated during roadmap creation) | | |
+| INFRA-01 | Phase 1 | Pending |
+| INFRA-02 | Phase 1 | Pending |
+| INFRA-03 | Phase 1 | Pending |
+| INFRA-04 | Phase 1 | Pending |
+| INFRA-05 | Phase 1 | Pending |
+| INFRA-06 | Phase 1 | Pending |
+| INFRA-07 | Phase 1 | Pending |
+| INFRA-08 | Phase 1 | Pending |
+| INFRA-09 | Phase 1 | Pending |
+| WHAT-04 | Phase 1 | Pending |
+| EXEC-03 | Phase 1 | Pending |
+| EXEC-04 | Phase 1 | Pending |
+| AUTH-01 | Phase 2 | Pending |
+| AUTH-02 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Pending |
+| EXEC-01 | Phase 2 | Pending |
+| DASH-01 | Phase 3 | Pending |
+| DASH-02 | Phase 3 | Pending |
+| DASH-03 | Phase 3 | Pending |
+| DASH-04 | Phase 3 | Pending |
+| DASH-05 | Phase 3 | Pending |
+| DASH-06 | Phase 3 | Pending |
+| DASH-07 | Phase 3 | Pending |
+| DASH-08 | Phase 3 | Pending |
+| DASH-09 | Phase 3 | Pending |
+| DASH-10 | Phase 3 | Pending |
+| TWIT-01 | Phase 4 | Pending |
+| TWIT-02 | Phase 4 | Pending |
+| TWIT-03 | Phase 4 | Pending |
+| TWIT-04 | Phase 4 | Pending |
+| TWIT-05 | Phase 4 | Pending |
+| TWIT-06 | Phase 4 | Pending |
+| TWIT-07 | Phase 4 | Pending |
+| TWIT-08 | Phase 4 | Pending |
+| TWIT-09 | Phase 4 | Pending |
+| TWIT-10 | Phase 4 | Pending |
+| TWIT-11 | Phase 4 | Pending |
+| TWIT-12 | Phase 4 | Pending |
+| TWIT-13 | Phase 4 | Pending |
+| TWIT-14 | Phase 4 | Pending |
+| SENR-01 | Phase 5 | Pending |
+| SENR-02 | Phase 5 | Pending |
+| SENR-03 | Phase 5 | Pending |
+| SENR-04 | Phase 5 | Pending |
+| SENR-05 | Phase 5 | Pending |
+| SENR-06 | Phase 5 | Pending |
+| SENR-07 | Phase 5 | Pending |
+| SENR-08 | Phase 5 | Pending |
+| SENR-09 | Phase 5 | Pending |
+| WHAT-01 | Phase 5 | Pending |
+| WHAT-02 | Phase 5 | Pending |
+| WHAT-03 | Phase 5 | Pending |
+| WHAT-05 | Phase 5 | Pending |
+| INST-01 | Phase 6 | Pending |
+| INST-02 | Phase 6 | Pending |
+| INST-03 | Phase 6 | Pending |
+| INST-04 | Phase 6 | Pending |
+| INST-05 | Phase 6 | Pending |
+| INST-06 | Phase 6 | Pending |
+| INST-07 | Phase 6 | Pending |
+| INST-08 | Phase 6 | Pending |
+| INST-09 | Phase 6 | Pending |
+| INST-10 | Phase 6 | Pending |
+| INST-11 | Phase 6 | Pending |
+| INST-12 | Phase 6 | Pending |
+| CONT-01 | Phase 7 | Pending |
+| CONT-02 | Phase 7 | Pending |
+| CONT-03 | Phase 7 | Pending |
+| CONT-04 | Phase 7 | Pending |
+| CONT-05 | Phase 7 | Pending |
+| CONT-06 | Phase 7 | Pending |
+| CONT-07 | Phase 7 | Pending |
+| CONT-08 | Phase 7 | Pending |
+| CONT-09 | Phase 7 | Pending |
+| CONT-10 | Phase 7 | Pending |
+| CONT-11 | Phase 7 | Pending |
+| CONT-12 | Phase 7 | Pending |
+| CONT-13 | Phase 7 | Pending |
+| CONT-14 | Phase 7 | Pending |
+| CONT-15 | Phase 7 | Pending |
+| CONT-16 | Phase 7 | Pending |
+| CONT-17 | Phase 7 | Pending |
+| DGST-01 | Phase 8 | Pending |
+| DGST-02 | Phase 8 | Pending |
+| DGST-03 | Phase 8 | Pending |
+| CREV-01 | Phase 8 | Pending |
+| CREV-02 | Phase 8 | Pending |
+| CREV-03 | Phase 8 | Pending |
+| CREV-04 | Phase 8 | Pending |
+| CREV-05 | Phase 8 | Pending |
+| SETT-01 | Phase 8 | Pending |
+| SETT-02 | Phase 8 | Pending |
+| SETT-03 | Phase 8 | Pending |
+| SETT-04 | Phase 8 | Pending |
+| SETT-05 | Phase 8 | Pending |
+| SETT-06 | Phase 8 | Pending |
+| SETT-07 | Phase 8 | Pending |
+| SETT-08 | Phase 8 | Pending |
+| EXEC-02 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 78 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 78
+- v1 requirements: 99 total (note: REQUIREMENTS.md previously stated 78 — actual count from requirement IDs is 99)
+- Mapped to phases: 99
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after initial definition*
+*Last updated: 2026-03-30 after roadmap creation*
