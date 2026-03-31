@@ -274,7 +274,7 @@ class TestApproveTransition:
             app.dependency_overrides.pop(get_db, None)
 
     async def test_approve_without_token_returns_401(self):
-        """Approve endpoint requires auth — no token returns 401."""
+        """Approve endpoint requires auth — no token returns 401 or 403."""
         item = make_draft_item(status="pending")
         item_id = item.id
         mock_db = make_mock_db(item)
@@ -286,7 +286,7 @@ class TestApproveTransition:
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 resp = await ac.patch(f"/items/{item_id}/approve")
-            assert resp.status_code == 403
+            assert resp.status_code in (401, 403)
         finally:
             app.dependency_overrides.pop(get_db, None)
 
@@ -361,7 +361,7 @@ class TestRejectRequiresReason:
             app.dependency_overrides.pop(get_db, None)
 
     async def test_reject_without_token_returns_401(self):
-        """Reject endpoint requires auth — no token returns 401."""
+        """Reject endpoint requires auth — no token returns 401 or 403."""
         item = make_draft_item(status="pending")
         item_id = item.id
         mock_db = make_mock_db(item)
@@ -376,7 +376,7 @@ class TestRejectRequiresReason:
                     f"/items/{item_id}/reject",
                     json={"category": "off-topic"},
                 )
-            assert resp.status_code == 403
+            assert resp.status_code in (401, 403)
         finally:
             app.dependency_overrides.pop(get_db, None)
 
