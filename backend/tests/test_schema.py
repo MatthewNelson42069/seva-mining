@@ -8,13 +8,16 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 
+_db_url = os.getenv("DATABASE_URL", "")
+# Skip if DATABASE_URL is absent or points to a fake/test host (e.g. set by test_health.py)
+_has_real_db = bool(_db_url) and "fake" not in _db_url and "neon.tech" in _db_url
+
 pytestmark = pytest.mark.skipif(
-    not os.getenv("DATABASE_URL"),
-    reason="DATABASE_URL not set — requires Neon connection"
+    not _has_real_db,
+    reason="DATABASE_URL not set or not a real Neon connection — skipping schema tests"
 )
 
-_raw_url = os.getenv("DATABASE_URL", "")
-DATABASE_URL = _raw_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
+DATABASE_URL = _db_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
 
 EXPECTED_TABLES = {
     "draft_items",
