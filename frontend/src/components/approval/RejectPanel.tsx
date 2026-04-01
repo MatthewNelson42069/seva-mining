@@ -19,22 +19,22 @@ interface RejectPanelProps {
 }
 
 export function RejectPanel({ isOpen, onConfirm, onCancel }: RejectPanelProps) {
-  const [selectedCategory, setSelectedCategory] = useState<RejectionCategory | null>(null)
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
   const [notes, setNotes] = useState('')
 
   if (!isOpen) return null
 
   const handleConfirm = () => {
     if (!selectedCategory) return
-    onConfirm(selectedCategory, notes.trim() || undefined)
-    setSelectedCategory(null)
+    onConfirm(selectedCategory as RejectionCategory, notes.trim() || undefined)
+    setSelectedCategory('')
     setNotes('')
   }
 
   return (
     <div className="mt-3 rounded-lg border bg-muted/30 p-3 space-y-3">
       <RadioGroup
-        value={selectedCategory ?? undefined}
+        value={selectedCategory}
         onValueChange={(val) => setSelectedCategory(val as RejectionCategory)}
       >
         {REJECTION_CATEGORIES.map((cat) => (

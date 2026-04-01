@@ -141,7 +141,7 @@ export function ApprovalCard({ item, platform }: ApprovalCardProps) {
             )}
             {item.related_id && (
               <Badge variant="outline" className="text-xs">
-                Also on {platform}
+                Related draft
               </Badge>
             )}
           </div>
