@@ -17,6 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection
 from sqlalchemy import text
 
+from agents.content_agent import ContentAgent
 from agents.twitter_agent import TwitterAgent
 from agents.instagram_agent import InstagramAgent
 from agents.senior_agent import SeniorAgent, seed_senior_config
@@ -143,6 +144,14 @@ def _make_job(job_name: str, engine):
                     JOB_LOCK_IDS[job_name],
                     job_name,
                     agent.run_morning_digest,
+                )
+            elif job_name == "content_agent":
+                agent = ContentAgent()
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    agent.run,
                 )
             else:
                 await with_advisory_lock(

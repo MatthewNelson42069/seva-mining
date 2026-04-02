@@ -290,10 +290,9 @@ def test_content_bundle_link():
 
 def test_scheduler_wiring():
     """worker.py _make_job('content_agent') creates ContentAgent, not placeholder."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     import importlib
     worker = importlib.import_module("worker")
-    # Verify content_agent branch exists in _make_job
     import inspect
     source = inspect.getsource(worker._make_job)
-    assert "ContentAgent" in source
+    assert "ContentAgent" in source, "_make_job must reference ContentAgent class"
+    assert "content_agent" in source, "_make_job must handle content_agent job name"
