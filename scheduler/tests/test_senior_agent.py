@@ -209,27 +209,251 @@ def test_dedup_no_match_below_threshold():
 # --- SENR-04: Queue Cap ---
 
 def test_queue_cap_accepts_below_cap():
-    """SENR-04: Queue cap accepts item when pending count < 15."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    """SENR-04: Queue cap accepts item when pending count < 15 (no displacement)."""
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    new_item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # New item with some score
+    new_item = MagicMock()
+    new_item.id = new_item_id
+    new_item.score = Decimal("7.5")
+    new_item.expires_at = now + timedelta(hours=5)
+    new_item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    # Simulate count query returning 10 (below cap of 15)
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 10
+    mock_session.execute = AsyncMock(return_value=count_result)
+
+    # session.get returns the new item
+    mock_session.get = AsyncMock(return_value=new_item)
+
+    deleted_items = []
+    mock_session.delete = AsyncMock(side_effect=lambda item: deleted_items.append(item))
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_queue_cap":
+                return "15"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config):
+            await agent._enforce_queue_cap(mock_session, new_item_id)
+
+    asyncio.run(run_test())
+
+    # Nothing should be deleted — queue is below cap
+    assert len(deleted_items) == 0, (
+        f"Expected no deletions below cap, but {len(deleted_items)} item(s) were deleted"
+    )
 
 
 def test_queue_cap_displaces_lowest():
     """SENR-04: Queue cap displaces lowest-score item when full and new item scores higher."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    new_item_id = uuid.uuid4()
+    lowest_item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # New item with score 9.0 — higher than the lowest existing item (1.0)
+    new_item = MagicMock()
+    new_item.id = new_item_id
+    new_item.score = Decimal("9.0")
+    new_item.expires_at = now + timedelta(hours=5)
+    new_item.status = "pending"
+
+    # Lowest-scoring existing item (score 1.0)
+    lowest_item = MagicMock()
+    lowest_item.id = lowest_item_id
+    lowest_item.score = Decimal("1.0")
+    lowest_item.expires_at = now + timedelta(hours=3)
+    lowest_item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    # Count query returns 15 (at cap)
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 15
+
+    # Lowest query returns lowest_item
+    lowest_result = MagicMock()
+    lowest_result.scalar_one_or_none.return_value = lowest_item
+
+    # First execute call = count, second = fetch lowest
+    mock_session.execute = AsyncMock(side_effect=[count_result, lowest_result])
+
+    # session.get returns the new item
+    mock_session.get = AsyncMock(return_value=new_item)
+
+    deleted_items = []
+    mock_session.delete = AsyncMock(side_effect=lambda item: deleted_items.append(item))
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_queue_cap":
+                return "15"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config):
+            await agent._enforce_queue_cap(mock_session, new_item_id)
+
+    asyncio.run(run_test())
+
+    # Lowest-scoring item should be deleted; new item stays
+    assert len(deleted_items) == 1, (
+        f"Expected 1 deletion, got {len(deleted_items)}"
+    )
+    assert deleted_items[0].id == lowest_item_id, (
+        f"Expected lowest item {lowest_item_id} deleted, got {deleted_items[0].id}"
+    )
 
 
 def test_queue_cap_discards_new_item():
     """SENR-04: Queue cap discards new item when full and new item scores <= lowest."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    new_item_id = uuid.uuid4()
+    lowest_item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # New item with score 3.0 — lower than the queue's minimum score (5.0)
+    new_item = MagicMock()
+    new_item.id = new_item_id
+    new_item.score = Decimal("3.0")
+    new_item.expires_at = now + timedelta(hours=5)
+    new_item.status = "pending"
+
+    # Lowest-scoring existing item (score 5.0 — still higher than new item)
+    lowest_item = MagicMock()
+    lowest_item.id = lowest_item_id
+    lowest_item.score = Decimal("5.0")
+    lowest_item.expires_at = now + timedelta(hours=3)
+    lowest_item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 15
+
+    lowest_result = MagicMock()
+    lowest_result.scalar_one_or_none.return_value = lowest_item
+
+    mock_session.execute = AsyncMock(side_effect=[count_result, lowest_result])
+    mock_session.get = AsyncMock(return_value=new_item)
+
+    deleted_items = []
+    mock_session.delete = AsyncMock(side_effect=lambda item: deleted_items.append(item))
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_queue_cap":
+                return "15"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config):
+            await agent._enforce_queue_cap(mock_session, new_item_id)
+
+    asyncio.run(run_test())
+
+    # New item should be deleted; lowest existing item stays
+    assert len(deleted_items) == 1, (
+        f"Expected 1 deletion, got {len(deleted_items)}"
+    )
+    assert deleted_items[0].id == new_item_id, (
+        f"Expected new item {new_item_id} deleted, got {deleted_items[0].id}"
+    )
 
 
 def test_queue_cap_tiebreak_expires_at():
-    """SENR-04: Tiebreaking keeps item with later expires_at when scores are equal."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    """SENR-04: Tiebreaking keeps item with later expires_at — soonest-expiring item is displaced."""
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    new_item_id = uuid.uuid4()
+    soon_item_id = uuid.uuid4()   # expires in 1 hour — should be displaced
+    later_item_id = uuid.uuid4()  # expires in 3 hours — should be kept  # noqa: F841
+    now = datetime.now(timezone.utc)
+
+    # New item with score 9.0 — higher than existing min score (3.0), so displacement occurs
+    new_item = MagicMock()
+    new_item.id = new_item_id
+    new_item.score = Decimal("9.0")
+    new_item.expires_at = now + timedelta(hours=5)
+    new_item.status = "pending"
+
+    # Item expiring soonest (1h) — should be the one displaced by ORDER BY score ASC, expires_at ASC
+    soon_item = MagicMock()
+    soon_item.id = soon_item_id
+    soon_item.score = Decimal("3.0")
+    soon_item.expires_at = now + timedelta(hours=1)
+    soon_item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    count_result = MagicMock()
+    count_result.scalar_one.return_value = 15
+
+    # The ORDER BY score ASC, expires_at ASC returns soon_item first (both have score 3.0,
+    # soon_item has the earlier/smaller expires_at)
+    lowest_result = MagicMock()
+    lowest_result.scalar_one_or_none.return_value = soon_item
+
+    mock_session.execute = AsyncMock(side_effect=[count_result, lowest_result])
+    mock_session.get = AsyncMock(return_value=new_item)
+
+    deleted_items = []
+    mock_session.delete = AsyncMock(side_effect=lambda item: deleted_items.append(item))
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_queue_cap":
+                return "15"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config):
+            await agent._enforce_queue_cap(mock_session, new_item_id)
+
+    asyncio.run(run_test())
+
+    # The item expiring soonest (smallest expires_at) should be displaced
+    assert len(deleted_items) == 1, (
+        f"Expected 1 deletion, got {len(deleted_items)}"
+    )
+    assert deleted_items[0].id == soon_item_id, (
+        f"Expected soon-expiring item {soon_item_id} deleted, got {deleted_items[0].id}"
+    )
 
 
 # --- SENR-05/SENR-09: Expiry Sweep ---

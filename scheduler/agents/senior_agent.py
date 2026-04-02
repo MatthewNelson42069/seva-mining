@@ -180,3 +180,162 @@ class SeniorAgent:
                 best_match.id,
                 best_score,
             )
+
+    # ------------------------------------------------------------------
+    # SENR-01 / SENR-03 / SENR-04: Queue cap enforcement
+    # ------------------------------------------------------------------
+
+    async def _enforce_queue_cap(
+        self, session: AsyncSession, new_item_id: uuid.UUID
+    ) -> None:
+        """Enforce the 15-item pending queue cap.
+
+        When the queue is at capacity and a new item arrives:
+        - If the new item's score is strictly greater than the lowest-scoring
+          pending item, delete the lowest-scoring item (new item stays).
+        - Otherwise delete the new item (discard the lower-priority arrival).
+
+        Tiebreaking: when two items share the lowest score, the one with the
+        earlier ``expires_at`` (less time remaining) is displaced first.
+        This is achieved by ``ORDER BY score ASC, expires_at ASC``.
+
+        Args:
+            session: Active async SQLAlchemy session.
+            new_item_id: UUID of the freshly persisted ``DraftItem``.
+        """
+        cap = int(await self._get_config(session, "senior_queue_cap", "15"))
+
+        # Count pending items that are NOT the new item
+        count_result = await session.execute(
+            select(func.count())
+            .select_from(DraftItem)
+            .where(
+                DraftItem.status == "pending",
+                DraftItem.id != new_item_id,
+            )
+        )
+        existing_count = count_result.scalar_one()
+
+        if existing_count < cap:
+            # Queue has room — accept new item without displacement
+            return
+
+        # Queue is at or over cap — compare new item against the lowest-scoring existing item
+        new_item = await session.get(DraftItem, new_item_id)
+        if new_item is None:
+            logger.warning("_enforce_queue_cap: DraftItem %s not found", new_item_id)
+            return
+
+        lowest_result = await session.execute(
+            select(DraftItem)
+            .where(
+                DraftItem.status == "pending",
+                DraftItem.id != new_item_id,
+            )
+            .order_by(DraftItem.score.asc(), DraftItem.expires_at.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        lowest = lowest_result.scalar_one_or_none()
+
+        if lowest is None:
+            # Shouldn't happen if count > 0, but guard defensively
+            return
+
+        new_score = float(new_item.score or 0)
+        low_score = float(lowest.score or 0)
+
+        if new_score > low_score:
+            # New item wins — displace the lowest-scoring existing item
+            logger.info(
+                "Queue cap: displacing item %s (score=%.2f) in favour of %s (score=%.2f)",
+                lowest.id,
+                low_score,
+                new_item_id,
+                new_score,
+            )
+            await session.delete(lowest)
+        else:
+            # New item loses — discard it
+            logger.info(
+                "Queue cap: discarding new item %s (score=%.2f) — queue full, lowest=%.2f",
+                new_item_id,
+                new_score,
+                low_score,
+            )
+            await session.delete(new_item)
+
+    # ------------------------------------------------------------------
+    # WHAT-02 stub: Breaking news alert (implemented in Plan 04)
+    # ------------------------------------------------------------------
+
+    async def _check_breaking_news_alert(
+        self, session: AsyncSession, item_id: uuid.UUID
+    ) -> None:
+        """Fire a WhatsApp breaking news alert when item score >= 8.5.
+
+        Stub — full implementation in Plan 04 (Wave 2).
+        """
+
+    # ------------------------------------------------------------------
+    # SENR-01: process_new_item — sub-agent entry point
+    # ------------------------------------------------------------------
+
+    async def process_new_item(self, item_id: uuid.UUID) -> None:
+        """Process a newly written DraftItem through the Senior Agent pipeline.
+
+        Called by sub-agents immediately after persisting a ``DraftItem``.
+        Runs deduplication, queue cap enforcement, and breaking news alert
+        check within a single DB session.  Errors are captured in
+        ``AgentRun.errors`` and do not propagate (EXEC-04).
+
+        Args:
+            item_id: UUID of the freshly committed ``DraftItem``.
+        """
+        async with AsyncSessionLocal() as session:
+            run = AgentRun(
+                agent_name="senior_agent_intake",
+                started_at=datetime.now(timezone.utc),
+                status="running",
+            )
+            session.add(run)
+            await session.flush()
+
+            try:
+                await self._run_deduplication(session, item_id)
+                await self._enforce_queue_cap(session, item_id)
+                await self._check_breaking_news_alert(session, item_id)
+
+                run.status = "completed"
+                run.ended_at = datetime.now(timezone.utc)
+                await session.commit()
+
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("process_new_item failed for item %s: %s", item_id, exc)
+                run.status = "failed"
+                run.errors = [str(exc)]
+                run.ended_at = datetime.now(timezone.utc)
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+
+
+# ---------------------------------------------------------------------------
+# Module-level convenience function — avoids circular imports from sub-agents
+# ---------------------------------------------------------------------------
+
+async def process_new_items(item_ids: list[uuid.UUID]) -> None:
+    """Create a SeniorAgent and process each item in *item_ids* sequentially.
+
+    Designed to be called from TwitterAgent (and future sub-agents) after
+    writing DraftItems to the database.  Using a module-level function avoids
+    a direct class import inside the sub-agent, which would create a circular
+    dependency if SeniorAgent ever imports sub-agent models directly.
+
+    Args:
+        item_ids: List of DraftItem UUIDs to process through the Senior Agent.
+    """
+    agent = SeniorAgent()
+    for item_id in item_ids:
+        await agent.process_new_item(item_id)
