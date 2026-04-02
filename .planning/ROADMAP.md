@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Infrastructure and Foundation** - Full database schema on Neon, Alembic migrations, two Railway services configured, APScheduler worker skeleton with DB job lock, Twilio WhatsApp template submission
 - [ ] **Phase 2: FastAPI Backend** - Password auth (bcrypt + JWT), all REST endpoints, state machine transition enforcement, Twilio outbound notification service
 - [ ] **Phase 3: React Approval Dashboard** - Tabbed approval interface, approval cards with full context and inline editing, approve/edit+approve/reject actions, copy-to-clipboard, direct source links
-- [ ] **Phase 4: Twitter Agent** - X API v2 monitoring, engagement scoring with recency decay, dual-format drafting with compliance checker, monthly quota counter with hard-stop logic
+- [x] **Phase 4: Twitter Agent** - X API v2 monitoring, engagement scoring with recency decay, dual-format drafting with compliance checker, monthly quota counter with hard-stop logic (completed 2026-04-02)
 - [ ] **Phase 5: Senior Agent Core** - Story fingerprint deduplication, 15-item queue cap, auto-expiry sweep, WhatsApp morning digest and alert dispatch
 - [ ] **Phase 6: Instagram Agent** - Apify scraper integration, per-hashtag baseline tracking, retry/health logic, comment draft alternatives with compliance checker
 - [ ] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, format decision logic, quality threshold with no-story flag, compliance checker
@@ -99,7 +99,7 @@ Plans:
 - [x] 04-02-PLAN.md — Fetch-filter-score pipeline: scoring functions, engagement gates, recency decay, quota counter
 - [x] 04-03-PLAN.md — Draft-compliance pipeline: Claude drafting, separate compliance checker, DraftItem persistence
 - [x] 04-04-PLAN.md — Wiring: APScheduler integration, seed script (25 watchlist accounts, keywords, config defaults)
-- [ ] 04-05-PLAN.md — Backend model sync, full test suite, human verification checkpoint
+- [x] 04-05-PLAN.md — Backend model sync, full test suite, human verification checkpoint
 
 ### Phase 5: Senior Agent Core
 **Goal**: All items entering the queue are deduplicated across platforms, the 15-item hard cap is enforced with priority tiebreaking, items auto-expire on schedule, and WhatsApp morning digests and alerts are dispatched via Twilio
@@ -170,7 +170,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Infrastructure and Foundation | 4/7 | In Progress|  |
 | 2. FastAPI Backend | 3/4 | In Progress|  |
 | 3. React Approval Dashboard | 3/5 | In Progress|  |
-| 4. Twitter Agent | 4/5 | In Progress|  |
+| 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/TBD | Not started | - |
 | 6. Instagram Agent | 0/TBD | Not started | - |
 | 7. Content Agent | 0/TBD | Not started | - |
