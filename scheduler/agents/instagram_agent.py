@@ -182,7 +182,30 @@ class InstagramAgent:
             )
         top_posts = select_top_posts(qualifying, top_n=top_n)
 
-        # Steps 7-9 implemented in Plan 03 (draft, compliance, persist)
+        # Step 7: Draft comments for top posts (INST-05, INST-06)
+        new_item_ids = []
+        for post in top_posts:
+            drafts = await self._draft_comments(post)
+            if not drafts:
+                continue
+            # Step 8: Compliance check (INST-06, INST-08)
+            compliant = await self._filter_compliant_drafts(drafts)
+            if not compliant:
+                continue
+            # Step 9: Persist DraftItem (INST-12)
+            draft_item = self._build_draft_item(post, compliant)
+            session.add(draft_item)
+            await session.flush()
+            new_item_ids.append(draft_item.id)
+            agent_run.items_queued = (agent_run.items_queued or 0) + 1
+
+        await session.commit()
+
+        # Step 9b: Senior Agent integration (lazy import, same as TwitterAgent)
+        if new_item_ids:
+            from agents.senior_agent import process_new_items  # noqa: PLC0415
+            await process_new_items(new_item_ids)
+
         # Step 10 implemented in Plan 04 (health monitoring)
 
     async def _get_config(self, session: AsyncSession, key: str, default: str) -> str:
@@ -273,3 +296,172 @@ class InstagramAgent:
                 seen.add(code)
                 unique.append(p)
         return unique
+
+    async def _draft_comments(self, post: dict) -> list[dict]:
+        """Draft 2-3 comment alternatives for a post via Claude Sonnet (INST-05).
+
+        Returns list of dicts with 'text' and 'rationale' keys.
+        Returns empty list if JSON parse fails.
+        """
+        return await draft_for_post(post=post, client=self.anthropic)
+
+    async def _check_instagram_compliance(self, draft_text: str) -> bool:
+        """Check a draft comment for compliance violations (INST-06, INST-08).
+
+        Pre-screens for '#' and 'seva mining' locally before calling Claude.
+        Fail-safe: any non-PASS response blocks the draft.
+
+        Returns True if draft passes, False if blocked.
+        """
+        return await check_compliance(draft=draft_text, client=self.anthropic)
+
+    async def _filter_compliant_drafts(self, drafts: list[dict]) -> list[dict]:
+        """Run compliance check on each draft and return only passing ones."""
+        passing = []
+        for draft in drafts:
+            if await self._check_instagram_compliance(draft["text"]):
+                passing.append(draft)
+        return passing
+
+    def _build_draft_item(self, post: dict, compliant_drafts: list[dict]) -> DraftItem:
+        """Build a DraftItem with platform='instagram' and 12h expiry (INST-12)."""
+        return DraftItem(
+            platform="instagram",
+            status="pending",
+            source_url=post.get("url", ""),
+            source_text=(post.get("caption") or "")[:500],
+            source_account=post.get("ownerUsername", "unknown"),
+            alternatives=[d["text"] for d in compliant_drafts],
+            rationale=compliant_drafts[0]["rationale"] if compliant_drafts else "",
+            score=post.get("score", 0.0),
+            engagement_snapshot={
+                "likes": post.get("likesCount", 0),
+                "comments": post.get("commentsCount", 0),
+                "follower_count": (
+                    post.get("ownerFollowersCount") or post.get("followersCount") or 0
+                ),
+                "captured_at": datetime.now(timezone.utc).isoformat(),
+            },
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=12),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Module-level functions — for direct testability (mirrors twitter_agent.py pattern)
+# ---------------------------------------------------------------------------
+
+async def draft_for_post(post: dict, client: AsyncAnthropic) -> list[dict]:
+    """Draft 2-3 Instagram comment alternatives via Claude Sonnet (INST-05, INST-06).
+
+    Args:
+        post: Instagram post dict with caption, ownerUsername, likesCount, commentsCount.
+        client: AsyncAnthropic instance injected by caller.
+
+    Returns:
+        List of dicts with 'text' and 'rationale' keys. Empty list on parse failure.
+    """
+    system_prompt = (
+        "You are a senior gold sector analyst writing Instagram comments. "
+        "Every comment must lead with a specific data point, stat, or market insight. "
+        "1-2 sentences max. NEVER include hashtags (no # character). "
+        "Write in a measured, analytical tone."
+    )
+    caption = post.get("caption") or ""
+    author = post.get("ownerUsername") or "unknown"
+    likes = post.get("likesCount", 0)
+    comments = post.get("commentsCount", 0)
+    user_prompt = (
+        f"Post by @{author} with {likes} likes and {comments} comments:\n"
+        f"{caption}\n\n"
+        "Write exactly 3 comment alternatives (no hashtags). "
+        "Respond with JSON in this format:\n"
+        '{"comment_alternatives": [{"text": "...", "rationale": "..."}, ...]}'
+    )
+    message = await client.messages.create(
+        model="claude-sonnet-4-20250514",
+        max_tokens=2000,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    raw_text = message.content[0].text.strip()
+    try:
+        parsed = json.loads(raw_text)
+    except (json.JSONDecodeError, Exception):
+        return []
+
+    if isinstance(parsed, dict):
+        alternatives = parsed.get("comment_alternatives") or []
+    elif isinstance(parsed, list):
+        # Test-compatible: plain list of strings
+        alternatives = [
+            {"text": item, "rationale": ""} if isinstance(item, str) else item
+            for item in parsed
+        ]
+    else:
+        return []
+
+    return [a for a in alternatives if isinstance(a, dict) and "text" in a]
+
+
+async def check_compliance(draft: str, client: AsyncAnthropic) -> bool:
+    """Check a draft Instagram comment for compliance violations (INST-06, INST-08).
+
+    Pre-screens locally for '#' and 'seva mining' before calling Claude.
+    Fail-safe: only explicit 'pass' in Claude response returns True.
+
+    Args:
+        draft: Draft comment text to check.
+        client: AsyncAnthropic instance injected by caller.
+
+    Returns:
+        True if draft passes all checks, False if blocked.
+    """
+    # INST-06: Pre-screen for hashtags — no LLM needed
+    if "#" in draft:
+        return False
+    # INST-08: Pre-screen for brand mention — no LLM needed
+    if "seva mining" in draft.lower():
+        return False
+
+    # Claude Haiku compliance check
+    message = await client.messages.create(
+        model="claude-haiku-3-20240307",
+        max_tokens=200,
+        system=(
+            "You are a compliance checker for social media comments. "
+            "Check if this comment: 1) mentions 'Seva Mining' or any company promotion, "
+            "2) contains financial advice, 3) contains hashtags. "
+            "Reply with exactly PASS or FAIL with reason."
+        ),
+        messages=[{"role": "user", "content": f"Check this draft: {draft}"}],
+    )
+    result_text = message.content[0].text.strip().lower()
+    # Fail-safe: only explicit "pass" returns True (CONTEXT.md)
+    if "pass" in result_text:
+        return True
+    return False
+
+
+def build_draft_item_expiry(created_at: datetime) -> DraftItem:
+    """Build a minimal DraftItem with expires_at = created_at + 12 hours (INST-12).
+
+    Used by tests to verify expiry calculation independently of the full pipeline.
+    Does NOT persist to the database (no session required).
+
+    Args:
+        created_at: The creation datetime (timezone-aware UTC).
+
+    Returns:
+        DraftItem with platform='instagram' and expires_at set to +12 hours.
+    """
+    return DraftItem(
+        platform="instagram",
+        status="pending",
+        source_url="",
+        source_text="",
+        source_account="",
+        alternatives=[],
+        rationale="",
+        score=0.0,
+        expires_at=created_at + timedelta(hours=12),
+    )
