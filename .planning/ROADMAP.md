@@ -97,8 +97,8 @@ Plans:
 Plans:
 - [x] 04-01-PLAN.md — Foundation: deps, scheduler models, Alembic migration (config table + platform_user_id), test stubs
 - [x] 04-02-PLAN.md — Fetch-filter-score pipeline: scoring functions, engagement gates, recency decay, quota counter
-- [ ] 04-03-PLAN.md — Draft-compliance pipeline: Claude drafting, separate compliance checker, DraftItem persistence
-- [ ] 04-04-PLAN.md — Wiring: APScheduler integration, seed script (25 watchlist accounts, keywords, config defaults)
+- [x] 04-03-PLAN.md — Draft-compliance pipeline: Claude drafting, separate compliance checker, DraftItem persistence
+- [x] 04-04-PLAN.md — Wiring: APScheduler integration, seed script (25 watchlist accounts, keywords, config defaults)
 - [ ] 04-05-PLAN.md — Backend model sync, full test suite, human verification checkpoint
 
 ### Phase 5: Senior Agent Core
@@ -170,7 +170,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Infrastructure and Foundation | 4/7 | In Progress|  |
 | 2. FastAPI Backend | 3/4 | In Progress|  |
 | 3. React Approval Dashboard | 3/5 | In Progress|  |
-| 4. Twitter Agent | 0/5 | Planned    |  |
+| 4. Twitter Agent | 4/5 | In Progress|  |
 | 5. Senior Agent Core | 0/TBD | Not started | - |
 | 6. Instagram Agent | 0/TBD | Not started | - |
 | 7. Content Agent | 0/TBD | Not started | - |
