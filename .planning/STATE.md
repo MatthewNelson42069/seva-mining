@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-04-02T22:31:19.610Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-04-02T22:37:26.696Z"
 progress:
   total_phases: 9
   completed_phases: 4
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 6 — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ## Performance Metrics
 
@@ -67,6 +67,7 @@ Plan: 4 of 5
 | Phase 06-instagram-agent P01 | 5 min | 2 tasks | 3 files |
 | Phase 06-instagram-agent P02 | 10 | 1 tasks | 2 files |
 | Phase 06 P03 | 129 | 1 tasks | 2 files |
+| Phase 06 P04 | 207 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,8 @@ Recent decisions affecting current work:
 - [Phase 06]: Module-level functions (draft_for_post, check_compliance, build_draft_item_expiry) in instagram_agent.py for direct test injection without class instantiation
 - [Phase 06]: Pre-screen '#' and 'seva mining' locally before calling Claude Haiku — avoids LLM cost for obvious compliance blocks
 - [Phase 06]: Fail-safe compliance: only explicit 'pass' substring returns True; everything else blocks draft
+- [Phase 06]: asyncio.sleep(2**attempt) gives 1s/2s backoff; 3 total attempts; empty list returned after exhaustion
+- [Phase 06]: _check_critical_failure returns count only; alert at exactly consecutive_zeros==2 in _run_pipeline (dedup)
 
 ### Pending Todos
 
@@ -133,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T22:31:19.607Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-04-02T22:37:26.693Z
+Stopped at: Completed 06-04-PLAN.md
 Resume file: None
