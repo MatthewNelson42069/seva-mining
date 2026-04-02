@@ -251,7 +251,7 @@ class InstagramAgent:
                 "resultsLimit": max_per_hashtag,
                 "onlyPostsNewerThan": lookback_date.strftime("%Y-%m-%d"),
             }
-            items = await self._call_apify_actor(run_input)
+            items = await self._call_apify_actor_with_retry(run_input)
             for item in items:
                 item["_source_tag"] = clean_tag
             all_items.extend(items)
@@ -269,12 +269,12 @@ class InstagramAgent:
                 "resultsLimit": max_per_account,
                 "onlyPostsNewerThan": lookback_date.strftime("%Y-%m-%d"),
             }
-            items = await self._call_apify_actor(run_input)
+            items = await self._call_apify_actor_with_retry(run_input)
             all_items.extend(items)
         return all_items
 
-    async def _call_apify_actor(self, run_input: dict) -> list[dict]:
-        """Call apify/instagram-scraper and return dataset items. Plan 04 adds retry."""
+    async def _call_apify_actor_once(self, run_input: dict) -> list[dict]:
+        """Call apify/instagram-scraper and return dataset items (no retry)."""
         actor_client = self.apify_client.actor("apify/instagram-scraper")
         run_result = await actor_client.call(run_input=run_input)
         if run_result is None:
@@ -285,6 +285,32 @@ class InstagramAgent:
         dataset_client = self.apify_client.dataset(dataset_id)
         items_result = await dataset_client.list_items()
         return items_result.items if items_result else []
+
+    async def _call_apify_actor_with_retry(self, run_input: dict, max_retries: int = 2) -> list[dict]:
+        """INST-09: Call Apify actor with exponential backoff retry.
+
+        Retries up to max_retries times on exception. Backoff: 2**attempt seconds
+        (attempt=0 → 1s, attempt=1 → 2s). Returns empty list after all retries exhausted.
+        """
+        last_exc = None
+        for attempt in range(max_retries + 1):  # 0, 1, 2 = 3 total attempts
+            try:
+                return await self._call_apify_actor_once(run_input)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    backoff = 2 ** attempt  # 1s, 2s
+                    logger.warning(
+                        "Apify call attempt %d failed: %s. Retrying in %ds...",
+                        attempt + 1, exc, backoff,
+                    )
+                    await asyncio.sleep(backoff)
+                else:
+                    logger.error(
+                        "Apify call failed after %d attempts: %s",
+                        max_retries + 1, last_exc,
+                    )
+        return []  # All retries exhausted
 
     def _deduplicate_posts(self, posts: list[dict]) -> list[dict]:
         """Deduplicate by shortCode (Apify unique post identifier)."""
