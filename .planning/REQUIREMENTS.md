@@ -44,10 +44,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Instagram Agent
 
-- [ ] **INST-01**: Agent monitors Instagram via Apify scraper using configurable hashtags and account watchlist every 4 hours
-- [ ] **INST-02**: Agent scores posts: likes x1 + comment count x2 + normalized follower count x1.5
-- [ ] **INST-03**: Minimum engagement gate: 200+ likes from last 8 hours
-- [ ] **INST-04**: Top 3 posts per run passed to drafting
+- [x] **INST-01**: Agent monitors Instagram via Apify scraper using configurable hashtags and account watchlist every 4 hours
+- [x] **INST-02**: Agent scores posts: likes x1 + comment count x2 + normalized follower count x1.5
+- [x] **INST-03**: Minimum engagement gate: 200+ likes from last 8 hours
+- [x] **INST-04**: Top 3 posts per run passed to drafting
 - [ ] **INST-05**: Agent drafts 2-3 alternative comments per qualifying post (1-2 sentences each)
 - [ ] **INST-06**: No hashtags in any drafted comment, ever
 - [ ] **INST-07**: Each draft evaluated against quality rubric before queuing
@@ -239,10 +239,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WHAT-02 | Phase 5 | Complete |
 | WHAT-03 | Phase 5 | Complete |
 | WHAT-05 | Phase 5 | Complete |
-| INST-01 | Phase 6 | Pending |
-| INST-02 | Phase 6 | Pending |
-| INST-03 | Phase 6 | Pending |
-| INST-04 | Phase 6 | Pending |
+| INST-01 | Phase 6 | Complete |
+| INST-02 | Phase 6 | Complete |
+| INST-03 | Phase 6 | Complete |
+| INST-04 | Phase 6 | Complete |
 | INST-05 | Phase 6 | Pending |
 | INST-06 | Phase 6 | Pending |
 | INST-07 | Phase 6 | Pending |
