@@ -150,7 +150,14 @@ Plans:
   3. The selected story undergoes a deep research pass: full article retrieved, 2-3 corroborating sources found via web search, key data points extracted before drafting
   4. Format decision produces the correct output: thread format produces both a tweet thread (3-5 tweets under 280 chars each) and a single long-form X post; infographic brief includes headline, 5-8 key stats with sources, visual structure suggestion, and full caption text
   5. A separate compliance checker Claude call validates no Seva Mining mention and no financial advice across the entire content package before it is sent to the Senior Agent
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Foundation: deps, ContentBundle model mirror, test stubs, config seed script
+- [ ] 07-02-PLAN.md — Ingest-Dedup-Score pipeline: RSS parsing, SerpAPI, dedup, scoring, story selection (TDD)
+- [ ] 07-03-PLAN.md — Deep research + drafting: article fetch, corroboration, Claude Sonnet format+draft prompt
+- [ ] 07-04-PLAN.md — Compliance checker, no-story flag, DraftItem builder, Senior Agent integration
+- [ ] 07-05-PLAN.md — Full pipeline wiring, worker.py integration, human verification checkpoint
 
 ### Phase 8: Dashboard Views and Digest
 **Goal**: Operator has a dedicated daily digest view showing morning digest output, a content review page for today's Content Agent bundle, and the full Settings page wired to live database configuration
@@ -188,6 +195,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/6 | Planned    |  |
 | 6. Instagram Agent | 0/5 | Planned    |  |
-| 7. Content Agent | 0/TBD | Not started | - |
+| 7. Content Agent | 0/5 | Planned    |  |
 | 8. Dashboard Views and Digest | 0/TBD | Not started | - |
 | 9. Agent Execution Polish | 0/TBD | Not started | - |
