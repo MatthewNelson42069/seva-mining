@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase 5 planned — ready for execution
-stopped_at: Phase 5 plans created and verified (6 plans, 4 waves) — ready for /gsd:execute-phase 5
-last_updated: "2026-04-02T20:00:00.000Z"
+status: Executing Phase 5
+stopped_at: Completed 05-01-PLAN.md — Phase 5 Wave 0 foundation complete
+last_updated: "2026-04-02T20:30:51.177Z"
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 21
-  completed_plans: 21
+  total_plans: 27
+  completed_plans: 22
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
-**Current focus:** Phase 05 — senior-agent-core
+**Current focus:** Phase 5
 
 ## Current Position
 
-Phase: 05 (senior-agent-core) — PLANNED
-Plan: 0 of 6
+Phase: 5 — EXECUTING
+Plan: 2 of 6
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Plan: 0 of 6
 | Phase 04-twitter-agent P04 | 124 | 2 tasks | 3 files |
 | Phase 04-twitter-agent P05 | 15 | 1 tasks | 4 files |
 | Phase 04-twitter-agent P05 | 15 | 2 tasks | 4 files |
+| Phase 05-senior-agent-core P01 | ~8 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,8 @@ Recent decisions affecting current work:
 - [Phase 04-twitter-agent]: TwitterAgent instantiated inside job closure (not at build time) to avoid import side effects at test collection
 - [Phase 04-twitter-agent]: All 25 watchlist accounts seeded at relationship_value=5 per user request (maximum priority for initial seed)
 - [Phase 04-twitter-agent]: Backend models must be kept in sync with scheduler models manually — no shared package, each service owns its own copy of the model
+- [Phase 05-senior-agent-core]: Wave 0 test stubs put pytest.skip() BEFORE the lazy import — ensures 19 tests show as 'skipped' not 'error' when senior_agent module doesn't exist yet
+- [Phase 05-senior-agent-core]: migration 0004 adds both engagement_alert_level (engagement alert dedup) and alerted_expiry_at (expiry alert dedup) to draft_items in a single migration
 
 ### Pending Todos
 
@@ -111,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T19:12:23.539Z
-Stopped at: Completed 04-05-PLAN.md — Phase 4 Twitter Agent fully verified and complete
+Last session: 2026-04-02T20:40:00.000Z
+Stopped at: Completed 05-01-PLAN.md — Phase 5 Wave 0 foundation complete
 Resume file: None
