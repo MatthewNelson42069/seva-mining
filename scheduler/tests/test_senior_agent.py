@@ -460,62 +460,516 @@ def test_queue_cap_tiebreak_expires_at():
 
 def test_expiry_sweep_marks_expired():
     """SENR-05/SENR-09: Expiry sweep marks items past expires_at as status='expired'."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    mock_session = AsyncMock()
+
+    # execute() for the bulk UPDATE returns a result with rowcount=2
+    update_result = MagicMock()
+    update_result.rowcount = 2
+
+    # Additional execute() calls (expiry alerts, engagement alerts) return safe mocks
+    expiry_alert_result = MagicMock()
+    expiry_alert_result.scalar_one_or_none.return_value = None
+    expiry_alert_result.scalars.return_value.all.return_value = []
+
+    engagement_watchlist_result = MagicMock()
+    engagement_watchlist_result.scalars.return_value.all.return_value = []
+
+    engagement_items_result = MagicMock()
+    engagement_items_result.scalars.return_value.all.return_value = []
+
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            update_result,           # bulk UPDATE expired items
+            expiry_alert_result,     # expiry alerts config (score threshold)
+            expiry_alert_result,     # expiry alerts config (minutes before)
+            expiry_alert_result,     # expiry alerts config (dashboard url)
+            expiry_alert_result,     # expiry alert candidates query
+            engagement_watchlist_result,  # watchlist handles query
+            engagement_watchlist_result,  # engagement config (dashboard url)
+            engagement_items_result, # engagement alert candidates query
+        ]
+    )
+    mock_session.commit = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.flush = AsyncMock()
+
+    # AgentRun mock
+    mock_run = MagicMock()
+    mock_run.status = "running"
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.AsyncSessionLocal") as mock_session_local, \
+             patch("agents.senior_agent.AgentRun", return_value=mock_run), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock):
+            mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_local.return_value.__aexit__ = AsyncMock(return_value=False)
+            await agent.run_expiry_sweep()
+
+    asyncio.run(run_test())
+
+    # The UPDATE was called — verify execute was invoked
+    assert mock_session.execute.called, "Expected session.execute() to be called for bulk UPDATE"
+    # run.status should be 'completed' on success
+    assert mock_run.status == "completed", f"Expected 'completed', got '{mock_run.status}'"
 
 
 # --- WHAT-02: Breaking News Alert ---
 
 def test_breaking_news_alert_fires():
     """WHAT-02: Breaking news alert fires when item score >= 8.5."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("9.0")
+    item.rationale = "Gold hits all-time high amid central bank buying. Markets rally."
+    item.source_account = "@KitcoNews"
+    item.platform = "twitter"
+
+    mock_session = AsyncMock()
+    mock_session.get = AsyncMock(return_value=item)
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_breaking_news_threshold":
+                return "8.5"
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            await agent._check_breaking_news_alert(mock_session, item_id)
+            mock_send.assert_called_once_with(
+                "breaking_news",
+                {
+                    "1": "Gold hits all-time high amid central bank buying.",
+                    "2": "@KitcoNews",
+                    "3": "9.0",
+                    "4": "https://app.sevamining.com",
+                },
+            )
+
+    asyncio.run(run_test())
 
 
 def test_breaking_news_alert_no_fire():
     """WHAT-02: Breaking news alert does NOT fire when item score < 8.5."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("7.5")
+    item.rationale = "Gold price consolidates after recent gains. Analysts cautious."
+    item.source_account = "@GoldInsider"
+    item.platform = "twitter"
+
+    mock_session = AsyncMock()
+    mock_session.get = AsyncMock(return_value=item)
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_breaking_news_threshold":
+                return "8.5"
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            await agent._check_breaking_news_alert(mock_session, item_id)
+            mock_send.assert_not_called()
+
+    asyncio.run(run_test())
 
 
 # --- WHAT-03: Expiry Alert ---
 
 def test_expiry_alert_fires():
     """WHAT-03: Expiry alert fires for score >= 7.0 item within 1 hour of expiry."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("8.0")
+    item.expires_at = now + timedelta(minutes=30)
+    item.alerted_expiry_at = None
+    item.platform = "twitter"
+    item.rationale = "Gold price breakout above key resistance level. Strong momentum."
+    item.source_account = "@KitcoNews"
+
+    mock_session = AsyncMock()
+
+    # Return the candidate item from the expiry alert query
+    expiry_result = MagicMock()
+    expiry_result.scalars.return_value.all.return_value = [item]
+    mock_session.execute = AsyncMock(return_value=expiry_result)
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_expiry_alert_score_threshold":
+                return "7.0"
+            if key == "senior_expiry_alert_minutes_before":
+                return "60"
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            await agent._check_expiry_alerts(mock_session)
+            mock_send.assert_called_once()
+            call_args = mock_send.call_args
+            assert call_args[0][0] == "expiry_alert", f"Expected 'expiry_alert', got {call_args[0][0]}"
+            variables = call_args[0][1]
+            assert variables["1"] == "twitter"
+            assert "4" in variables and variables["4"] == "https://app.sevamining.com"
+
+        # alerted_expiry_at must be set
+        assert item.alerted_expiry_at is not None, "Expected alerted_expiry_at to be set"
+
+    asyncio.run(run_test())
 
 
 def test_expiry_alert_no_double_send():
     """WHAT-03: Expiry alert does NOT fire twice for same item (alerted_expiry_at dedup)."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("8.0")
+    item.expires_at = now + timedelta(minutes=30)
+    # Already alerted — dedup should prevent re-send
+    item.alerted_expiry_at = now - timedelta(minutes=10)
+    item.platform = "twitter"
+    item.rationale = "Gold price breakout above key resistance level."
+    item.source_account = "@KitcoNews"
+
+    mock_session = AsyncMock()
+
+    # The query should NOT return this item (alerted_expiry_at IS NULL filter in query)
+    expiry_result = MagicMock()
+    expiry_result.scalars.return_value.all.return_value = []
+    mock_session.execute = AsyncMock(return_value=expiry_result)
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_expiry_alert_score_threshold":
+                return "7.0"
+            if key == "senior_expiry_alert_minutes_before":
+                return "60"
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            await agent._check_expiry_alerts(mock_session)
+            mock_send.assert_not_called()
+
+    asyncio.run(run_test())
 
 
 # --- Engagement Alerts ---
 
 def test_engagement_alert_watchlist_early():
     """WHAT-02: Watchlist item gets early signal alert at 50+ likes / 5000+ views."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("7.0")
+    item.source_account = "@KitcoNews"
+    item.platform = "twitter"
+    item.engagement_snapshot = {"likes": 60, "views": 6000, "retweets": 5, "replies": 3,
+                                 "captured_at": now.isoformat()}
+    item.engagement_alert_level = None
+    item.source_text = "Gold price surges to new highs as central banks continue buying"
+    item.rationale = "Strong bullish signal"
+    item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    # First execute: watchlist handles query → returns {kitconews}
+    watchlist_row = MagicMock()
+    watchlist_row.__iter__ = MagicMock(return_value=iter(["@KitcoNews"]))
+    watchlist_result = MagicMock()
+    watchlist_result.all.return_value = [("@KitcoNews",)]
+    mock_session.execute = AsyncMock(return_value=watchlist_result)
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            # Patch the items query to return our watchlist item
+            call_count = 0
+            original_execute = mock_session.execute.side_effect
+
+            async def execute_side_effect(stmt):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    # watchlist handles query
+                    result = MagicMock()
+                    result.all.return_value = [("@KitcoNews",)]
+                    return result
+                else:
+                    # items query
+                    result = MagicMock()
+                    result.scalars.return_value.all.return_value = [item]
+                    return result
+
+            mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+            await agent._check_engagement_alerts(mock_session)
+            mock_send.assert_called_once()
+            call_args = mock_send.call_args
+            assert call_args[0][0] == "breaking_news", f"Expected 'breaking_news', got {call_args[0][0]}"
+
+        assert item.engagement_alert_level == "watchlist", \
+            f"Expected 'watchlist', got '{item.engagement_alert_level}'"
+
+    asyncio.run(run_test())
 
 
 def test_engagement_alert_watchlist_viral():
     """WHAT-02: Watchlist item gets viral confirmation at 500+ likes / 40000+ views."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("8.5")
+    item.source_account = "@KitcoNews"
+    item.platform = "twitter"
+    item.engagement_snapshot = {"likes": 600, "views": 50000, "retweets": 80, "replies": 25,
+                                 "captured_at": now.isoformat()}
+    # Already at watchlist level — should escalate to viral
+    item.engagement_alert_level = "watchlist"
+    item.source_text = "Gold price hits historic record as global demand surges to extraordinary levels"
+    item.rationale = "Viral gold story"
+    item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            call_count = 0
+
+            async def execute_side_effect(stmt):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    result = MagicMock()
+                    result.all.return_value = [("@KitcoNews",)]
+                    return result
+                else:
+                    result = MagicMock()
+                    result.scalars.return_value.all.return_value = [item]
+                    return result
+
+            mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+            await agent._check_engagement_alerts(mock_session)
+            mock_send.assert_called_once()
+
+        assert item.engagement_alert_level == "viral", \
+            f"Expected 'viral', got '{item.engagement_alert_level}'"
+
+    asyncio.run(run_test())
 
 
 def test_engagement_alert_nonwatchlist_viral():
     """WHAT-02: Non-watchlist item gets single alert at 500+ likes / 40000+ views."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("7.5")
+    item.source_account = "@RandomUser"
+    item.platform = "twitter"
+    item.engagement_snapshot = {"likes": 600, "views": 50000, "retweets": 70, "replies": 20,
+                                 "captured_at": now.isoformat()}
+    item.engagement_alert_level = None
+    item.source_text = "Massive gold discovery reported in remote Canadian mining region"
+    item.rationale = "Viral gold discovery story"
+    item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            call_count = 0
+
+            async def execute_side_effect(stmt):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    # watchlist — @RandomUser is NOT in watchlist
+                    result = MagicMock()
+                    result.all.return_value = [("@KitcoNews",)]
+                    return result
+                else:
+                    result = MagicMock()
+                    result.scalars.return_value.all.return_value = [item]
+                    return result
+
+            mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+            await agent._check_engagement_alerts(mock_session)
+            mock_send.assert_called_once()
+
+        assert item.engagement_alert_level == "viral", \
+            f"Expected 'viral', got '{item.engagement_alert_level}'"
+
+    asyncio.run(run_test())
 
 
 def test_engagement_alert_no_repeat_viral():
     """WHAT-02: Item at engagement_alert_level='viral' does NOT get another alert."""
-    pytest.skip("Wave 0 stub — implementation in Wave 2")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    item_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    item = MagicMock()
+    item.id = item_id
+    item.score = Decimal("9.0")
+    item.source_account = "@KitcoNews"
+    item.platform = "twitter"
+    item.engagement_snapshot = {"likes": 1000, "views": 100000, "retweets": 200, "replies": 50,
+                                 "captured_at": now.isoformat()}
+    # Already at viral — should NOT get another alert
+    item.engagement_alert_level = "viral"
+    item.source_text = "Gold prices have broken all records"
+    item.rationale = "Already viral"
+    item.status = "pending"
+
+    mock_session = AsyncMock()
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+            call_count = 0
+
+            async def execute_side_effect(stmt):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    result = MagicMock()
+                    result.all.return_value = [("@KitcoNews",)]
+                    return result
+                else:
+                    # Query filters out viral items, returns empty
+                    result = MagicMock()
+                    result.scalars.return_value.all.return_value = []
+                    return result
+
+            mock_session.execute = AsyncMock(side_effect=execute_side_effect)
+            await agent._check_engagement_alerts(mock_session)
+            mock_send.assert_not_called()
+
+    asyncio.run(run_test())
 
 
 # --- SENR-06/SENR-07: Morning Digest ---

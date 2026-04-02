@@ -11,7 +11,7 @@ import re
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
@@ -19,6 +19,8 @@ from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.config import Config
 from models.draft_item import DraftItem
+from models.watchlist import Watchlist
+from services.whatsapp import send_whatsapp_template
 
 logger = logging.getLogger(__name__)
 
@@ -266,16 +268,301 @@ class SeniorAgent:
             await session.delete(new_item)
 
     # ------------------------------------------------------------------
-    # WHAT-02 stub: Breaking news alert (implemented in Plan 04)
+    # WHAT-02: Breaking news alert
     # ------------------------------------------------------------------
 
     async def _check_breaking_news_alert(
         self, session: AsyncSession, item_id: uuid.UUID
     ) -> None:
-        """Fire a WhatsApp breaking news alert when item score >= 8.5.
+        """Fire a WhatsApp breaking news alert when item score >= threshold.
 
-        Stub — full implementation in Plan 04 (Wave 2).
+        Reads ``senior_breaking_news_threshold`` from config (default ``"8.5"``).
+        Fires once per item.  Errors are logged but do not propagate.
+
+        Args:
+            session: Active async SQLAlchemy session.
+            item_id: UUID of the DraftItem to check.
         """
+        item = await session.get(DraftItem, item_id)
+        if item is None:
+            logger.warning("_check_breaking_news_alert: DraftItem %s not found", item_id)
+            return
+
+        threshold = float(
+            await self._get_config(session, "senior_breaking_news_threshold", "8.5")
+        )
+        if float(item.score or 0) < threshold:
+            return
+
+        # Extract headline: first sentence of rationale
+        rationale = item.rationale or ""
+        parts = rationale.split(". ")
+        headline = parts[0] + "." if parts else rationale
+
+        dashboard_url = await self._get_config(
+            session, "dashboard_url", "https://app.sevamining.com"
+        )
+
+        try:
+            await send_whatsapp_template(
+                "breaking_news",
+                {
+                    "1": headline,
+                    "2": item.source_account or "unknown",
+                    "3": str(round(float(item.score), 1)),
+                    "4": dashboard_url,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "_check_breaking_news_alert: WhatsApp send failed for item %s: %s",
+                item_id,
+                exc,
+            )
+
+    # ------------------------------------------------------------------
+    # WHAT-03: Expiry alerts
+    # ------------------------------------------------------------------
+
+    async def _check_expiry_alerts(self, session: AsyncSession) -> None:
+        """Fire expiry alerts for high-value items approaching expiry.
+
+        Queries pending items where ``score >= senior_expiry_alert_score_threshold``
+        AND ``expires_at`` is within the next ``senior_expiry_alert_minutes_before``
+        minutes AND ``alerted_expiry_at IS NULL``.
+
+        For each candidate, sends the ``expiry_alert`` WhatsApp template and
+        sets ``alerted_expiry_at`` to prevent double-sends.
+
+        Args:
+            session: Active async SQLAlchemy session.
+        """
+        score_threshold = float(
+            await self._get_config(session, "senior_expiry_alert_score_threshold", "7.0")
+        )
+        minutes_before = int(
+            await self._get_config(session, "senior_expiry_alert_minutes_before", "60")
+        )
+        dashboard_url = await self._get_config(
+            session, "dashboard_url", "https://app.sevamining.com"
+        )
+
+        now = datetime.now(timezone.utc)
+        window_end = now + timedelta(minutes=minutes_before)
+
+        result = await session.execute(
+            select(DraftItem)
+            .where(
+                DraftItem.status == "pending",
+                DraftItem.score >= score_threshold,
+                DraftItem.expires_at != None,  # noqa: E711
+                DraftItem.expires_at >= now,
+                DraftItem.expires_at <= window_end,
+                DraftItem.alerted_expiry_at == None,  # noqa: E711
+            )
+        )
+        candidates = result.scalars().all()
+
+        for item in candidates:
+            rationale = item.rationale or ""
+            parts = rationale.split(". ")
+            headline = parts[0] + "." if parts else rationale
+
+            minutes_remaining = max(
+                0,
+                int((item.expires_at - datetime.now(timezone.utc)).total_seconds() / 60),
+            )
+
+            try:
+                await send_whatsapp_template(
+                    "expiry_alert",
+                    {
+                        "1": item.platform or "unknown",
+                        "2": headline,
+                        "3": str(minutes_remaining),
+                        "4": dashboard_url,
+                    },
+                )
+                item.alerted_expiry_at = datetime.now(timezone.utc)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "_check_expiry_alerts: WhatsApp send failed for item %s: %s",
+                    item.id,
+                    exc,
+                )
+
+    # ------------------------------------------------------------------
+    # WHAT-02 / WHAT-05: Engagement alerts
+    # ------------------------------------------------------------------
+
+    async def _send_engagement_alert(
+        self, item: DraftItem, dashboard_url: str
+    ) -> None:
+        """Send a breaking_news WhatsApp alert for an engagement gate crossing.
+
+        Template variables:
+        - ``{{1}}``: first ~100 chars of ``source_text`` (word-boundary truncation)
+        - ``{{2}}``: ``source_account``
+        - ``{{3}}``: composite engagement score (likes + retweets*2 + replies*1.5)
+        - ``{{4}}``: dashboard URL
+
+        Args:
+            item: The DraftItem that crossed an engagement threshold.
+            dashboard_url: Dashboard URL from config.
+        """
+        snap = item.engagement_snapshot or {}
+        likes = snap.get("likes", 0) or 0
+        retweets = snap.get("retweets", 0) or 0
+        replies = snap.get("replies", 0) or 0
+        engagement_score = likes * 1 + retweets * 2 + replies * 1.5
+
+        source_text = item.source_text or ""
+        if len(source_text) > 100:
+            # Truncate at word boundary
+            truncated = source_text[:100]
+            last_space = truncated.rfind(" ")
+            excerpt = truncated[:last_space] if last_space > 0 else truncated
+        else:
+            excerpt = source_text
+
+        try:
+            await send_whatsapp_template(
+                "breaking_news",
+                {
+                    "1": excerpt,
+                    "2": item.source_account or "unknown",
+                    "3": str(round(engagement_score, 1)),
+                    "4": dashboard_url,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "_send_engagement_alert: WhatsApp send failed for item %s: %s",
+                item.id,
+                exc,
+            )
+
+    async def _check_engagement_alerts(self, session: AsyncSession) -> None:
+        """Check pending Twitter items for engagement gate crossings and fire alerts.
+
+        Watchlist items get TWO alerts:
+        - Early signal: 50+ likes AND 5000+ views → level = ``"watchlist"``
+        - Viral confirmation: 500+ likes AND 40000+ views → level = ``"viral"``
+
+        Non-watchlist items get ONE alert:
+        - Viral: 500+ likes AND 40000+ views → level = ``"viral"``
+
+        Deduplication via ``engagement_alert_level`` column — items already at
+        ``"viral"`` are excluded from the query entirely.
+
+        Args:
+            session: Active async SQLAlchemy session.
+        """
+        # Load active watchlist handles for twitter (lowercased, stripped @)
+        wl_result = await session.execute(
+            select(Watchlist.account_handle).where(
+                Watchlist.platform == "twitter",
+                Watchlist.active == True,  # noqa: E712
+            )
+        )
+        watchlist_handles: set[str] = {
+            row[0].lstrip("@").lower() for row in wl_result.all()
+        }
+
+        dashboard_url = await self._get_config(
+            session, "dashboard_url", "https://app.sevamining.com"
+        )
+
+        # Candidates: pending twitter items NOT yet at viral level
+        candidates_result = await session.execute(
+            select(DraftItem).where(
+                DraftItem.status == "pending",
+                DraftItem.platform == "twitter",
+                or_(
+                    DraftItem.engagement_alert_level.is_(None),
+                    DraftItem.engagement_alert_level == "watchlist",
+                ),
+            )
+        )
+        candidates = candidates_result.scalars().all()
+
+        for item in candidates:
+            snap = item.engagement_snapshot or {}
+            likes = snap.get("likes", 0) or 0
+            views = snap.get("views", 0) or 0
+
+            is_watchlist = (item.source_account or "").lstrip("@").lower() in watchlist_handles
+            current_level = item.engagement_alert_level
+
+            if is_watchlist:
+                if current_level is None and likes >= 50 and views >= 5000:
+                    await self._send_engagement_alert(item, dashboard_url)
+                    item.engagement_alert_level = "watchlist"
+                elif current_level == "watchlist" and likes >= 500 and views >= 40000:
+                    await self._send_engagement_alert(item, dashboard_url)
+                    item.engagement_alert_level = "viral"
+            else:
+                if current_level is None and likes >= 500 and views >= 40000:
+                    await self._send_engagement_alert(item, dashboard_url)
+                    item.engagement_alert_level = "viral"
+
+    # ------------------------------------------------------------------
+    # SENR-05 / SENR-09: Expiry sweep job
+    # ------------------------------------------------------------------
+
+    async def run_expiry_sweep(self) -> None:
+        """Run the 30-minute expiry sweep job.
+
+        Responsibilities:
+        1. Bulk-expire stale items (``expires_at < now()``).
+        2. Fire expiry alerts for high-value items approaching expiry.
+        3. Fire engagement alerts for posts crossing like/view thresholds.
+
+        Logs to ``AgentRun`` with ``agent_name='expiry_sweep'``.
+        Errors are captured and do not propagate (EXEC-04).
+        """
+        async with AsyncSessionLocal() as session:
+            run = AgentRun(
+                agent_name="expiry_sweep",
+                started_at=datetime.now(timezone.utc),
+                status="running",
+            )
+            session.add(run)
+            await session.flush()
+
+            try:
+                # Step 1: Bulk-expire stale items
+                result = await session.execute(
+                    update(DraftItem)
+                    .where(
+                        DraftItem.status == "pending",
+                        DraftItem.expires_at != None,  # noqa: E711
+                        DraftItem.expires_at < func.now(),
+                    )
+                    .values(status="expired", updated_at=func.now())
+                )
+                items_expired = result.rowcount
+                logger.info("run_expiry_sweep: marked %d items as expired", items_expired)
+
+                # Step 2: Fire expiry alerts for approaching expirations
+                await self._check_expiry_alerts(session)
+
+                # Step 3: Fire engagement alerts for threshold crossings
+                await self._check_engagement_alerts(session)
+
+                run.status = "completed"
+                run.ended_at = datetime.now(timezone.utc)
+                await session.commit()
+
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("run_expiry_sweep failed: %s", exc)
+                run.status = "failed"
+                run.errors = [str(exc)]
+                run.ended_at = datetime.now(timezone.utc)
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
 
     # ------------------------------------------------------------------
     # SENR-01: process_new_item — sub-agent entry point
