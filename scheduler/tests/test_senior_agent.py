@@ -32,26 +32,178 @@ os.environ.setdefault("FRONTEND_URL", "https://x.com")
 
 def test_jaccard_similarity():
     """SENR-02: Jaccard similarity returns correct value for known token sets."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import jaccard_similarity  # noqa: F401
+    from agents.senior_agent import jaccard_similarity
+
+    # Standard overlap: 2 common ("gold", "price") / 4 union ("gold", "price", "surges", "drops")
+    result = jaccard_similarity(
+        frozenset({"gold", "price", "surges"}),
+        frozenset({"gold", "price", "drops"}),
+    )
+    assert result == 0.5, f"Expected 0.5, got {result}"
+
+    # Empty sets → 0.0 (no divide-by-zero)
+    assert jaccard_similarity(frozenset(), frozenset()) == 0.0
+
+    # Identical sets → 1.0
+    tokens = frozenset({"gold", "mining", "rally"})
+    assert jaccard_similarity(tokens, tokens) == 1.0
+
+    # Completely disjoint sets → 0.0
+    assert jaccard_similarity(frozenset({"gold"}), frozenset({"tesla"})) == 0.0
 
 
 def test_extract_fingerprint_tokens():
     """SENR-02: extract_fingerprint_tokens strips stopwords, keeps cashtags and numbers."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import extract_fingerprint_tokens  # noqa: F401
+    from agents.senior_agent import extract_fingerprint_tokens
+
+    # Standard sentence with stopwords "to" and "per"
+    tokens = extract_fingerprint_tokens(
+        "Gold price surges to $2400 per troy ounce amid central bank buying"
+    )
+    assert isinstance(tokens, frozenset)
+    # Must include meaningful terms
+    assert "gold" in tokens
+    assert "price" in tokens
+    assert "surges" in tokens
+    assert "$2400" in tokens
+    assert "troy" in tokens
+    assert "ounce" in tokens
+    assert "amid" in tokens
+    assert "central" in tokens
+    assert "bank" in tokens
+    assert "buying" in tokens
+    # Must exclude stopwords
+    assert "to" not in tokens
+    assert "per" not in tokens
+
+    # Empty string → empty frozenset
+    assert extract_fingerprint_tokens("") == frozenset()
+
+    # None → empty frozenset
+    assert extract_fingerprint_tokens(None) == frozenset()
+
+    # Cashtag preserved
+    cashtag_tokens = extract_fingerprint_tokens("$GLD hits all-time high")
+    assert "$gld" in cashtag_tokens
 
 
 def test_dedup_sets_related_id():
     """SENR-02: Dedup sets related_id when token overlap >= 0.40 threshold."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    older_id = uuid.uuid4()
+    newer_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # Two items with substantially overlapping source_text — should be >= 0.40 Jaccard
+    older_item = MagicMock()
+    older_item.id = older_id
+    older_item.source_text = "Gold price hits $2400 amid central bank buying"
+    older_item.rationale = "Strong gold momentum"
+    older_item.status = "pending"
+    older_item.created_at = now
+    older_item.related_id = None
+
+    newer_item = MagicMock()
+    newer_item.id = newer_id
+    newer_item.source_text = "Gold price reaches $2400 as central banks buy"
+    newer_item.rationale = "Strong gold momentum continues"
+    newer_item.status = "pending"
+    newer_item.created_at = now
+    newer_item.related_id = None
+
+    # Mock session
+    mock_session = AsyncMock()
+
+    # session.get() returns the newer item when called with (DraftItem, newer_id)
+    mock_session.get = AsyncMock(return_value=newer_item)
+
+    # session.execute() returns a result with .scalars().all() = [older_item]
+    mock_execute_result = MagicMock()
+    mock_execute_result.scalars.return_value.all.return_value = [older_item]
+    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+
+    # _get_config returns default threshold
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_dedup_threshold":
+                return "0.40"
+            if key == "senior_dedup_lookback_hours":
+                return "24"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config):
+            await agent._run_deduplication(mock_session, newer_id)
+
+    asyncio.run(run_test())
+
+    # The newer item's related_id must be set to the older item's id
+    assert newer_item.related_id == older_id, (
+        f"Expected related_id={older_id}, got {newer_item.related_id}"
+    )
 
 
 def test_dedup_no_match_below_threshold():
     """SENR-02: Dedup does NOT set related_id when overlap < 0.40."""
-    pytest.skip("Wave 0 stub — implementation in Wave 1")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    other_id = uuid.uuid4()
+    new_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # Two items with completely different topics — should be < 0.40 Jaccard
+    other_item = MagicMock()
+    other_item.id = other_id
+    other_item.source_text = "Tesla announces new gigafactory in Berlin Germany"
+    other_item.rationale = "EV manufacturing expansion"
+    other_item.status = "pending"
+    other_item.created_at = now
+    other_item.related_id = None
+
+    new_item = MagicMock()
+    new_item.id = new_id
+    new_item.source_text = "Gold price surges amid Federal Reserve rate decisions"
+    new_item.rationale = "Gold rally driven by inflation fears"
+    new_item.status = "pending"
+    new_item.created_at = now
+    new_item.related_id = None
+
+    mock_session = AsyncMock()
+    mock_session.get = AsyncMock(return_value=new_item)
+
+    mock_execute_result = MagicMock()
+    mock_execute_result.scalars.return_value.all.return_value = [other_item]
+    mock_session.execute = AsyncMock(return_value=mock_execute_result)
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_get_config(session, key, default):
+            if key == "senior_dedup_threshold":
+                return "0.40"
+            if key == "senior_dedup_lookback_hours":
+                return "24"
+            return default
+
+        with patch.object(agent, "_get_config", new=mock_get_config):
+            await agent._run_deduplication(mock_session, new_id)
+
+    asyncio.run(run_test())
+
+    # related_id must remain None — no match
+    assert new_item.related_id is None, (
+        f"Expected related_id=None, got {new_item.related_id}"
+    )
 
 
 # --- SENR-04: Queue Cap ---
