@@ -8,6 +8,7 @@ from app.models.agent_run import AgentRun
 from app.models.daily_digest import DailyDigest
 from app.models.watchlist import Watchlist
 from app.models.keyword import Keyword
+from app.models.config import Config
 
 __all__ = [
     "Base",
@@ -17,4 +18,5 @@ __all__ = [
     "DailyDigest",
     "Watchlist",
     "Keyword",
+    "Config",
 ]

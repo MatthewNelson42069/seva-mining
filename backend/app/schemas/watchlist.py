@@ -25,6 +25,7 @@ class WatchlistResponse(BaseModel):
     id: UUID
     platform: str
     account_handle: str
+    platform_user_id: Optional[str] = None
     relationship_value: Optional[int] = None
     follower_threshold: Optional[int] = None
     notes: Optional[str] = None
