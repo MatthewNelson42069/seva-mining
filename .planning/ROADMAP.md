@@ -90,7 +90,7 @@ Plans:
   1. Agent runs every 2 hours, fetches posts matching configured cashtags/hashtags/keywords, and only passes posts with 500+ likes (or watchlist accounts with 50+ likes) to drafting
   2. Each qualifying post produces both a reply draft and a retweet-with-comment draft, each with 2-3 alternatives, in the senior analyst voice with rationale attached
   3. A separate compliance checker Claude call — not the drafting prompt — blocks any draft mentioning Seva Mining or containing financial advice from reaching the queue
-  4. Monthly quota counter increments with every tweet read; the agent hard-stops at the configured safety margin and the dashboard displays current quota consumption
+  4. Monthly quota counter increments with every tweet read; the agent hard-stops at the configured safety margin and the quota counter is stored and readable from the database
   5. Recency decay applies correctly: full score under 1 hour, 50% at 4 hours, item marked expired at 6 hours
 **Plans**: 5 plans
 

@@ -9,6 +9,7 @@ from app.routers.keywords import router as keywords_router
 from app.routers.agent_runs import router as agent_runs_router
 from app.routers.digests import router as digests_router
 from app.routers.content import router as content_router
+from app.routers.config import router as config_router
 
 
 @asynccontextmanager
@@ -44,6 +45,7 @@ app.include_router(keywords_router)
 app.include_router(agent_runs_router)
 app.include_router(digests_router)
 app.include_router(content_router)
+app.include_router(config_router)
 
 
 @app.get("/health")
