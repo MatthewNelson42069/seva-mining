@@ -76,9 +76,9 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 03-01-PLAN.md — Bootstrap Vite + React 19 + Tailwind v4 + shadcn/ui, TypeScript types, API client, test infra, CORS fix
-- [ ] 03-02-PLAN.md — Zustand store, TanStack Query hooks, ApprovalCard component with draft tabs, inline editor, reject panel
-- [ ] 03-03-PLAN.md — Login page, auth flow, AppShell layout, sidebar, platform tabs, routing, page stubs
+- [x] 03-01-PLAN.md — Bootstrap Vite + React 19 + Tailwind v4 + shadcn/ui, TypeScript types, API client, test infra, CORS fix
+- [x] 03-02-PLAN.md — Zustand store, TanStack Query hooks, ApprovalCard component with draft tabs, inline editor, reject panel
+- [x] 03-03-PLAN.md — Login page, auth flow, AppShell layout, sidebar, platform tabs, routing, page stubs
 - [ ] 03-04-PLAN.md — QueuePage wiring, content modal, related badges, empty state, database seed script
 - [ ] 03-05-PLAN.md — Human verification of complete approval dashboard (checkpoint)
 
@@ -92,7 +92,14 @@ Plans:
   3. A separate compliance checker Claude call — not the drafting prompt — blocks any draft mentioning Seva Mining or containing financial advice from reaching the queue
   4. Monthly quota counter increments with every tweet read; the agent hard-stops at the configured safety margin and the dashboard displays current quota consumption
   5. Recency decay applies correctly: full score under 1 hour, 50% at 4 hours, item marked expired at 6 hours
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Foundation: deps, scheduler models, Alembic migration (config table + platform_user_id), test stubs
+- [ ] 04-02-PLAN.md — Fetch-filter-score pipeline: scoring functions, engagement gates, recency decay, quota counter
+- [ ] 04-03-PLAN.md — Draft-compliance pipeline: Claude drafting, separate compliance checker, DraftItem persistence
+- [ ] 04-04-PLAN.md — Wiring: APScheduler integration, seed script (25 watchlist accounts, keywords, config defaults)
+- [ ] 04-05-PLAN.md — Backend model sync, full test suite, human verification checkpoint
 
 ### Phase 5: Senior Agent Core
 **Goal**: All items entering the queue are deduplicated across platforms, the 15-item hard cap is enforced with priority tiebreaking, items auto-expire on schedule, and WhatsApp morning digests and alerts are dispatched via Twilio
@@ -162,8 +169,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Infrastructure and Foundation | 4/7 | In Progress|  |
 | 2. FastAPI Backend | 3/4 | In Progress|  |
-| 3. React Approval Dashboard | 0/5 | Not started | - |
-| 4. Twitter Agent | 0/TBD | Not started | - |
+| 3. React Approval Dashboard | 3/5 | In Progress|  |
+| 4. Twitter Agent | 0/5 | Not started | - |
 | 5. Senior Agent Core | 0/TBD | Not started | - |
 | 6. Instagram Agent | 0/TBD | Not started | - |
 | 7. Content Agent | 0/TBD | Not started | - |
