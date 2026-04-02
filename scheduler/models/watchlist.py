@@ -1,0 +1,25 @@
+import uuid
+from datetime import datetime
+from sqlalchemy import Column, String, Integer, Text, Boolean, DateTime
+from sqlalchemy.dialects.postgresql import UUID
+from models.base import Base
+
+
+class Watchlist(Base):
+    """Mirror of backend/app/models/watchlist.py for the scheduler worker.
+
+    Adds platform_user_id column (added via migration 0003) for Twitter
+    numeric user ID caching — avoids repeated get_user() calls (TWIT-01).
+    """
+    __tablename__ = "watchlists"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    platform = Column(String(20), nullable=False)         # twitter, instagram
+    account_handle = Column(String(255), nullable=False)
+    platform_user_id = Column(String(50), nullable=True)  # Twitter numeric user ID, resolved lazily
+    relationship_value = Column(Integer)                   # 1-5 for Twitter (SETT-01)
+    follower_threshold = Column(Integer)                   # for Instagram (SETT-02)
+    notes = Column(Text)
+    active = Column(Boolean, nullable=False, server_default="true")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), onupdate=datetime.utcnow)
