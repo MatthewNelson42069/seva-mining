@@ -111,7 +111,15 @@ Plans:
   3. Twitter items auto-expire at 6 hours and Instagram items at 12 hours; the expiry sweep runs every 30 minutes
   4. A WhatsApp morning digest arrives at 8am daily containing top 5 gold sector stories, queue snapshot, yesterday's approval and rejection counts, and the single highest-value queue item
   5. A WhatsApp expiry alert is sent when a high-scored item approaches expiry without review
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Foundation: twilio dep, DailyDigest model, WhatsApp service mirror, test stubs, migration 0004
+- [ ] 05-02-PLAN.md — Story deduplication: Jaccard similarity, fingerprint tokens, related_id linking (TDD)
+- [ ] 05-03-PLAN.md — Queue cap: 15-item hard cap, priority displacement, tiebreaking, process_new_item (TDD)
+- [ ] 05-04-PLAN.md — Expiry sweep: bulk-expire, breaking news alerts, expiry alerts, engagement alerts (TDD)
+- [ ] 05-05-PLAN.md — Morning digest: assembly, DailyDigest record, WhatsApp dispatch with 7 variables (TDD)
+- [ ] 05-06-PLAN.md — Worker wiring, Twitter Agent integration, config seed, human verification checkpoint
 
 ### Phase 6: Instagram Agent
 **Goal**: The Instagram Agent runs on schedule, scrapes qualifying gold-sector posts via Apify with health monitoring, drafts comment alternatives with compliance checking, and handles scraper failures gracefully with alerting
@@ -171,7 +179,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. FastAPI Backend | 3/4 | In Progress|  |
 | 3. React Approval Dashboard | 3/5 | In Progress|  |
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
-| 5. Senior Agent Core | 0/TBD | Not started | - |
+| 5. Senior Agent Core | 0/6 | Not started | - |
 | 6. Instagram Agent | 0/TBD | Not started | - |
 | 7. Content Agent | 0/TBD | Not started | - |
 | 8. Dashboard Views and Digest | 0/TBD | Not started | - |
