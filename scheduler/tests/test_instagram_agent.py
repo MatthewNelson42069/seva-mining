@@ -45,7 +45,6 @@ def test_scoring_formula():
     returns the expected float using: likes*1 + comments*2 + normalize_followers(n)*1.5
     Covers: INST-02
     """
-    pytest.skip("Instagram agent not yet implemented")
     ia = _get_instagram_agent()
     score = ia.calculate_instagram_score(likes=200, comment_count=50, follower_count=100000)
     # normalize_followers(100000) = log10(100000)/log10(1_000_000) = 5/6 ≈ 0.8333
@@ -64,7 +63,6 @@ def test_normalize_followers():
       0 → 0.0, 1000 → ~0.5, 1_000_000 → 1.0
     Covers: INST-02
     """
-    pytest.skip("Instagram agent not yet implemented")
     ia = _get_instagram_agent()
     assert ia.normalize_followers(0) == 0.0
     norm_1k = ia.normalize_followers(1000)
@@ -82,7 +80,6 @@ def test_engagement_gate():
     200 likes but 9h old fails.
     Covers: INST-03
     """
-    pytest.skip("Instagram agent not yet implemented")
     ia = _get_instagram_agent()
     now = datetime.now(timezone.utc)
     recent = now - timedelta(hours=4)
@@ -105,7 +102,6 @@ def test_select_top_posts():
     Given 5 scored posts, select_top_posts returns top 3 by score descending.
     Covers: INST-04
     """
-    pytest.skip("Instagram agent not yet implemented")
     ia = _get_instagram_agent()
     posts = [
         {"shortCode": "a", "score": 3.0},
