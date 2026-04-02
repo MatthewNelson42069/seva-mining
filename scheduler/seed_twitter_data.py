@@ -196,7 +196,13 @@ async def seed_config(session: AsyncSession) -> tuple[int, int]:
 
 async def main() -> None:
     db_url = os.environ["DATABASE_URL"]
-    engine = create_async_engine(db_url, pool_pre_ping=True)
+    # asyncpg uses ssl=require not sslmode=require — strip and pass via connect_args
+    db_url = db_url.replace("?sslmode=require", "").replace("&sslmode=require", "")
+    engine = create_async_engine(
+        db_url,
+        pool_pre_ping=True,
+        connect_args={"ssl": "require"},
+    )
     Session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with Session() as session:
