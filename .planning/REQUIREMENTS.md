@@ -84,9 +84,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SENR-03**: Prioritizes queue: Twitter time-sensitive first, breaking news content second, Instagram third, evergreen last
 - [x] **SENR-04**: Hard cap of 15 items in queue — lower-scoring items displaced by higher-scoring new items when full
 - [x] **SENR-05**: Auto-expires items after platform window (Twitter: 6h, Instagram: 12h)
-- [ ] **SENR-06**: Assembles morning digest daily at 8am
-- [ ] **SENR-07**: Morning digest contains: top 5 gold sector stories (one sentence each), queue snapshot by platform, yesterday's approved/rejected/expired counts, scraped surface metrics on @sevamining posts, single highest-value queue item
-- [ ] **SENR-08**: Logs every approval and rejection with reason tags
+- [x] **SENR-06**: Assembles morning digest daily at 8am
+- [x] **SENR-07**: Morning digest contains: top 5 gold sector stories (one sentence each), queue snapshot by platform, yesterday's approved/rejected/expired counts, scraped surface metrics on @sevamining posts, single highest-value queue item
+- [x] **SENR-08**: Logs every approval and rejection with reason tags
 - [x] **SENR-09**: Expiry processor runs every 30 minutes to sweep stale items
 
 ### Approval Dashboard
@@ -118,7 +118,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### WhatsApp Notifications
 
-- [ ] **WHAT-01**: Morning digest sent to operator's WhatsApp daily at 8am via Twilio
+- [x] **WHAT-01**: Morning digest sent to operator's WhatsApp daily at 8am via Twilio
 - [x] **WHAT-02**: Breaking gold news alert sent when a high-scoring story is detected
 - [x] **WHAT-03**: High-value draft expiry alert sent when a top-scored item is approaching expiration without review
 - [ ] **WHAT-04**: All WhatsApp messages use Meta-approved message templates (submitted early in build)
@@ -231,11 +231,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SENR-03 | Phase 5 | Complete |
 | SENR-04 | Phase 5 | Complete |
 | SENR-05 | Phase 5 | Complete |
-| SENR-06 | Phase 5 | Pending |
-| SENR-07 | Phase 5 | Pending |
-| SENR-08 | Phase 5 | Pending |
+| SENR-06 | Phase 5 | Complete |
+| SENR-07 | Phase 5 | Complete |
+| SENR-08 | Phase 5 | Complete |
 | SENR-09 | Phase 5 | Complete |
-| WHAT-01 | Phase 5 | Pending |
+| WHAT-01 | Phase 5 | Complete |
 | WHAT-02 | Phase 5 | Complete |
 | WHAT-03 | Phase 5 | Complete |
 | WHAT-05 | Phase 5 | Complete |
