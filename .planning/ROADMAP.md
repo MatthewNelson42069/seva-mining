@@ -153,7 +153,7 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Foundation: deps, ContentBundle model mirror, test stubs, config seed script
+- [x] 07-01-PLAN.md — Foundation: deps, ContentBundle model mirror, test stubs, config seed script
 - [ ] 07-02-PLAN.md — Ingest-Dedup-Score pipeline: RSS parsing, SerpAPI, dedup, scoring, story selection (TDD)
 - [ ] 07-03-PLAN.md — Deep research + drafting: article fetch, corroboration, Claude Sonnet format+draft prompt
 - [ ] 07-04-PLAN.md — Compliance checker, no-story flag, DraftItem builder, Senior Agent integration
@@ -195,6 +195,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/6 | Planned    |  |
 | 6. Instagram Agent | 0/5 | Planned    |  |
-| 7. Content Agent | 0/5 | Planned    |  |
+| 7. Content Agent | 1/5 | In Progress|  |
 | 8. Dashboard Views and Digest | 0/TBD | Not started | - |
 | 9. Agent Execution Polish | 0/TBD | Not started | - |

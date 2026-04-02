@@ -59,23 +59,23 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Content Agent
 
-- [ ] **CONT-01**: Agent runs daily at 6am, pulling new content from all sources since last run
-- [ ] **CONT-02**: RSS ingestion from Kitco News, Mining.com, Junior Mining Network, World Gold Council blog
-- [ ] **CONT-03**: SerpAPI news search with gold-sector keywords ("gold exploration", "gold price", "central bank gold", "gold ETF", "junior miners", "gold reserves")
-- [ ] **CONT-04**: Deduplication by URL and headline similarity (fuzzy match, 85% threshold)
-- [ ] **CONT-05**: Story scoring on relevance to gold/mining (40%), recency (30%), engagement signal (30%)
-- [ ] **CONT-06**: Quality threshold: only the single highest-scoring story above 7.0/10 is selected
-- [ ] **CONT-07**: "No story today" flag sent to Senior Agent if nothing clears the threshold
-- [ ] **CONT-08**: Deep research pass on selected story: pull full article, find 2-3 corroborating sources via web search, extract key data points
-- [ ] **CONT-09**: Format decision logic: long-form article (600-900 words) for complex/data stories, short post/thread for fast-moving news, infographic brief for data-heavy visual stories
-- [ ] **CONT-10**: Thread format drafted as both a tweet thread (3-5 tweets, each under 280 chars) AND a single long-form X post
-- [ ] **CONT-11**: Infographic brief includes headline, 5-8 key stats with sources, suggested visual structure, and full caption text
-- [ ] **CONT-12**: Infographic generation using HTML templates for data-heavy pieces and AI image generation for creative/editorial pieces
-- [ ] **CONT-13**: All content drafted in senior analyst voice — data-driven, measured, cites specifics
-- [ ] **CONT-14**: No mention of Seva Mining in any content
-- [ ] **CONT-15**: No financial advice in any content
-- [ ] **CONT-16**: Separate Claude compliance-checker call on all content
-- [ ] **CONT-17**: Content packaged with all sources and credibility score, sent to Senior Agent
+- [x] **CONT-01**: Agent runs daily at 6am, pulling new content from all sources since last run
+- [x] **CONT-02**: RSS ingestion from Kitco News, Mining.com, Junior Mining Network, World Gold Council blog
+- [x] **CONT-03**: SerpAPI news search with gold-sector keywords ("gold exploration", "gold price", "central bank gold", "gold ETF", "junior miners", "gold reserves")
+- [x] **CONT-04**: Deduplication by URL and headline similarity (fuzzy match, 85% threshold)
+- [x] **CONT-05**: Story scoring on relevance to gold/mining (40%), recency (30%), engagement signal (30%)
+- [x] **CONT-06**: Quality threshold: only the single highest-scoring story above 7.0/10 is selected
+- [x] **CONT-07**: "No story today" flag sent to Senior Agent if nothing clears the threshold
+- [x] **CONT-08**: Deep research pass on selected story: pull full article, find 2-3 corroborating sources via web search, extract key data points
+- [x] **CONT-09**: Format decision logic: long-form article (600-900 words) for complex/data stories, short post/thread for fast-moving news, infographic brief for data-heavy visual stories
+- [x] **CONT-10**: Thread format drafted as both a tweet thread (3-5 tweets, each under 280 chars) AND a single long-form X post
+- [x] **CONT-11**: Infographic brief includes headline, 5-8 key stats with sources, suggested visual structure, and full caption text
+- [x] **CONT-12**: Infographic generation using HTML templates for data-heavy pieces and AI image generation for creative/editorial pieces
+- [x] **CONT-13**: All content drafted in senior analyst voice — data-driven, measured, cites specifics
+- [x] **CONT-14**: No mention of Seva Mining in any content
+- [x] **CONT-15**: No financial advice in any content
+- [x] **CONT-16**: Separate Claude compliance-checker call on all content
+- [x] **CONT-17**: Content packaged with all sources and credibility score, sent to Senior Agent
 
 ### Senior Agent
 
@@ -251,23 +251,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INST-10 | Phase 6 | Complete |
 | INST-11 | Phase 6 | Complete |
 | INST-12 | Phase 6 | Complete |
-| CONT-01 | Phase 7 | Pending |
-| CONT-02 | Phase 7 | Pending |
-| CONT-03 | Phase 7 | Pending |
-| CONT-04 | Phase 7 | Pending |
-| CONT-05 | Phase 7 | Pending |
-| CONT-06 | Phase 7 | Pending |
-| CONT-07 | Phase 7 | Pending |
-| CONT-08 | Phase 7 | Pending |
-| CONT-09 | Phase 7 | Pending |
-| CONT-10 | Phase 7 | Pending |
-| CONT-11 | Phase 7 | Pending |
-| CONT-12 | Phase 7 | Pending |
-| CONT-13 | Phase 7 | Pending |
-| CONT-14 | Phase 7 | Pending |
-| CONT-15 | Phase 7 | Pending |
-| CONT-16 | Phase 7 | Pending |
-| CONT-17 | Phase 7 | Pending |
+| CONT-01 | Phase 7 | Complete |
+| CONT-02 | Phase 7 | Complete |
+| CONT-03 | Phase 7 | Complete |
+| CONT-04 | Phase 7 | Complete |
+| CONT-05 | Phase 7 | Complete |
+| CONT-06 | Phase 7 | Complete |
+| CONT-07 | Phase 7 | Complete |
+| CONT-08 | Phase 7 | Complete |
+| CONT-09 | Phase 7 | Complete |
+| CONT-10 | Phase 7 | Complete |
+| CONT-11 | Phase 7 | Complete |
+| CONT-12 | Phase 7 | Complete |
+| CONT-13 | Phase 7 | Complete |
+| CONT-14 | Phase 7 | Complete |
+| CONT-15 | Phase 7 | Complete |
+| CONT-16 | Phase 7 | Complete |
+| CONT-17 | Phase 7 | Complete |
 | DGST-01 | Phase 8 | Pending |
 | DGST-02 | Phase 8 | Pending |
 | DGST-03 | Phase 8 | Pending |
