@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Executing Phase 5
-stopped_at: Completed 05-01-PLAN.md — Phase 5 Wave 0 foundation complete
-last_updated: "2026-04-02T20:30:51.177Z"
+status: Ready to execute
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-04-02T20:40:07.986Z"
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 27
-  completed_plans: 22
+  completed_plans: 21
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 5 — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Plan: 2 of 6
 | Phase 04-twitter-agent P05 | 15 | 1 tasks | 4 files |
 | Phase 04-twitter-agent P05 | 15 | 2 tasks | 4 files |
 | Phase 05-senior-agent-core P01 | ~8 | 2 tasks | 9 files |
+| Phase 05-senior-agent-core P02 | 440m | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,8 @@ Recent decisions affecting current work:
 - [Phase 04-twitter-agent]: Backend models must be kept in sync with scheduler models manually — no shared package, each service owns its own copy of the model
 - [Phase 05-senior-agent-core]: Wave 0 test stubs put pytest.skip() BEFORE the lazy import — ensures 19 tests show as 'skipped' not 'error' when senior_agent module doesn't exist yet
 - [Phase 05-senior-agent-core]: migration 0004 adds both engagement_alert_level (engagement alert dedup) and alerted_expiry_at (expiry alert dedup) to draft_items in a single migration
+- [Phase 05-senior-agent-core]: Jaccard similarity >= 0.40 threshold for story dedup, configurable via senior_dedup_threshold config key (default 0.40); lookback 24h via senior_dedup_lookback_hours
+- [Phase 05-senior-agent-core]: cashtag-aware regex r'$[a-z0-9]+|\b\w+\b' preserves dollar-prefixed tokens like $gld and $2400 as atomic fingerprint units
 
 ### Pending Todos
 
@@ -114,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T20:40:00.000Z
-Stopped at: Completed 05-01-PLAN.md — Phase 5 Wave 0 foundation complete
+Last session: 2026-04-02T20:40:07.983Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None

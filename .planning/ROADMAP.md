@@ -179,7 +179,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. FastAPI Backend | 3/4 | In Progress|  |
 | 3. React Approval Dashboard | 3/5 | In Progress|  |
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
-| 5. Senior Agent Core | 0/6 | Not started | - |
+| 5. Senior Agent Core | 0/6 | Planned    |  |
 | 6. Instagram Agent | 0/TBD | Not started | - |
 | 7. Content Agent | 0/TBD | Not started | - |
 | 8. Dashboard Views and Digest | 0/TBD | Not started | - |
