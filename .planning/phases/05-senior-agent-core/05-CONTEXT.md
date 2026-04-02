@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Build the Senior Agent Core: the layer that sits between the sub-agents (Twitter, Instagram, Content) and the operator's approval queue. It enforces the 15-item hard cap with priority tiebreaking, deduplicates same-story items across platforms and links them as "related," runs the 30-minute expiry sweep (Twitter 6h, Instagram 12h), assembles and dispatches the daily 8am WhatsApp morning digest, and fires WhatsApp alerts for breaking stories and approaching expirations.
+Build the Senior Agent Core: the layer that sits between the sub-agents (Twitter, Instagram, Content) and the operator's approval queue. It enforces the 15-item hard cap with priority tiebreaking, deduplicates same-story items across platforms and links them as "related," runs the 30-minute expiry sweep (Twitter 6h, Instagram 12h), assembles and dispatches the daily 8am WhatsApp morning digest, and fires WhatsApp alerts for: (1) breaking stories (score ≥ 8.5), (2) real-time engagement gate crossings for all qualifying posts (watchlist posts get two alerts — early signal + viral confirmation; non-watchlist posts get one alert at viral threshold), and (3) approaching expirations for high-value items.
 
 This phase does NOT include: Instagram Agent, Content Agent, dashboard views/settings, or any agent configuration from the UI. Those are Phases 6–9.
 
@@ -30,15 +30,52 @@ How it works:
 
 The 40% threshold and 24-hour lookback window are configurable via the `config` table.
 
-### Breaking News Alert Threshold (WHAT-02)
+### Breaking News Alert Threshold (WHAT-02) + Real-Time Engagement Alerts (NEW)
 
-**Score ≥ 8.5/10 triggers an immediate WhatsApp breaking news alert.**
+Two distinct alert types, both using the `breaking_news` WhatsApp template:
 
-Behavior:
-- Fired inside the same function that enforces the queue cap — after a new DraftItem is committed, if `score >= 8.5`, send the `breaking_news` WhatsApp template immediately
-- Template variables: `{{1}}` = item rationale headline (first sentence), `{{2}}` = source_account, `{{3}}` = score rounded to 1 decimal, `{{4}}` = dashboard URL
-- Only fires once per item (flag in `config` table or check `draft_items` created_at to avoid double-fire on restart)
-- Threshold stored as `senior_breaking_news_threshold` in `config` table (default: `"8.5"`) — operator can adjust
+---
+
+**Alert Type 1: High-score breaking news — score ≥ 8.5/10**
+
+- Fired after a new DraftItem is committed to the queue, if `score >= 8.5`
+- Template variables: `{{1}}` = rationale headline (first sentence), `{{2}}` = source_account, `{{3}}` = score rounded to 1 decimal, `{{4}}` = dashboard URL
+- Threshold stored as `senior_breaking_news_threshold` in `config` table (default: `"8.5"`)
+- Fires once per item only
+
+---
+
+**Alert Type 2: Engagement gate crossed — real-time notification**
+
+The user wants to know immediately (within the next 30-minute sweep cycle) when any gold post crosses the engagement gate, not just high-scoring ones.
+
+**Scope: all qualifying posts** — watchlist accounts AND non-watchlist viral posts.
+
+**Alert logic by threshold:**
+
+- **Watchlist accounts → two alerts per post:**
+  1. Early signal alert: post hits 50+ likes AND 5,000+ views (watchlist gate) → immediate alert
+  2. Viral confirmation alert: same post later reaches 500+ likes AND 40,000+ views → second alert
+
+- **Non-watchlist accounts → one alert per post:**
+  - Viral alert: post hits 500+ likes AND 40,000+ views → one alert
+
+**Template variables for engagement alerts:**
+- `{{1}}` = first ~100 chars of `source_text` (tweet excerpt)
+- `{{2}}` = `source_account` (e.g., `@KitcoNews`)
+- `{{3}}` = current engagement score (composite, rounded to 1 decimal)
+- `{{4}}` = dashboard URL
+
+**Implementation approach:**
+
+Since the Twitter Agent runs every 2 hours (polling, not streaming), and the expiry sweep runs every 30 minutes, engagement alerts are dispatched by the **Senior Agent's expiry sweep** on the cycle immediately after the Twitter Agent writes the DraftItem. This keeps Phase 4 code unchanged.
+
+Deduplication: a new `alerted_at` column is added to `draft_items` (via Alembic migration) to track which items have received engagement alerts and at which threshold level. Fields:
+- `engagement_alert_level`: nullable String(20) — `null` = no alert sent yet, `"watchlist"` = first alert sent, `"viral"` = viral alert sent (or only alert for non-watchlist)
+
+The expiry sweep checks: `WHERE status='pending' AND engagement_alert_level IS NULL` (for new items needing first alert) and `WHERE engagement_alert_level='watchlist' AND [engagement_snapshot meets viral threshold]` (for watchlist items needing second alert).
+
+`engagement_snapshot` JSONB on `DraftItem` already stores raw likes/views at capture time — use this for threshold re-check.
 
 ### Expiry Alert Timing (WHAT-03)
 
@@ -144,6 +181,9 @@ The Senior Agent reads these fields to compute digest stats. No new logging sche
 - `.planning/REQUIREMENTS.md` §WhatsApp Notifications — WHAT-01 through WHAT-05
 - `.planning/ROADMAP.md` §Phase 5 — Success criteria and dependency context
 
+### Required Migration
+- `backend/alembic/versions/` — Phase 5 requires Alembic migration 0004: add `engagement_alert_level VARCHAR(20)` column to `draft_items` table (nullable; tracks whether engagement alert has been sent and at which threshold level)
+
 ### Existing Models (all deployed to Neon)
 - `backend/app/models/draft_item.py` — DraftItem schema (status enum, related_id FK, score, expires_at, urgency, platform)
 - `backend/app/models/daily_digest.py` — DailyDigest schema (top_stories, queue_snapshot, yesterday_* JSONB columns, whatsapp_sent_at)
@@ -197,6 +237,9 @@ The Senior Agent reads these fields to compute digest stats. No new logging sche
 - Text overlap (Jaccard similarity ≥ 0.40) for story deduplication — no Claude call, no API cost
 - Score ≥ 8.5 triggers immediate breaking news WhatsApp alert (configurable via `senior_breaking_news_threshold`)
 - Expiry alert fires at ≤ 1 hour before expiry for items with score ≥ 7.0 (configurable thresholds)
+- Real-time engagement alerts: all qualifying posts (watchlist + non-watchlist) get a WhatsApp alert when they cross the engagement gate; watchlist posts get TWO alerts (early signal at 50 likes/5k views, viral confirmation at 500 likes/40k views)
+- Engagement alerts dispatched by expiry sweep (30-min cycle), not Twitter Agent — Phase 4 stays unchanged
+- New `engagement_alert_level` column needed on `draft_items` — requires Alembic migration 0004
 - @sevamining own metrics deferred — no field in DailyDigest, not in scope for Phase 5
 
 </specifics>
