@@ -206,7 +206,33 @@ class InstagramAgent:
             from agents.senior_agent import process_new_items  # noqa: PLC0415
             await process_new_items(new_item_ids)
 
-        # Step 10 implemented in Plan 04 (health monitoring)
+        # Step 10: Health monitoring (INST-10)
+        hashtag_counts = self._count_posts_by_source(hashtag_posts)
+        self._store_hashtag_counts(agent_run, hashtag_counts)
+        run_count = await self._get_run_count(session)
+        baseline_threshold = int(
+            await self._get_config(session, "instagram_health_baseline_runs", "3")
+        )
+        health_warnings = await self._check_scraper_health(
+            session, hashtag_counts, run_count, baseline_threshold
+        )
+        if health_warnings:
+            agent_run.errors = health_warnings
+
+        # Step 11: Critical failure check (INST-11)
+        total_fetched = sum(hashtag_counts.values()) + len(account_posts)
+        consecutive_zeros = await self._check_critical_failure(session, total_fetched)
+        if consecutive_zeros == 2:
+            settings = get_settings()
+            from services.whatsapp import send_whatsapp_template  # noqa: PLC0415
+            await send_whatsapp_template("breaking_news", {
+                "1": "Instagram scraper failure",
+                "2": "instagram_agent",
+                "3": str(consecutive_zeros),
+                "4": settings.frontend_url,
+            })
+
+        await session.commit()
 
     async def _get_config(self, session: AsyncSession, key: str, default: str) -> str:
         """Read a config value from the Config table, with default fallback."""
@@ -311,6 +337,142 @@ class InstagramAgent:
                         max_retries + 1, last_exc,
                     )
         return []  # All retries exhausted
+
+    # -----------------------------------------------------------------------
+    # INST-09: Retry helpers
+    # -----------------------------------------------------------------------
+
+    def _count_posts_by_source(self, hashtag_posts: list[dict]) -> dict[str, int]:
+        """Count posts per _source_tag in a list of fetched hashtag posts."""
+        counts: dict[str, int] = {}
+        for p in hashtag_posts:
+            tag = p.get("_source_tag", "")
+            if tag:
+                counts[tag] = counts.get(tag, 0) + 1
+        return counts
+
+    def _store_hashtag_counts(self, agent_run: AgentRun, hashtag_counts: dict[str, int]) -> None:
+        """Store per-hashtag fetch counts in agent_run.notes as JSON (INST-10)."""
+        agent_run.notes = json.dumps({
+            "hashtag_counts": hashtag_counts,
+            "total_posts_fetched": sum(hashtag_counts.values()),
+        })
+
+    async def _get_run_count(self, session: AsyncSession) -> int:
+        """Return total count of completed instagram_agent runs."""
+        from sqlalchemy import func
+        result = await session.execute(
+            select(func.count()).where(
+                AgentRun.agent_name == "instagram_agent",
+                AgentRun.status == "completed",
+            )
+        )
+        return result.scalar_one() or 0
+
+    # -----------------------------------------------------------------------
+    # INST-10: Scraper health monitoring
+    # -----------------------------------------------------------------------
+
+    async def _check_scraper_health(
+        self,
+        session: AsyncSession,
+        current_counts: dict[str, int],
+        run_number: int,
+        baseline_threshold: int,
+    ) -> list[str]:
+        """INST-10: Return health warning strings for hashtags below 20% of rolling average.
+
+        Skips the check when run_number <= baseline_threshold (no baseline yet).
+        Queries last 7 completed instagram_agent runs for rolling averages.
+        """
+        if run_number <= baseline_threshold:
+            return []
+
+        # Query last 7 completed runs with notes
+        result = await session.execute(
+            select(AgentRun).where(
+                AgentRun.agent_name == "instagram_agent",
+                AgentRun.status == "completed",
+                AgentRun.notes.isnot(None),
+            ).order_by(AgentRun.created_at.desc()).limit(7)
+        )
+        prior_runs = result.scalars().all()
+
+        if not prior_runs:
+            return []
+
+        # Build per-hashtag rolling averages from notes JSON
+        tag_sums: dict[str, list[int]] = {}
+        for run in prior_runs:
+            try:
+                notes = json.loads(run.notes)
+                counts = notes.get("hashtag_counts", {})
+                for tag, count in counts.items():
+                    tag_sums.setdefault(tag, []).append(count)
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+        if not tag_sums:
+            return []
+
+        warnings: list[str] = []
+        for tag, current_count in current_counts.items():
+            historical = tag_sums.get(tag, [])
+            if not historical:
+                continue
+            rolling_avg = sum(historical) / len(historical)
+            threshold_20pct = rolling_avg * 0.20
+            if current_count < threshold_20pct:
+                warnings.append(
+                    f"health_warning: #{tag} returned {current_count} posts "
+                    f"(avg={rolling_avg:.1f}, threshold={threshold_20pct:.1f})"
+                )
+                logger.warning(
+                    "health_warning: #%s returned %d posts (rolling avg=%.1f)",
+                    tag, current_count, rolling_avg,
+                )
+
+        return warnings
+
+    # -----------------------------------------------------------------------
+    # INST-11: Critical failure alerting
+    # -----------------------------------------------------------------------
+
+    async def _check_critical_failure(
+        self,
+        session: AsyncSession,
+        current_total: int,
+    ) -> int:
+        """INST-11: Return consecutive zero-run count. 0 if current run has results.
+
+        Counts the current run (0 total) + prior consecutive all-zero completed runs.
+        """
+        if current_total > 0:
+            return 0
+
+        # Current run is zero — count prior consecutive all-zero runs
+        result = await session.execute(
+            select(AgentRun).where(
+                AgentRun.agent_name == "instagram_agent",
+                AgentRun.status == "completed",
+                AgentRun.notes.isnot(None),
+            ).order_by(AgentRun.created_at.desc()).limit(7)
+        )
+        prior_runs = result.scalars().all()
+
+        consecutive = 1  # Current run counts as zero
+        for run in prior_runs:
+            try:
+                notes = json.loads(run.notes)
+                total = notes.get("total_posts_fetched", -1)
+                if total == 0:
+                    consecutive += 1
+                else:
+                    break  # Non-zero run breaks the streak
+            except (json.JSONDecodeError, TypeError):
+                break
+
+        return consecutive
 
     def _deduplicate_posts(self, posts: list[dict]) -> list[dict]:
         """Deduplicate by shortCode (Apify unique post identifier)."""
