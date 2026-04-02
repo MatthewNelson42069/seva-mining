@@ -2,10 +2,10 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-It starts AsyncIOScheduler with 5 placeholder jobs and uses PostgreSQL
-advisory locks to prevent duplicate execution during Railway zero-downtime deploys.
+It starts AsyncIOScheduler with 5 jobs and uses PostgreSQL advisory locks
+to prevent duplicate execution during Railway zero-downtime deploys.
 
-Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04
+Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04, TWIT-01
 Decisions: D-12 (APScheduler 3.11.2), D-13 (advisory lock), D-14 (placeholder jobs)
 """
 import asyncio
@@ -16,6 +16,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection
 from sqlalchemy import text
 
+from agents.twitter_agent import TwitterAgent
 from config import get_settings
 
 logging.basicConfig(
@@ -97,17 +98,29 @@ async def placeholder_job(job_name: str) -> None:
 
 def _make_job(job_name: str, engine):
     """
-    Create a job callback for APScheduler that wraps placeholder_job
-    with the advisory lock.
+    Create a job callback for APScheduler that wraps the appropriate agent
+    or placeholder with the advisory lock.
+
+    The twitter_agent job instantiates TwitterAgent and calls agent.run().
+    All other jobs currently use placeholder_job until their phases are built.
     """
     async def job():
         async with engine.connect() as conn:
-            await with_advisory_lock(
-                conn,
-                JOB_LOCK_IDS[job_name],
-                job_name,
-                lambda: placeholder_job(job_name),
-            )
+            if job_name == "twitter_agent":
+                agent = TwitterAgent()
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    agent.run,
+                )
+            else:
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    lambda: placeholder_job(job_name),
+                )
     return job
 
 
