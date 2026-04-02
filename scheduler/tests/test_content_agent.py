@@ -65,7 +65,6 @@ def test_serpapi_parsing():
 
 def test_url_deduplication():
     """deduplicate_stories removes exact URL duplicates, keeps first occurrence."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
     stories = [
         {"title": "Gold hits $3200", "link": "https://example.com/a", "source_name": "Reuters"},
@@ -82,7 +81,6 @@ def test_url_deduplication():
 
 def test_headline_deduplication():
     """deduplicate_stories removes headline-similar (>=0.85) stories, keeps more credible source."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
     stories = [
         {"title": "Gold price surges to record high of $3200", "link": "https://a.com/1", "source_name": "kitco.com"},
@@ -99,7 +97,6 @@ def test_headline_deduplication():
 
 def test_recency_score():
     """recency_score returns 1.0 for <3h, 0.8 for <6h, 0.6 for <12h, 0.4 for <24h, 0.2 for >=24h."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
     now = datetime.now(timezone.utc)
     assert ca.recency_score(now - timedelta(hours=1)) == 1.0
@@ -115,7 +112,6 @@ def test_recency_score():
 
 def test_credibility_score():
     """credibility_score returns tier-based score: reuters=1.0, kitco=0.8, unknown=0.4."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
     assert ca.credibility_score("reuters.com") == 1.0
     assert ca.credibility_score("bloomberg.com") == 1.0
@@ -132,7 +128,6 @@ def test_credibility_score():
 
 def test_final_score_formula():
     """calculate_story_score combines relevance*0.4 + recency*0.3 + credibility*0.3, scaled to 0-10."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
     # relevance=0.9, recency=1.0, credibility=0.8
     # (0.9*0.4 + 1.0*0.3 + 0.8*0.3) * 10 = (0.36 + 0.30 + 0.24) * 10 = 9.0
@@ -146,7 +141,6 @@ def test_final_score_formula():
 
 def test_select_top_story():
     """select_top_story returns highest-scoring story above threshold, or None."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
     stories = [
         {"title": "A", "score": 8.5},
@@ -164,7 +158,6 @@ def test_select_top_story():
 
 def test_no_story_flag():
     """select_top_story returns None when all stories are below threshold."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
     stories = [{"title": "A", "score": 5.0}, {"title": "B", "score": 6.9}]
     result = ca.select_top_story(stories, threshold=7.0)
