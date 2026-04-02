@@ -11,6 +11,7 @@ dependencies = [
     "tweepy[async]>=4.14",
     "anthropic>=0.86.0",
     "twilio>=9.0",
+    "apify-client==2.5.0",
 ]
 
 [project.optional-dependencies]
