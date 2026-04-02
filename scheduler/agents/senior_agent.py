@@ -873,3 +873,38 @@ async def process_new_items(item_ids: list[uuid.UUID]) -> None:
     agent = SeniorAgent()
     for item_id in item_ids:
         await agent.process_new_item(item_id)
+
+
+async def seed_senior_config() -> None:
+    """Insert Senior Agent default config values if not already present.
+
+    Idempotent — safe to call on every worker startup.  Only inserts rows
+    for keys that do not yet exist in the config table.
+
+    Config keys seeded:
+    - senior_queue_cap: "15"
+    - senior_breaking_news_threshold: "8.5"
+    - senior_dedup_threshold: "0.40"
+    - senior_dedup_lookback_hours: "24"
+    - senior_expiry_alert_score_threshold: "7.0"
+    - senior_expiry_alert_minutes_before: "60"
+    - dashboard_url: "https://app.sevamining.com"
+    """
+    defaults = {
+        "senior_queue_cap": "15",
+        "senior_breaking_news_threshold": "8.5",
+        "senior_dedup_threshold": "0.40",
+        "senior_dedup_lookback_hours": "24",
+        "senior_expiry_alert_score_threshold": "7.0",
+        "senior_expiry_alert_minutes_before": "60",
+        "dashboard_url": "https://app.sevamining.com",
+    }
+    async with AsyncSessionLocal() as session:
+        for key, value in defaults.items():
+            existing = await session.execute(
+                select(Config.value).where(Config.key == key)
+            )
+            if existing.scalar_one_or_none() is None:
+                session.add(Config(key=key, value=value))
+        await session.commit()
+    logger.info("seed_senior_config: Senior Agent config defaults verified.")

@@ -5,8 +5,9 @@ This module is the entry point for Railway service 2 (scheduler worker).
 It starts AsyncIOScheduler with 5 jobs and uses PostgreSQL advisory locks
 to prevent duplicate execution during Railway zero-downtime deploys.
 
-Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04, TWIT-01
+Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04, TWIT-01, SENR-01, SENR-09
 Decisions: D-12 (APScheduler 3.11.2), D-13 (advisory lock), D-14 (placeholder jobs)
+Phase 5 (SENR): expiry_sweep and morning_digest jobs wired to SeniorAgent.
 """
 import asyncio
 import inspect
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection
 from sqlalchemy import text
 
 from agents.twitter_agent import TwitterAgent
+from agents.senior_agent import SeniorAgent, seed_senior_config
 from config import get_settings
 
 logging.basicConfig(
@@ -101,8 +103,10 @@ def _make_job(job_name: str, engine):
     Create a job callback for APScheduler that wraps the appropriate agent
     or placeholder with the advisory lock.
 
-    The twitter_agent job instantiates TwitterAgent and calls agent.run().
-    All other jobs currently use placeholder_job until their phases are built.
+    - twitter_agent: TwitterAgent().run()
+    - expiry_sweep: SeniorAgent().run_expiry_sweep()   [Phase 5 — SENR-09]
+    - morning_digest: SeniorAgent().run_morning_digest() [Phase 5 — SENR-01]
+    - All other jobs use placeholder_job until their phases are built.
     """
     async def job():
         async with engine.connect() as conn:
@@ -113,6 +117,22 @@ def _make_job(job_name: str, engine):
                     JOB_LOCK_IDS[job_name],
                     job_name,
                     agent.run,
+                )
+            elif job_name == "expiry_sweep":
+                agent = SeniorAgent()
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    agent.run_expiry_sweep,
+                )
+            elif job_name == "morning_digest":
+                agent = SeniorAgent()
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    agent.run_morning_digest,
                 )
             else:
                 await with_advisory_lock(
@@ -187,6 +207,9 @@ async def main() -> None:
         pool_pre_ping=True,
         pool_recycle=300,
     )
+
+    # Seed Senior Agent config defaults (idempotent — safe to run on every startup)
+    await seed_senior_config()
 
     scheduler = build_scheduler(engine)
     scheduler.start()

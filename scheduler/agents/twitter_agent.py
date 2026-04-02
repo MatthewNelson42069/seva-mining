@@ -816,7 +816,7 @@ class TwitterAgent:
         self,
         session: AsyncSession,
         qualifying_posts: list[dict],
-    ) -> tuple[int, int, list]:
+    ) -> tuple[int, int, list, list]:
         """Draft, check compliance, and persist DraftItem records for qualifying posts.
 
         For each qualifying post:
@@ -831,11 +831,13 @@ class TwitterAgent:
             qualifying_posts: List of scored tweet dicts (output of scoring pipeline).
 
         Returns:
-            Tuple of (items_queued, items_filtered_by_compliance, errors_list).
+            Tuple of (items_queued, items_filtered_by_compliance, errors_list, new_item_ids).
+            new_item_ids contains the UUIDs of committed DraftItems (populated after commit).
         """
         items_queued = 0
         items_filtered = 0
         errors: list[str] = []
+        new_draft_items: list[DraftItem] = []
 
         for post in qualifying_posts:
             tweet_id = post.get("id", "unknown")
@@ -929,6 +931,7 @@ class TwitterAgent:
                 },
             )
             session.add(draft_item)
+            new_draft_items.append(draft_item)
             items_queued += 1
             logger.info(
                 "Queued DraftItem for tweet %s (@%s, score=%.3f, %d alts)",
@@ -941,8 +944,10 @@ class TwitterAgent:
         # Commit all DraftItems in a single transaction
         if items_queued > 0:
             await session.commit()
+            # UUIDs are now populated by SQLAlchemy after commit
 
-        return items_queued, items_filtered, errors
+        new_item_ids = [item.id for item in new_draft_items if item.id is not None]
+        return items_queued, items_filtered, errors, new_item_ids
 
     # -----------------------------------------------------------------------
     # Main pipeline
@@ -1081,8 +1086,8 @@ class TwitterAgent:
         )
 
         # Step 10: Draft, compliance check, and persist DraftItems (TWIT-07 through TWIT-14)
-        items_queued, compliance_filtered, compliance_errors = await self._process_drafts(
-            session, top_posts
+        items_queued, compliance_filtered, compliance_errors, new_item_ids = (
+            await self._process_drafts(session, top_posts)
         )
         run_record = agent_run
         run_record.items_queued = items_queued
@@ -1096,6 +1101,12 @@ class TwitterAgent:
         agent_run.status = "completed"
         agent_run.ended_at = datetime.now(timezone.utc)
         await session.commit()
+
+        # Step 12: Senior Agent intake — dedup + queue cap + breaking news alert
+        # Phase 5: lazy import to avoid circular dependency at module level
+        if new_item_ids:
+            from agents.senior_agent import process_new_items  # noqa: PLC0415
+            await process_new_items(new_item_ids)
 
         logger.info(
             "TwitterAgent run complete: found=%d filtered=%d queued=%d",
