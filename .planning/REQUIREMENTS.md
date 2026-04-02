@@ -48,14 +48,14 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **INST-02**: Agent scores posts: likes x1 + comment count x2 + normalized follower count x1.5
 - [x] **INST-03**: Minimum engagement gate: 200+ likes from last 8 hours
 - [x] **INST-04**: Top 3 posts per run passed to drafting
-- [ ] **INST-05**: Agent drafts 2-3 alternative comments per qualifying post (1-2 sentences each)
-- [ ] **INST-06**: No hashtags in any drafted comment, ever
-- [ ] **INST-07**: Each draft evaluated against quality rubric before queuing
-- [ ] **INST-08**: Separate Claude compliance-checker call on every draft
+- [x] **INST-05**: Agent drafts 2-3 alternative comments per qualifying post (1-2 sentences each)
+- [x] **INST-06**: No hashtags in any drafted comment, ever
+- [x] **INST-07**: Each draft evaluated against quality rubric before queuing
+- [x] **INST-08**: Separate Claude compliance-checker call on every draft
 - [ ] **INST-09**: Retry logic for Apify scraping failures with exponential backoff
 - [ ] **INST-10**: Scraper health monitoring: detect silent failures (HTTP 200 with empty results) by comparing against baseline expected volume
 - [ ] **INST-11**: Scraper failure alerts surfaced in agent run logs and WhatsApp if critical
-- [ ] **INST-12**: Items expire after 12 hours
+- [x] **INST-12**: Items expire after 12 hours
 
 ### Content Agent
 
@@ -243,14 +243,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INST-02 | Phase 6 | Complete |
 | INST-03 | Phase 6 | Complete |
 | INST-04 | Phase 6 | Complete |
-| INST-05 | Phase 6 | Pending |
-| INST-06 | Phase 6 | Pending |
-| INST-07 | Phase 6 | Pending |
-| INST-08 | Phase 6 | Pending |
+| INST-05 | Phase 6 | Complete |
+| INST-06 | Phase 6 | Complete |
+| INST-07 | Phase 6 | Complete |
+| INST-08 | Phase 6 | Complete |
 | INST-09 | Phase 6 | Pending |
 | INST-10 | Phase 6 | Pending |
 | INST-11 | Phase 6 | Pending |
-| INST-12 | Phase 6 | Pending |
+| INST-12 | Phase 6 | Complete |
 | CONT-01 | Phase 7 | Pending |
 | CONT-02 | Phase 7 | Pending |
 | CONT-03 | Phase 7 | Pending |
