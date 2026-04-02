@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Phase complete — ready for verification
-stopped_at: Completed 05-06-PLAN.md — Phase 5 Senior Agent Core complete
-last_updated: "2026-04-02T20:58:16.548Z"
+status: Executing Phase 6
+stopped_at: Completed 06-01-PLAN.md — Wave 0 test stubs and apify-client dep
+last_updated: "2026-04-02T22:22:29Z"
 progress:
   total_phases: 9
-  completed_phases: 5
-  total_plans: 27
-  completed_plans: 21
+  completed_phases: 4
+  total_plans: 32
+  completed_plans: 22
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
-**Current focus:** Phase 5
+**Current focus:** Phase 6
 
 ## Current Position
 
-Phase: 5 — EXECUTING
-Plan: 6 of 6
+Phase: 6 — EXECUTING
+Plan: 2 of 5
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Plan: 6 of 6
 | Phase 05-senior-agent-core P03 | 15 min | 1 tasks | 2 files |
 | Phase 05-senior-agent-core P04 | 20 | 1 tasks | 2 files |
 | Phase 05 P05 | 2 minutes | 1 tasks | 2 files |
+| Phase 06-instagram-agent P01 | 5 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,7 @@ Recent decisions affecting current work:
 - [Phase 05-senior-agent-core]: process_new_items module-level function uses lazy SeniorAgent instantiation to avoid circular imports from TwitterAgent call site
 - [Phase 05-senior-agent-core]: run_expiry_sweep does NOT call _check_breaking_news_alert (that fires at item intake via process_new_item); engagement dedup uses one-way state machine null->watchlist->viral via engagement_alert_level column
 - [Phase 05]: _headline_from_rationale splits on period-space to avoid splitting decimal numbers; queue_snapshot total computed in Python; yesterday_approved includes empty items list; var_2 truncated at last semicolon-space boundary within 200 chars
+- [Phase 06-instagram-agent]: Wave 0 test stubs use pytest.skip() BEFORE lazy import — ensures 15 tests show as 'skipped' not 'error' when instagram_agent module doesn't exist yet; uv sync --all-extras required to preserve dev dependencies when adding prod deps
 
 ### Pending Todos
 
