@@ -49,6 +49,10 @@ class DraftItem(Base):
     event_mode = Column(String(20))
     engagement_snapshot = Column(JSONB)
 
+    # Senior Agent alert tracking (Phase 5, migration 0004)
+    engagement_alert_level = Column(String(20), nullable=True)   # null/watchlist/viral
+    alerted_expiry_at = Column(DateTime(timezone=True), nullable=True)  # expiry alert dedup
+
     __table_args__ = (
         Index("ix_draft_items_status", "status"),       # D-08
         Index("ix_draft_items_platform", "platform"),   # D-08
