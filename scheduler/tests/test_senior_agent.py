@@ -976,11 +976,222 @@ def test_engagement_alert_no_repeat_viral():
 
 def test_morning_digest_assembly():
     """SENR-06/SENR-07: Morning digest assembles correct JSONB with top stories, counts, snapshot."""
-    pytest.skip("Wave 0 stub — implementation in Wave 3")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock
+    from agents.senior_agent import SeniorAgent
+
+    now = datetime.now(timezone.utc)
+
+    # --- Build mock DraftItems for approved (3), rejected (1), expired (2) ---
+
+    def make_item(item_id, status, score, platform, source_account, rationale, source_url):
+        item = MagicMock()
+        item.id = item_id
+        item.status = status
+        item.score = Decimal(str(score))
+        item.platform = platform
+        item.source_account = source_account
+        item.rationale = rationale
+        item.source_url = source_url
+        item.expires_at = now
+        return item
+
+    approved_1 = make_item(uuid.uuid4(), "approved", 9.0, "twitter", "@Kitco", "Gold hits high. Details here.", "https://ex.com/1")
+    approved_2 = make_item(uuid.uuid4(), "edited_approved", 8.5, "instagram", "@GoldInvestor", "Fed signals rate cut. Market reacts.", "https://ex.com/2")
+    approved_3 = make_item(uuid.uuid4(), "approved", 7.8, "content", "@NewsDesk", "Mining output rises quarterly. Analysts bullish.", "https://ex.com/3")
+    rejected_1 = make_item(uuid.uuid4(), "rejected", 5.0, "twitter", "@Spam", "Not relevant. Discard.", "https://ex.com/4")
+    expired_1 = make_item(uuid.uuid4(), "expired", 4.0, "twitter", "@Old", "Old story expired. Not shown.", "https://ex.com/5")
+    expired_2 = make_item(uuid.uuid4(), "expired", 3.5, "twitter", "@Old2", "Another expired. Done.", "https://ex.com/6")
+
+    # Top 5 stories query: 3 items by score DESC
+    top_story_1 = make_item(uuid.uuid4(), "approved", 9.0, "twitter", "@Kitco", "Gold hits all-time high. Markets rally strongly.", "https://ex.com/t1")
+    top_story_2 = make_item(uuid.uuid4(), "approved", 8.5, "instagram", "@GoldInvestor", "Central banks buying gold. Record purchases.", "https://ex.com/t2")
+    top_story_3 = make_item(uuid.uuid4(), "pending", 7.0, "twitter", "@AuAnalyst", "Gold ETF inflows surge. Demand robust.", "https://ex.com/t3")
+
+    # Priority alert: highest-scoring pending item
+    priority_item = make_item(uuid.uuid4(), "pending", 9.0, "twitter", "@Breaking", "Breaking gold news right now. Act fast.", "https://ex.com/p1")
+
+    mock_session = AsyncMock()
+
+    # execute() call sequence:
+    # 1. yesterday approved count → scalar_one() = 3
+    # 2. yesterday rejected count → scalar_one() = 1
+    # 3. yesterday expired count → scalar_one() = 2
+    # 4. top 5 stories → scalars().all() = [top_story_1, top_story_2, top_story_3]
+    # 5. queue snapshot → all() = [("twitter", 3), ("instagram", 1), ("content", 1)]
+    # 6. priority alert → scalar_one_or_none() = priority_item
+
+    approved_result = MagicMock()
+    approved_result.scalar_one.return_value = 3
+
+    rejected_result = MagicMock()
+    rejected_result.scalar_one.return_value = 1
+
+    expired_result = MagicMock()
+    expired_result.scalar_one.return_value = 2
+
+    top_stories_result = MagicMock()
+    top_stories_result.scalars.return_value.all.return_value = [top_story_1, top_story_2, top_story_3]
+
+    queue_snapshot_result = MagicMock()
+    queue_snapshot_result.all.return_value = [("twitter", 3), ("instagram", 1), ("content", 1)]
+
+    priority_result = MagicMock()
+    priority_result.scalar_one_or_none.return_value = priority_item
+
+    mock_session.execute = AsyncMock(side_effect=[
+        approved_result,
+        rejected_result,
+        expired_result,
+        top_stories_result,
+        queue_snapshot_result,
+        priority_result,
+    ])
+
+    async def run_test():
+        agent = SeniorAgent()
+        return await agent._assemble_digest(mock_session)
+
+    digest = asyncio.run(run_test())
+
+    # top_stories: list of 3, each with correct keys
+    assert isinstance(digest["top_stories"], list), "top_stories must be a list"
+    assert len(digest["top_stories"]) == 3, f"Expected 3 top stories, got {len(digest['top_stories'])}"
+    for story in digest["top_stories"]:
+        assert "headline" in story, f"Missing 'headline' key in story: {story}"
+        assert "source_account" in story, f"Missing 'source_account' key"
+        assert "platform" in story, f"Missing 'platform' key"
+        assert "score" in story, f"Missing 'score' key"
+        assert "source_url" in story, f"Missing 'source_url' key"
+
+    # queue_snapshot: correct platform counts and total
+    qs = digest["queue_snapshot"]
+    assert qs == {"twitter": 3, "instagram": 1, "content": 1, "total": 5}, \
+        f"queue_snapshot mismatch: {qs}"
+
+    # yesterday counts
+    assert digest["yesterday_approved"]["count"] == 3, \
+        f"Expected approved count 3, got {digest['yesterday_approved']['count']}"
+    assert digest["yesterday_rejected"]["count"] == 1, \
+        f"Expected rejected count 1, got {digest['yesterday_rejected']['count']}"
+    assert digest["yesterday_expired"]["count"] == 2, \
+        f"Expected expired count 2, got {digest['yesterday_expired']['count']}"
+
+    # priority_alert: has required keys, correct score
+    pa = digest["priority_alert"]
+    assert pa is not None, "priority_alert must not be None"
+    for key in ("id", "platform", "score", "headline", "expires_at", "source_url"):
+        assert key in pa, f"Missing key '{key}' in priority_alert: {pa}"
+    assert pa["score"] == 9.0, f"Expected priority_alert score 9.0, got {pa['score']}"
 
 
 def test_morning_digest_whatsapp_send():
     """WHAT-01/WHAT-05: Morning digest sends WhatsApp with 7 template variables including dashboard URL."""
-    pytest.skip("Wave 0 stub — implementation in Wave 3")
-    from agents.senior_agent import SeniorAgent  # noqa: F401
+    import asyncio
+    from datetime import date
+    from unittest.mock import AsyncMock, MagicMock, patch
+    from agents.senior_agent import SeniorAgent
+
+    # Known digest dict returned by _assemble_digest
+    known_digest = {
+        "top_stories": [
+            {"headline": "Gold hits all-time high.", "source_account": "@Kitco", "platform": "twitter", "score": 9.0, "source_url": "https://ex.com/1"},
+            {"headline": "Central banks buying gold.", "source_account": "@GoldInvestor", "platform": "instagram", "score": 8.5, "source_url": "https://ex.com/2"},
+            {"headline": "Gold ETF inflows surge.", "source_account": "@AuAnalyst", "platform": "twitter", "score": 7.0, "source_url": "https://ex.com/3"},
+        ],
+        "queue_snapshot": {"twitter": 3, "instagram": 1, "content": 1, "total": 5},
+        "yesterday_approved": {"count": 3, "items": []},
+        "yesterday_rejected": {"count": 1},
+        "yesterday_expired": {"count": 2},
+        "priority_alert": {
+            "id": "some-uuid",
+            "platform": "twitter",
+            "score": 9.0,
+            "source_account": "@Breaking",
+            "headline": "Breaking gold news right now.",
+            "expires_at": None,
+            "source_url": "https://ex.com/p1",
+        },
+    }
+
+    mock_run = MagicMock()
+    mock_run.status = "running"
+
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.commit = AsyncMock()
+
+    added_objects = []
+    mock_session.add = MagicMock(side_effect=lambda obj: added_objects.append(obj))
+
+    async def run_test():
+        agent = SeniorAgent()
+
+        async def mock_assemble_digest(session):
+            return known_digest
+
+        async def mock_get_config(session, key, default):
+            if key == "dashboard_url":
+                return "https://app.sevamining.com"
+            return default
+
+        with patch.object(agent, "_assemble_digest", new=mock_assemble_digest), \
+             patch.object(agent, "_get_config", new=mock_get_config), \
+             patch("agents.senior_agent.AsyncSessionLocal") as mock_session_local, \
+             patch("agents.senior_agent.AgentRun", return_value=mock_run), \
+             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+
+            mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session_local.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            await agent.run_morning_digest()
+
+            # Assert send_whatsapp_template called once with "morning_digest" and 7 variables
+            mock_send.assert_called_once()
+            call_args = mock_send.call_args
+            assert call_args[0][0] == "morning_digest", \
+                f"Expected template 'morning_digest', got '{call_args[0][0]}'"
+            variables = call_args[0][1]
+
+            # Variable 1: today's date as YYYY-MM-DD
+            today_str = date.today().isoformat()
+            assert variables["1"] == today_str, \
+                f"Variable 1 (date) expected '{today_str}', got '{variables['1']}'"
+
+            # Variable 2: headlines joined, <= 200 chars
+            assert "2" in variables, "Variable 2 (headlines) missing"
+            assert len(variables["2"]) <= 200, \
+                f"Variable 2 length {len(variables['2'])} > 200 chars: {variables['2']}"
+            assert "Gold hits all-time high" in variables["2"], \
+                f"Expected first headline in variable 2: {variables['2']}"
+
+            # Variable 3: total queue count
+            assert variables["3"] == "5", f"Variable 3 (queue total) expected '5', got '{variables['3']}'"
+
+            # Variable 4: approved count
+            assert variables["4"] == "3", f"Variable 4 (approved) expected '3', got '{variables['4']}'"
+
+            # Variable 5: rejected count
+            assert variables["5"] == "1", f"Variable 5 (rejected) expected '1', got '{variables['5']}'"
+
+            # Variable 6: expired count
+            assert variables["6"] == "2", f"Variable 6 (expired) expected '2', got '{variables['6']}'"
+
+            # Variable 7: dashboard URL
+            assert variables["7"] == "https://app.sevamining.com", \
+                f"Variable 7 (dashboard_url) expected 'https://app.sevamining.com', got '{variables['7']}'"
+
+        # Assert DailyDigest was added to the session
+        daily_digest_objects = [obj for obj in added_objects if type(obj).__name__ == "DailyDigest"]
+        assert len(daily_digest_objects) >= 1, \
+            f"Expected DailyDigest to be added to session, added_objects: {[type(o).__name__ for o in added_objects]}"
+
+        # Assert whatsapp_sent_at is set (not None)
+        digest_record = daily_digest_objects[0]
+        assert digest_record.whatsapp_sent_at is not None, \
+            "Expected DailyDigest.whatsapp_sent_at to be set after send"
+
+    asyncio.run(run_test())
