@@ -177,6 +177,46 @@ def select_top_story(stories: list[dict], threshold: float) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Compliance checker — fail-safe pattern (CONT-14, CONT-15, CONT-16)
+# ---------------------------------------------------------------------------
+
+async def check_compliance(text: str, anthropic_client=None) -> bool:
+    """Check content for compliance. Returns True only on explicit 'pass'.
+    Fail-safe: ambiguous response = block (returns False).
+    Pre-screens locally for 'seva mining' before calling Claude Haiku.
+
+    Args:
+        text: Draft text to check for compliance.
+        anthropic_client: Optional AsyncAnthropic instance; created from settings if None.
+
+    Returns:
+        True only if Claude responds with exactly 'pass'. False otherwise (fail-safe).
+    """
+    text_lower = text.lower()
+    # Local pre-screen — no LLM cost for obvious blocks
+    if "seva mining" in text_lower:
+        return False
+
+    if anthropic_client is None:
+        settings = get_settings()
+        anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+    try:
+        response = await anthropic_client.messages.create(
+            model="claude-haiku-3-20240307",
+            max_tokens=50,
+            system="You are a compliance checker. Evaluate the following content. Reply with exactly 'pass' if the content does NOT mention Seva Mining and does NOT contain financial advice (recommendations to buy, sell, invest, or any action-oriented investment guidance). Reply with 'fail: [reason]' otherwise.",
+            messages=[{"role": "user", "content": text}],
+        )
+        result = response.content[0].text.strip().lower()
+        # Fail-safe: only explicit 'pass' returns True
+        return result == "pass"
+    except Exception as exc:
+        logger.warning("Compliance check failed with error: %s — blocking by default", exc)
+        return False
+
+
+# ---------------------------------------------------------------------------
 # RSS and SerpAPI parsing helpers (CONT-02, CONT-03) — stubs for Plan 03
 # ---------------------------------------------------------------------------
 

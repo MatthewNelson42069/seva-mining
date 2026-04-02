@@ -199,9 +199,8 @@ def test_thread_draft_structure():
 @pytest.mark.asyncio
 async def test_compliance_fail_seva_mining():
     """check_compliance returns False when draft contains 'Seva Mining'."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
-    # Mock anthropic to return "fail: mentions Seva Mining"
+    # Local pre-screen catches this — no LLM call needed
     result = await ca.check_compliance("This post by Seva Mining shows gold at $3200")
     assert result is False
 
@@ -213,11 +212,13 @@ async def test_compliance_fail_seva_mining():
 @pytest.mark.asyncio
 async def test_compliance_failsafe():
     """check_compliance returns False (blocks) on ambiguous LLM response."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
-    # Mock anthropic to return "maybe" (ambiguous)
-    result = await ca.check_compliance("Some text")
-    assert result is False
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="maybe it's fine")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.check_compliance("Gold prices rose 5% this week", anthropic_client=mock_client)
+    assert result is False  # "maybe it's fine" is not "pass" — fail-safe blocks
 
 
 # ---------------------------------------------------------------------------
