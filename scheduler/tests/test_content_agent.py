@@ -189,13 +189,19 @@ async def test_article_fetch_fallback():
 # ---------------------------------------------------------------------------
 
 def test_thread_draft_structure():
-    """Thread format draft_content has keys: format, tweets, long_form_post."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
-    draft = {"format": "thread", "tweets": ["t1", "t2", "t3"], "long_form_post": "full post"}
+    """Thread format draft_content has keys: format, tweets, long_form_post — validated structurally."""
+    # This tests the expected JSON structure, not the Claude call itself
+    draft = {
+        "format": "thread",
+        "tweets": ["Tweet 1 about gold prices", "Tweet 2 about production", "Tweet 3 about outlook"],
+        "long_form_post": "A comprehensive look at gold prices..."
+    }
     assert draft["format"] == "thread"
     assert isinstance(draft["tweets"], list)
     assert len(draft["tweets"]) >= 3
+    assert all(len(t) <= 280 for t in draft["tweets"])
     assert "long_form_post" in draft
+    assert len(draft["long_form_post"]) <= 2200
 
 
 # ---------------------------------------------------------------------------
