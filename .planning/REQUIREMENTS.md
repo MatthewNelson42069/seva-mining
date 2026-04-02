@@ -79,10 +79,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Senior Agent
 
-- [ ] **SENR-01**: Receives all drafts from sub-agents as they arrive
+- [x] **SENR-01**: Receives all drafts from sub-agents as they arrive
 - [x] **SENR-02**: Deduplicates across agents — same story surfaces as separate cards per platform, visually linked as "related"
-- [ ] **SENR-03**: Prioritizes queue: Twitter time-sensitive first, breaking news content second, Instagram third, evergreen last
-- [ ] **SENR-04**: Hard cap of 15 items in queue — lower-scoring items displaced by higher-scoring new items when full
+- [x] **SENR-03**: Prioritizes queue: Twitter time-sensitive first, breaking news content second, Instagram third, evergreen last
+- [x] **SENR-04**: Hard cap of 15 items in queue — lower-scoring items displaced by higher-scoring new items when full
 - [ ] **SENR-05**: Auto-expires items after platform window (Twitter: 6h, Instagram: 12h)
 - [ ] **SENR-06**: Assembles morning digest daily at 8am
 - [ ] **SENR-07**: Morning digest contains: top 5 gold sector stories (one sentence each), queue snapshot by platform, yesterday's approved/rejected/expired counts, scraped surface metrics on @sevamining posts, single highest-value queue item
@@ -226,10 +226,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TWIT-12 | Phase 4 | Complete |
 | TWIT-13 | Phase 4 | Complete |
 | TWIT-14 | Phase 4 | Complete |
-| SENR-01 | Phase 5 | Pending |
+| SENR-01 | Phase 5 | Complete |
 | SENR-02 | Phase 5 | Complete |
-| SENR-03 | Phase 5 | Pending |
-| SENR-04 | Phase 5 | Pending |
+| SENR-03 | Phase 5 | Complete |
+| SENR-04 | Phase 5 | Complete |
 | SENR-05 | Phase 5 | Pending |
 | SENR-06 | Phase 5 | Pending |
 | SENR-07 | Phase 5 | Pending |
