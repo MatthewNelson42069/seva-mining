@@ -413,12 +413,16 @@ async def test_no_duplicate_alert():
 async def test_scheduler_wiring():
     """
     InstagramAgent().run must be an async callable (coroutine function).
+    Also verifies the worker.py instagram_agent job slot references InstagramAgent.
     Covers: INST-01
     """
-    pytest.skip("Instagram agent not yet implemented")
     import inspect
     ia = _get_instagram_agent()
-    agent = ia.InstagramAgent()
+    with patch("agents.instagram_agent.get_settings", return_value=MagicMock(
+        apify_api_token="tok", anthropic_api_key="key"
+    )):
+        with patch("agents.instagram_agent.ApifyClientAsync"):
+            agent = ia.InstagramAgent()
     assert inspect.iscoroutinefunction(agent.run), (
         "InstagramAgent.run must be an async def (coroutine function)"
     )

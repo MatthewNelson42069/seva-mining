@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection
 from sqlalchemy import text
 
 from agents.twitter_agent import TwitterAgent
+from agents.instagram_agent import InstagramAgent
 from agents.senior_agent import SeniorAgent, seed_senior_config
 from config import get_settings
 
@@ -104,6 +105,7 @@ def _make_job(job_name: str, engine):
     or placeholder with the advisory lock.
 
     - twitter_agent: TwitterAgent().run()
+    - instagram_agent: InstagramAgent().run()          [Phase 6 — INST-01]
     - expiry_sweep: SeniorAgent().run_expiry_sweep()   [Phase 5 — SENR-09]
     - morning_digest: SeniorAgent().run_morning_digest() [Phase 5 — SENR-01]
     - All other jobs use placeholder_job until their phases are built.
@@ -112,6 +114,14 @@ def _make_job(job_name: str, engine):
         async with engine.connect() as conn:
             if job_name == "twitter_agent":
                 agent = TwitterAgent()
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    agent.run,
+                )
+            elif job_name == "instagram_agent":
+                agent = InstagramAgent()
                 await with_advisory_lock(
                     conn,
                     JOB_LOCK_IDS[job_name],
