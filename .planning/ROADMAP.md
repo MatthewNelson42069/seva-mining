@@ -131,7 +131,14 @@ Plans:
   3. A separate compliance checker Claude call blocks any draft mentioning Seva Mining or containing financial advice
   4. When Apify returns zero results for a hashtag with an established baseline, this is flagged as a scraper health event in the run log — not treated as a quiet day
   5. Items expire from the queue after 12 hours; critical scraper failures trigger a WhatsApp alert
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Foundation: apify-client dep, 15 test stubs (Wave 0)
+- [ ] 06-02-PLAN.md — Fetch-filter-score pipeline: scoring formula, follower normalization, engagement gate, InstagramAgent skeleton (TDD)
+- [ ] 06-03-PLAN.md — Draft-compliance pipeline: Claude drafting, hashtag/Seva blocking, fail-safe compliance, 12h expiry (TDD)
+- [ ] 06-04-PLAN.md — Health monitoring: retry logic, rolling baseline detection, critical failure WhatsApp alerting (TDD)
+- [ ] 06-05-PLAN.md — Worker wiring, seed script (hashtags + watchlist + config), human verification checkpoint
 
 ### Phase 7: Content Agent
 **Goal**: The Content Agent runs daily at 6am, ingests RSS and SerpAPI news, picks the single best qualifying story, conducts multi-step deep research, drafts it in the correct format with compliance checking, and delivers to the Senior Agent — or sends an explicit "no story today" flag
@@ -180,7 +187,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. React Approval Dashboard | 3/5 | In Progress|  |
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/6 | Planned    |  |
-| 6. Instagram Agent | 0/TBD | Not started | - |
+| 6. Instagram Agent | 0/5 | Planned    |  |
 | 7. Content Agent | 0/TBD | Not started | - |
 | 8. Dashboard Views and Digest | 0/TBD | Not started | - |
 | 9. Agent Execution Polish | 0/TBD | Not started | - |
