@@ -170,12 +170,18 @@ def test_no_story_flag():
 
 @pytest.mark.asyncio
 async def test_article_fetch_fallback():
-    """fetch_article returns RSS summary when httpx fetch fails (403, timeout)."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
+    """fetch_article returns fallback text when httpx fetch fails."""
     ca = _get_content_agent()
-    # Mock httpx to raise HTTPError
-    # Verify function returns fallback_text parameter
-    ...
+    with patch("agents.content_agent.httpx") as mock_httpx:
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = Exception("Connection refused")
+        mock_httpx.AsyncClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_httpx.AsyncClient.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.HTTPError = Exception
+        mock_httpx.TimeoutException = Exception
+        text, success = await ca.fetch_article("https://example.com/fail", fallback_text="RSS summary text")
+        assert success is False
+        assert text == "RSS summary text"
 
 
 # ---------------------------------------------------------------------------

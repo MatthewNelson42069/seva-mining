@@ -10,11 +10,16 @@ Requirements: CONT-01 through CONT-17
 """
 from __future__ import annotations
 
+import asyncio
 import difflib
+import json
 import logging
 from datetime import datetime, timezone
 
+import httpx
+import serpapi
 from anthropic import AsyncAnthropic
+from bs4 import BeautifulSoup
 
 from config import get_settings
 
@@ -177,6 +182,51 @@ def select_top_story(stories: list[dict], threshold: float) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# Article fetch + BeautifulSoup extraction (CONT-08)
+# ---------------------------------------------------------------------------
+
+def extract_article_text(html: str) -> str:
+    """Extract main article text from HTML, stripping boilerplate.
+
+    Strips nav/header/footer/aside/script/style tags, then tries semantic
+    content selectors in priority order. Falls back to full body text.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    # Strip boilerplate tags
+    for tag in soup.find_all(["nav", "header", "footer", "aside", "script", "style"]):
+        tag.decompose()
+    # Try semantic main content tags in priority order
+    for selector in ["article", "main", "[role='main']", "div.content", "div.article-body"]:
+        node = soup.select_one(selector)
+        if node:
+            return node.get_text(separator=" ", strip=True)
+    # Fallback: full body text
+    return soup.get_text(separator=" ", strip=True)
+
+
+async def fetch_article(url: str, fallback_text: str = "") -> tuple[str, bool]:
+    """Fetch full article text via httpx. Returns (text, success_flag).
+
+    Falls back to fallback_text on any HTTP error, timeout, non-200 status,
+    or if extracted text is < 100 chars (likely paywall/JS-rendered).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 SevaBot/1.0"})
+            if resp.status_code != 200:
+                logger.warning("Article fetch %s returned %d, using fallback", url, resp.status_code)
+                return fallback_text, False
+            text = extract_article_text(resp.text)
+            if len(text) < 100:  # Too short = likely paywall/JS-rendered
+                logger.warning("Article fetch %s extracted <100 chars, using fallback", url)
+                return fallback_text, False
+            return text, True
+    except (httpx.HTTPError, httpx.TimeoutException, Exception) as exc:
+        logger.warning("Article fetch %s failed: %s, using fallback", url, exc)
+        return fallback_text, False
+
+
+# ---------------------------------------------------------------------------
 # RSS and SerpAPI parsing helpers (CONT-02, CONT-03) — stubs for Plan 03
 # ---------------------------------------------------------------------------
 
@@ -213,6 +263,133 @@ class ContentAgent:
     def __init__(self) -> None:
         settings = get_settings()
         self.anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self.serpapi_client = serpapi.Client(api_key=settings.serpapi_api_key)
+
+    async def _search_corroborating(self, headline: str) -> list[dict]:
+        """CONT-09: Find 2-3 corroborating sources via SerpAPI Google News.
+
+        Runs synchronous serpapi call in executor to avoid blocking the event loop.
+
+        Returns:
+            List of dicts with keys: title, url, source, snippet.
+        """
+        loop = asyncio.get_event_loop()
+        try:
+            def _call():
+                return self.serpapi_client.search({
+                    "engine": "google_news",
+                    "q": headline,
+                    "num": 3,
+                })
+            results = await loop.run_in_executor(None, _call)
+            sources = []
+            for item in results.get("news_results", [])[:3]:
+                sources.append({
+                    "title": item.get("title", ""),
+                    "url": item.get("link", ""),
+                    "source": (item.get("source") or {}).get("name", "unknown"),
+                    "snippet": item.get("snippet", ""),
+                })
+            return sources
+        except Exception as exc:
+            logger.warning("Corroboration search failed: %s", exc)
+            return []
+
+    async def _research_and_draft(
+        self, story: dict, deep_research: dict
+    ) -> tuple[dict, dict, str] | None:
+        """CONT-10/11/12/13: Combined Claude Sonnet call for format decision + drafting.
+
+        Sends the full research bundle (article text + corroborating sources + story
+        metadata) to Claude Sonnet in a single API call. Claude decides the best
+        format (thread/long_form/infographic) and produces the draft.
+
+        Returns:
+            (draft_content_dict, updated_deep_research_dict, rationale_string)
+            or None on JSON parse failure.
+        """
+        article_text = deep_research.get("article_text", "")
+        corroborating = deep_research.get("corroborating_sources", [])
+
+        # Build corroborating sources block
+        if corroborating:
+            corr_lines = "\n".join(
+                f"- {s.get('title', '')} ({s.get('source', '')}) — {s.get('snippet', '')}"
+                for s in corroborating
+            )
+        else:
+            corr_lines = "None found."
+
+        article_block = article_text if article_text else "Article text unavailable — use corroborating sources and headline."
+
+        user_prompt = f"""Based on the following research, produce original content for publication on X (Twitter).
+
+## Story
+Headline: {story.get('title', '')}
+Source: {story.get('source_name', '')} ({story.get('link', '')})
+
+## Full Article
+{article_block}
+
+## Corroborating Sources
+{corr_lines}
+
+## Instructions
+1. Extract 5-8 key data points from the research (numbers, percentages, dates, production figures).
+2. Decide the best format for this content:
+   - "thread" — for multi-faceted stories that benefit from sequential presentation (produces BOTH a tweet thread of 3-5 tweets each <=280 chars AND a single long-form X post <=2200 chars)
+   - "long_form" — for focused stories that work as a single extended post (<=2200 chars)
+   - "infographic" — for data-heavy stories with strong visual potential (produces headline, 5-8 key stats with sources, visual structure suggestion from ["bar chart", "timeline", "comparison table", "stat callouts", "map"], and full caption text)
+3. Draft the content in your chosen format.
+4. Provide a brief rationale for your format choice (1-2 sentences).
+
+Respond in valid JSON with this structure:
+{{
+  "format": "thread" | "long_form" | "infographic",
+  "rationale": "...",
+  "key_data_points": ["...", "..."],
+  "draft_content": {{ ... }}
+}}
+
+For "thread" format, draft_content must have: {{"format": "thread", "tweets": ["t1", ...], "long_form_post": "..."}}
+For "long_form" format, draft_content must have: {{"format": "long_form", "post": "..."}}
+For "infographic" format, draft_content must have: {{"format": "infographic", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "visual_structure": "bar chart", "caption_text": "..."}}"""
+
+        system_prompt = (
+            "You are a senior gold market analyst. You produce original content about the gold and mining sector "
+            "based on research provided. You write in a data-driven, measured tone. You cite specific numbers, "
+            "dates, and sources. You never mention Seva Mining. You never give financial advice. You never use "
+            'phrases like "buy", "sell", "invest in", "I recommend", or "you should".'
+        )
+
+        try:
+            response = await self.anthropic.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            raw = response.content[0].text.strip()
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```", 2)[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.rsplit("```", 1)[0].strip()
+            parsed = json.loads(raw)
+        except Exception as exc:
+            logger.error("_research_and_draft JSON parse failed: %s", exc)
+            return None
+
+        draft_content = parsed.get("draft_content", {})
+        rationale = parsed.get("rationale", "")
+        key_data_points = parsed.get("key_data_points", [])
+
+        # Update deep_research with extracted key data points
+        updated_research = dict(deep_research)
+        updated_research["key_data_points"] = key_data_points
+
+        return draft_content, updated_research, rationale
 
     async def run(self) -> None:
         """Entry point called by APScheduler. Full pipeline implemented in Plan 05."""
