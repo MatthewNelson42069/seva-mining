@@ -27,20 +27,20 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Twitter Agent
 
-- [ ] **TWIT-01**: Agent monitors X via Basic API using configurable cashtags, hashtags, and natural language keywords every 2 hours
-- [ ] **TWIT-02**: Agent scores posts on engagement (40%), account authority (30%), and topic relevance (30%)
-- [ ] **TWIT-03**: Engagement formula: likes x1 + retweets x2 + replies x1.5
-- [ ] **TWIT-04**: Minimum engagement gate: 500+ likes OR watchlist account with 50+ likes
-- [ ] **TWIT-05**: Recency decay: full score under 1h, 50% at 4h, expired at 6h
-- [ ] **TWIT-06**: Top 3-5 qualifying posts per run passed to drafting
-- [ ] **TWIT-07**: Agent drafts both a reply comment AND a retweet-with-comment for each qualifying post
-- [ ] **TWIT-08**: Agent produces 2-3 alternative drafts per response type
-- [ ] **TWIT-09**: Each draft evaluated against quality rubric (relevance, originality, tone match, no company mention, no financial advice) before queuing
-- [ ] **TWIT-10**: Separate Claude compliance-checker call validates no Seva Mining mention and no financial advice in every draft
-- [ ] **TWIT-11**: Monthly X API quota counter tracks tweet reads against 10,000/month cap
-- [ ] **TWIT-12**: Hard-stop logic prevents API calls when quota approaches limit (configurable safety margin)
-- [ ] **TWIT-13**: Dashboard displays current quota usage and alerts when quota is low
-- [ ] **TWIT-14**: All drafts sent to Senior Agent with rationale explaining why this post matters and what angle the draft takes
+- [x] **TWIT-01**: Agent monitors X via Basic API using configurable cashtags, hashtags, and natural language keywords every 2 hours
+- [x] **TWIT-02**: Agent scores posts on engagement (40%), account authority (30%), and topic relevance (30%)
+- [x] **TWIT-03**: Engagement formula: likes x1 + retweets x2 + replies x1.5
+- [x] **TWIT-04**: Minimum engagement gate: 500+ likes OR watchlist account with 50+ likes
+- [x] **TWIT-05**: Recency decay: full score under 1h, 50% at 4h, expired at 6h
+- [x] **TWIT-06**: Top 3-5 qualifying posts per run passed to drafting
+- [x] **TWIT-07**: Agent drafts both a reply comment AND a retweet-with-comment for each qualifying post
+- [x] **TWIT-08**: Agent produces 2-3 alternative drafts per response type
+- [x] **TWIT-09**: Each draft evaluated against quality rubric (relevance, originality, tone match, no company mention, no financial advice) before queuing
+- [x] **TWIT-10**: Separate Claude compliance-checker call validates no Seva Mining mention and no financial advice in every draft
+- [x] **TWIT-11**: Monthly X API quota counter tracks tweet reads against 10,000/month cap
+- [x] **TWIT-12**: Hard-stop logic prevents API calls when quota approaches limit (configurable safety margin)
+- [x] **TWIT-13**: Dashboard displays current quota usage and alerts when quota is low
+- [x] **TWIT-14**: All drafts sent to Senior Agent with rationale explaining why this post matters and what angle the draft takes
 
 ### Instagram Agent
 
@@ -98,7 +98,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DASH-05**: Inline editing of draft text directly on the card
 - [ ] **DASH-06**: One-click copy to clipboard of approved/edited draft text with toast confirmation
 - [ ] **DASH-07**: Direct link to original post opens in new tab
-- [ ] **DASH-08**: Related cards (same story across platforms) visually linked
+- [x] **DASH-08**: Related cards (same story across platforms) visually linked
 - [ ] **DASH-09**: Desktop-only layout (no mobile responsiveness required)
 - [ ] **DASH-10**: Clean minimal design — Linear/Notion aesthetic, content-focused, lots of white space
 
@@ -209,23 +209,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-05 | Phase 3 | Pending |
 | DASH-06 | Phase 3 | Pending |
 | DASH-07 | Phase 3 | Pending |
-| DASH-08 | Phase 3 | Pending |
+| DASH-08 | Phase 3 | Complete |
 | DASH-09 | Phase 3 | Pending |
 | DASH-10 | Phase 3 | Pending |
-| TWIT-01 | Phase 4 | Pending |
-| TWIT-02 | Phase 4 | Pending |
-| TWIT-03 | Phase 4 | Pending |
-| TWIT-04 | Phase 4 | Pending |
-| TWIT-05 | Phase 4 | Pending |
-| TWIT-06 | Phase 4 | Pending |
-| TWIT-07 | Phase 4 | Pending |
-| TWIT-08 | Phase 4 | Pending |
-| TWIT-09 | Phase 4 | Pending |
-| TWIT-10 | Phase 4 | Pending |
-| TWIT-11 | Phase 4 | Pending |
-| TWIT-12 | Phase 4 | Pending |
-| TWIT-13 | Phase 4 | Pending |
-| TWIT-14 | Phase 4 | Pending |
+| TWIT-01 | Phase 4 | Complete |
+| TWIT-02 | Phase 4 | Complete |
+| TWIT-03 | Phase 4 | Complete |
+| TWIT-04 | Phase 4 | Complete |
+| TWIT-05 | Phase 4 | Complete |
+| TWIT-06 | Phase 4 | Complete |
+| TWIT-07 | Phase 4 | Complete |
+| TWIT-08 | Phase 4 | Complete |
+| TWIT-09 | Phase 4 | Complete |
+| TWIT-10 | Phase 4 | Complete |
+| TWIT-11 | Phase 4 | Complete |
+| TWIT-12 | Phase 4 | Complete |
+| TWIT-13 | Phase 4 | Complete |
+| TWIT-14 | Phase 4 | Complete |
 | SENR-01 | Phase 5 | Pending |
 | SENR-02 | Phase 5 | Pending |
 | SENR-03 | Phase 5 | Pending |

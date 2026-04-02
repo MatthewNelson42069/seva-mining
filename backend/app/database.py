@@ -1,3 +1,5 @@
+import ssl
+
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
@@ -7,14 +9,25 @@ from app.config import get_settings
 
 settings = get_settings()
 
+# asyncpg doesn't support sslmode= in the URL — strip it and use connect_args
+_db_url = settings.database_url
+if "sslmode=" in _db_url:
+    import re
+    _db_url = re.sub(r"[?&]sslmode=[^&]*", "", _db_url)
+    if "?" not in _db_url and "&" in _db_url:
+        _db_url = _db_url.replace("&", "?", 1)
+
+_ssl_context = ssl.create_default_context()
+
 engine = create_async_engine(
-    settings.database_url,
+    _db_url,
     # Neon-specific pool config (D-05, INFRA-07)
     pool_size=5,            # conservative for Neon free tier (max_connections=104)
     max_overflow=10,
     pool_pre_ping=True,     # detect stale connections after Neon compute auto-suspend
     pool_recycle=300,       # 5 min matches Neon default auto-suspend timeout
     echo=False,
+    connect_args={"ssl": _ssl_context},
 )
 
 AsyncSessionLocal = async_sessionmaker(

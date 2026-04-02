@@ -702,7 +702,25 @@ async def main() -> None:
             print(f"Seed data already exists ({existing_count} pending items), skipping.")
             return
 
+        # Two-pass insert: first without related_ids to avoid FK violations,
+        # then update related_ids after all items exist
+        related_map = {}
+        for item in MOCK_ITEMS:
+            if item.related_id is not None:
+                related_map[item.id] = item.related_id
+                item.related_id = None
+
         session.add_all(MOCK_ITEMS)
+        await session.flush()
+
+        # Now set related_ids
+        for item_id, related_id in related_map.items():
+            result = await session.execute(
+                select(DraftItem).where(DraftItem.id == item_id)
+            )
+            item = result.scalar_one()
+            item.related_id = related_id
+
         await session.commit()
         print(f"Seeded {len(MOCK_ITEMS)} mock draft items successfully.")
 
