@@ -154,10 +154,10 @@ Plans:
 
 Plans:
 - [x] 07-01-PLAN.md — Foundation: deps, ContentBundle model mirror, test stubs, config seed script
-- [ ] 07-02-PLAN.md — Ingest-Dedup-Score pipeline: RSS parsing, SerpAPI, dedup, scoring, story selection (TDD)
-- [ ] 07-03-PLAN.md — Deep research + drafting: article fetch, corroboration, Claude Sonnet format+draft prompt
-- [ ] 07-04-PLAN.md — Compliance checker, no-story flag, DraftItem builder, Senior Agent integration
-- [ ] 07-05-PLAN.md — Full pipeline wiring, worker.py integration, human verification checkpoint
+- [x] 07-02-PLAN.md — Ingest-Dedup-Score pipeline: RSS parsing, SerpAPI, dedup, scoring, story selection (TDD)
+- [x] 07-03-PLAN.md — Deep research + drafting: article fetch, corroboration, Claude Sonnet format+draft prompt
+- [x] 07-04-PLAN.md — Compliance checker, no-story flag, DraftItem builder, Senior Agent integration
+- [x] 07-05-PLAN.md — Full pipeline wiring, worker.py integration, human verification checkpoint
 
 ### Phase 8: Dashboard Views and Digest
 **Goal**: Operator has a dedicated daily digest view showing morning digest output, a content review page for today's Content Agent bundle, and the full Settings page wired to live database configuration
