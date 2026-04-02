@@ -16,15 +16,45 @@ import json
 import logging
 from datetime import datetime, timezone
 
+import feedparser
 import httpx
 import serpapi
 from anthropic import AsyncAnthropic
 from bs4 import BeautifulSoup
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
+from database import AsyncSessionLocal
+from models.agent_run import AgentRun
+from models.config import Config
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# RSS feed list — module-level constant (CONT-02)
+# ---------------------------------------------------------------------------
+
+RSS_FEEDS = [
+    ("https://www.kitco.com/rss/news.xml", "kitco.com"),
+    ("https://www.mining.com/feed/", "mining.com"),
+    ("https://www.juniorminingnetwork.com/feed", "juniorminingnetwork.com"),
+    ("https://www.gold.org/goldhub/news/feed", "gold.org"),
+]
+
+# ---------------------------------------------------------------------------
+# SerpAPI keyword list — module-level constant (CONT-03)
+# ---------------------------------------------------------------------------
+
+SERPAPI_KEYWORDS = [
+    "gold exploration",
+    "gold price",
+    "central bank gold",
+    "gold ETF",
+    "junior miners",
+    "gold reserves",
+]
 
 # ---------------------------------------------------------------------------
 # Credibility tier lookup — module-level constant (CONT-05)
@@ -358,6 +388,27 @@ def parse_serpapi_results(results: list[dict], source_name: str = "serpapi") -> 
 
 
 # ---------------------------------------------------------------------------
+# Draft text extractor for compliance checking
+# ---------------------------------------------------------------------------
+
+def _extract_check_text(draft_content: dict) -> str:
+    """Extract all text from draft_content for compliance checking."""
+    fmt = draft_content.get("format", "")
+    parts = []
+    if fmt == "thread":
+        parts.extend(draft_content.get("tweets", []))
+        parts.append(draft_content.get("long_form_post", ""))
+    elif fmt == "long_form":
+        parts.append(draft_content.get("post", ""))
+    elif fmt == "infographic":
+        parts.append(draft_content.get("headline", ""))
+        parts.append(draft_content.get("caption_text", ""))
+        for stat in draft_content.get("key_stats", []):
+            parts.append(stat.get("stat", ""))
+    return " ".join(p for p in parts if p)
+
+
+# ---------------------------------------------------------------------------
 # ContentAgent class skeleton (CONT-01)
 # ---------------------------------------------------------------------------
 
@@ -498,7 +549,246 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
 
         return draft_content, updated_research, rationale
 
+    async def _get_config(self, session: AsyncSession, key: str, default: str) -> str:
+        """Read a config value from the DB by key. Returns default if not found."""
+        result = await session.execute(select(Config).where(Config.key == key))
+        row = result.scalar_one_or_none()
+        return row.value if row else default
+
+    async def _fetch_all_rss(self) -> list[dict]:
+        """CONT-02: Fetch all RSS feeds concurrently using asyncio.gather + run_in_executor."""
+        loop = asyncio.get_event_loop()
+        tasks = []
+        for url, source in RSS_FEEDS:
+            tasks.append(loop.run_in_executor(None, feedparser.parse, url))
+        feeds = await asyncio.gather(*tasks, return_exceptions=True)
+        stories = []
+        for (url, source), feed in zip(RSS_FEEDS, feeds):
+            if isinstance(feed, Exception):
+                logger.warning("RSS feed %s failed: %s", url, feed)
+                continue
+            for entry in feed.entries:
+                published_parsed = entry.get("published_parsed")
+                published = (
+                    datetime(*published_parsed[:6], tzinfo=timezone.utc)
+                    if published_parsed else datetime.now(timezone.utc)
+                )
+                stories.append({
+                    "title": entry.get("title", ""),
+                    "link": entry.get("link", ""),
+                    "published": published,
+                    "summary": entry.get("summary", ""),
+                    "source_name": source,
+                })
+        return stories
+
+    async def _fetch_all_serpapi(self) -> list[dict]:
+        """CONT-03: Run SerpAPI keyword searches concurrently via asyncio.gather + run_in_executor."""
+        loop = asyncio.get_event_loop()
+        tasks = []
+        for keyword in SERPAPI_KEYWORDS:
+            def _call(q=keyword):
+                return self.serpapi_client.search({
+                    "engine": "google_news",
+                    "q": q,
+                    "num": 5,
+                })
+            tasks.append(loop.run_in_executor(None, _call))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        stories = []
+        for keyword, result in zip(SERPAPI_KEYWORDS, results):
+            if isinstance(result, Exception):
+                logger.warning("SerpAPI search '%s' failed: %s", keyword, result)
+                continue
+            for item in result.get("news_results", [])[:5]:
+                iso_date = item.get("date")
+                published = (
+                    datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
+                    if iso_date else datetime.now(timezone.utc)
+                )
+                source_name = (item.get("source") or {}).get("name", "unknown")
+                stories.append({
+                    "title": item.get("title", ""),
+                    "link": item.get("link", ""),
+                    "published": published,
+                    "summary": item.get("snippet", ""),
+                    "source_name": source_name,
+                })
+        return stories
+
+    async def _score_relevance(self, title: str, summary: str) -> float:
+        """CONT-05: Claude Haiku call to classify gold-sector relevance on 0-1 scale."""
+        try:
+            response = await self.anthropic.messages.create(
+                model="claude-haiku-3-20240307",
+                max_tokens=10,
+                system="Rate the relevance of this news story to the gold mining and precious metals sector on a scale of 0.0 to 1.0. Reply with only a decimal number.",
+                messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
+            )
+            score = float(response.content[0].text.strip())
+            return max(0.0, min(1.0, score))
+        except Exception as exc:
+            logger.warning("Relevance scoring failed for '%s': %s", title[:50], exc)
+            return 0.5  # Neutral default on failure
+
+    async def _run_pipeline(self, session: AsyncSession, agent_run: AgentRun) -> None:
+        """CONT-01: Orchestrate the full ingest-dedup-score-research-draft-comply-persist flow."""
+        # 1. Read config
+        threshold = float(await self._get_config(session, "content_quality_threshold", "7.0"))
+        rel_weight = float(await self._get_config(session, "content_relevance_weight", "0.40"))
+        rec_weight = float(await self._get_config(session, "content_recency_weight", "0.30"))
+        cred_weight = float(await self._get_config(session, "content_credibility_weight", "0.30"))
+
+        # 2. Ingest RSS + SerpAPI concurrently
+        rss_stories, serpapi_stories = await asyncio.gather(
+            self._fetch_all_rss(),
+            self._fetch_all_serpapi(),
+        )
+        all_stories = rss_stories + serpapi_stories
+        agent_run.items_found = len(all_stories)
+        logger.info(
+            "Ingested %d stories (%d RSS, %d SerpAPI)",
+            len(all_stories), len(rss_stories), len(serpapi_stories),
+        )
+
+        # 3. Deduplicate
+        unique_stories = deduplicate_stories(all_stories)
+        agent_run.items_filtered = len(all_stories) - len(unique_stories)
+        logger.info(
+            "After dedup: %d unique stories (filtered %d)",
+            len(unique_stories), agent_run.items_filtered,
+        )
+
+        if not unique_stories:
+            bundle = build_no_story_bundle(best_score=0.0)
+            session.add(bundle)
+            agent_run.notes = json.dumps({"best_candidate": None, "best_score": 0.0})
+            return
+
+        # 4. Score each story
+        scored = []
+        for story in unique_stories:
+            relevance = await self._score_relevance(story["title"], story["summary"])
+            rec = recency_score(story["published"])
+            cred = credibility_score(story.get("source_name", ""))
+            story["score"] = (relevance * rel_weight + rec * rec_weight + cred * cred_weight) * 10
+            scored.append(story)
+
+        # 5. Select top story
+        top = select_top_story(scored, threshold=threshold)
+
+        if top is None:
+            best = max(scored, key=lambda s: s["score"])
+            bundle = build_no_story_bundle(best_score=best["score"])
+            session.add(bundle)
+            agent_run.notes = json.dumps({
+                "best_candidate": best["title"][:200],
+                "best_score": float(best["score"]),
+            })
+            logger.info(
+                "No story cleared threshold %.1f (best: %.1f '%s')",
+                threshold, best["score"], best["title"][:60],
+            )
+            return
+
+        # 6. Deep research
+        article_text, fetch_ok = await fetch_article(top["link"], fallback_text=top.get("summary", ""))
+        corroborating = await self._search_corroborating(top["title"])
+        deep_research = {
+            "article_text": article_text[:5000],  # Cap at 5000 chars
+            "article_fetch_succeeded": fetch_ok,
+            "corroborating_sources": corroborating,
+            "key_data_points": [],  # Filled by Sonnet prompt
+        }
+
+        # 7. Format decision + drafting (combined Sonnet call)
+        draft_result = await self._research_and_draft(top, deep_research)
+        if draft_result is None:
+            logger.error("Drafting failed for '%s'", top["title"][:60])
+            from models.content_bundle import ContentBundle  # noqa: PLC0415
+            bundle = ContentBundle(
+                story_headline=top["title"],
+                story_url=top["link"],
+                source_name=top.get("source_name"),
+                score=top["score"],
+                deep_research=deep_research,
+                compliance_passed=False,
+            )
+            session.add(bundle)
+            agent_run.errors = "Drafting failed — Claude returned unparseable response"
+            return
+        draft_content, deep_research, rationale = draft_result
+
+        # 8. Compliance check
+        check_text = _extract_check_text(draft_content)
+        compliance_ok = await check_compliance(check_text, self.anthropic)
+
+        # 9. Persist ContentBundle
+        from models.content_bundle import ContentBundle  # noqa: PLC0415
+        bundle = ContentBundle(
+            story_headline=top["title"],
+            story_url=top["link"],
+            source_name=top.get("source_name"),
+            format_type=draft_content.get("format"),
+            score=top["score"],
+            deep_research=deep_research,
+            draft_content=draft_content,
+            compliance_passed=compliance_ok,
+        )
+        session.add(bundle)
+        await session.flush()  # Get bundle.id
+
+        if not compliance_ok:
+            logger.warning("Compliance check failed for '%s'", top["title"][:60])
+            agent_run.errors = "Compliance check failed — draft blocked"
+            agent_run.notes = json.dumps({
+                "story": top["title"][:200],
+                "score": float(top["score"]),
+                "blocked": True,
+            })
+            return
+
+        # 10. Create DraftItem + call Senior Agent
+        item = build_draft_item(bundle, rationale)
+        session.add(item)
+        await session.flush()  # Get item.id
+
+        # Lazy import to avoid circular deps
+        from agents.senior_agent import process_new_items  # noqa: PLC0415
+        await process_new_items([item.id])
+
+        agent_run.items_queued = 1
+        agent_run.notes = json.dumps({
+            "story": top["title"][:200],
+            "score": float(top["score"]),
+            "format": draft_content.get("format"),
+            "content_bundle_id": str(bundle.id),
+        })
+        logger.info(
+            "Content Agent queued: '%s' (score=%.1f, format=%s)",
+            top["title"][:60], top["score"], draft_content.get("format"),
+        )
+
     async def run(self) -> None:
-        """Entry point called by APScheduler. Full pipeline implemented in Plan 05."""
-        # Full pipeline — implemented in Plan 05
-        pass
+        """Entry point called by APScheduler. Runs the full pipeline."""
+        async with AsyncSessionLocal() as session:
+            agent_run = AgentRun(
+                agent_name="content_agent",
+                status="running",
+                started_at=datetime.now(timezone.utc),
+                items_found=0,
+                items_queued=0,
+                items_filtered=0,
+            )
+            session.add(agent_run)
+            await session.commit()
+            try:
+                await self._run_pipeline(session, agent_run)
+                agent_run.status = "completed"
+            except Exception as exc:
+                agent_run.status = "failed"
+                agent_run.errors = str(exc)
+                logger.error("ContentAgent run failed: %s", exc, exc_info=True)
+            finally:
+                agent_run.ended_at = datetime.now(timezone.utc)
+                await session.commit()
