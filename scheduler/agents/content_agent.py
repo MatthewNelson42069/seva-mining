@@ -227,6 +227,113 @@ async def fetch_article(url: str, fallback_text: str = "") -> tuple[str, bool]:
 
 
 # ---------------------------------------------------------------------------
+# Compliance checker — fail-safe pattern (CONT-14, CONT-15, CONT-16)
+# ---------------------------------------------------------------------------
+
+async def check_compliance(text: str, anthropic_client=None) -> bool:
+    """Check content for compliance. Returns True only on explicit 'pass'.
+    Fail-safe: ambiguous response = block (returns False).
+    Pre-screens locally for 'seva mining' before calling Claude Haiku.
+
+    Args:
+        text: Draft text to check for compliance.
+        anthropic_client: Optional AsyncAnthropic instance; created from settings if None.
+
+    Returns:
+        True only if Claude responds with exactly 'pass'. False otherwise (fail-safe).
+    """
+    text_lower = text.lower()
+    # Local pre-screen — no LLM cost for obvious blocks
+    if "seva mining" in text_lower:
+        return False
+
+    if anthropic_client is None:
+        settings = get_settings()
+        anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+
+    try:
+        response = await anthropic_client.messages.create(
+            model="claude-haiku-3-20240307",
+            max_tokens=50,
+            system="You are a compliance checker. Evaluate the following content. Reply with exactly 'pass' if the content does NOT mention Seva Mining and does NOT contain financial advice (recommendations to buy, sell, invest, or any action-oriented investment guidance). Reply with 'fail: [reason]' otherwise.",
+            messages=[{"role": "user", "content": text}],
+        )
+        result = response.content[0].text.strip().lower()
+        # Fail-safe: only explicit 'pass' returns True
+        return result == "pass"
+    except Exception as exc:
+        logger.warning("Compliance check failed with error: %s — blocking by default", exc)
+        return False
+
+
+# ---------------------------------------------------------------------------
+# No-story flag and ContentBundle builder (CONT-07)
+# ---------------------------------------------------------------------------
+
+def build_no_story_bundle(best_score: float):
+    """Create a ContentBundle with no_story_flag=True for days with no qualifying story.
+
+    Args:
+        best_score: Score of the best candidate story that failed threshold.
+
+    Returns:
+        ContentBundle with no_story_flag=True and all draft fields as None.
+    """
+    from models.content_bundle import ContentBundle  # noqa: PLC0415
+    return ContentBundle(
+        story_headline="No qualifying story today",
+        no_story_flag=True,
+        score=best_score,
+        # All other fields left as None
+    )
+
+
+# ---------------------------------------------------------------------------
+# DraftItem builder for Senior Agent integration (CONT-17)
+# ---------------------------------------------------------------------------
+
+def build_draft_item(content_bundle, rationale: str):
+    """Create a DraftItem from a ContentBundle for Senior Agent queue.
+    platform='content', urgency='low', expires_at=None (evergreen content).
+    Stores content_bundle.id in engagement_snapshot for Phase 8 linking.
+
+    Args:
+        content_bundle: ContentBundle instance to build DraftItem from.
+        rationale: Format decision rationale string.
+
+    Returns:
+        DraftItem ready to be persisted to the database.
+    """
+    import json  # noqa: PLC0415
+    from models.draft_item import DraftItem  # noqa: PLC0415
+
+    # Build a brief summary from draft_content for the alternatives field
+    draft = content_bundle.draft_content or {}
+    fmt = draft.get("format", "unknown")
+    if fmt == "thread":
+        summary = f"Thread ({len(draft.get('tweets', []))} tweets) + long-form post"
+    elif fmt == "long_form":
+        summary = f"Long-form post ({len(draft.get('post', ''))} chars)"
+    elif fmt == "infographic":
+        summary = f"Infographic brief: {draft.get('headline', 'N/A')}"
+    else:
+        summary = f"Content draft ({fmt})"
+
+    return DraftItem(
+        platform="content",
+        source_text=content_bundle.story_headline,
+        source_url=content_bundle.story_url,
+        source_account=content_bundle.source_name,
+        alternatives=json.dumps([summary]),
+        rationale=rationale,
+        score=float(content_bundle.score) if content_bundle.score else 0.0,
+        expires_at=None,
+        urgency="low",
+        engagement_snapshot={"content_bundle_id": str(content_bundle.id)},
+    )
+
+
+# ---------------------------------------------------------------------------
 # RSS and SerpAPI parsing helpers (CONT-02, CONT-03) — stubs for Plan 03
 # ---------------------------------------------------------------------------
 

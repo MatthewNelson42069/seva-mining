@@ -157,11 +157,15 @@ def test_select_top_story():
 # ---------------------------------------------------------------------------
 
 def test_no_story_flag():
-    """select_top_story returns None when all stories are below threshold."""
+    """build_no_story_bundle creates ContentBundle with no_story_flag=True and score of best candidate."""
     ca = _get_content_agent()
-    stories = [{"title": "A", "score": 5.0}, {"title": "B", "score": 6.9}]
-    result = ca.select_top_story(stories, threshold=7.0)
-    assert result is None
+    # select_top_story already tested — test the no-story bundle builder
+    bundle = ca.build_no_story_bundle(best_score=6.5)
+    assert bundle.no_story_flag is True
+    assert bundle.story_headline == "No qualifying story today"
+    assert float(bundle.score) == 6.5
+    assert bundle.draft_content is None
+    assert bundle.compliance_passed is None
 
 
 # ---------------------------------------------------------------------------
@@ -211,9 +215,8 @@ def test_thread_draft_structure():
 @pytest.mark.asyncio
 async def test_compliance_fail_seva_mining():
     """check_compliance returns False when draft contains 'Seva Mining'."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
-    # Mock anthropic to return "fail: mentions Seva Mining"
+    # Local pre-screen catches this — no LLM call needed
     result = await ca.check_compliance("This post by Seva Mining shows gold at $3200")
     assert result is False
 
@@ -225,11 +228,13 @@ async def test_compliance_fail_seva_mining():
 @pytest.mark.asyncio
 async def test_compliance_failsafe():
     """check_compliance returns False (blocks) on ambiguous LLM response."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
-    # Mock anthropic to return "maybe" (ambiguous)
-    result = await ca.check_compliance("Some text")
-    assert result is False
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="maybe it's fine")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.check_compliance("Gold prices rose 5% this week", anthropic_client=mock_client)
+    assert result is False  # "maybe it's fine" is not "pass" — fail-safe blocks
 
 
 # ---------------------------------------------------------------------------
@@ -238,10 +243,25 @@ async def test_compliance_failsafe():
 
 def test_draft_item_fields():
     """build_draft_item returns DraftItem with platform='content', urgency='low', expires_at=None."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
-    # Verify build_draft_item produces correct field values
-    ...
+    from models.content_bundle import ContentBundle
+    import uuid
+    cb = ContentBundle(
+        id=uuid.uuid4(),
+        story_headline="Gold hits $3200",
+        story_url="https://reuters.com/gold-3200",
+        source_name="Reuters",
+        score=8.5,
+        draft_content={"format": "thread", "tweets": ["t1", "t2", "t3"], "long_form_post": "..."},
+    )
+    item = ca.build_draft_item(cb, rationale="Thread format chosen for multi-faceted story")
+    assert item.platform == "content"
+    assert item.urgency == "low"
+    assert item.expires_at is None
+    assert item.source_text == "Gold hits $3200"
+    assert item.source_url == "https://reuters.com/gold-3200"
+    assert item.source_account == "Reuters"
+    assert float(item.score) == 8.5
 
 
 # ---------------------------------------------------------------------------
@@ -250,10 +270,19 @@ def test_draft_item_fields():
 
 def test_content_bundle_link():
     """build_draft_item stores content_bundle_id in engagement_snapshot JSONB."""
-    pytest.skip("Wave 0 stub — agents.content_agent not implemented yet")
     ca = _get_content_agent()
-    # Verify engagement_snapshot contains {"content_bundle_id": "..."}
-    ...
+    from models.content_bundle import ContentBundle
+    import uuid
+    cb_id = uuid.uuid4()
+    cb = ContentBundle(
+        id=cb_id,
+        story_headline="Test",
+        score=7.5,
+        draft_content={"format": "long_form", "post": "..."},
+    )
+    item = ca.build_draft_item(cb, rationale="test")
+    assert item.engagement_snapshot is not None
+    assert item.engagement_snapshot["content_bundle_id"] == str(cb_id)
 
 
 # ---------------------------------------------------------------------------
