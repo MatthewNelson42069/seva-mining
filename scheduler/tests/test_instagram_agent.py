@@ -229,23 +229,33 @@ async def test_compliance_fail_safe():
 
 async def test_retry_logic():
     """
-    On Apify API error: retry up to 2 times. Call fails twice then succeeds on third try.
+    _call_apify_actor_once fails twice then succeeds on 3rd attempt.
+    asyncio.sleep called with 1 then 2 (exponential backoff).
     Covers: INST-09
     """
-    pytest.skip("Instagram agent not yet implemented")
     ia = _get_instagram_agent()
     call_count = 0
 
-    async def fake_apify_call():
+    async def fake_once(run_input: dict) -> list:
         nonlocal call_count
         call_count += 1
         if call_count < 3:
             raise Exception("Apify transient error")
-        return [{"shortCode": "xyz", "likesCount": 300}]
+        return [{"shortCode": "abc"}]
 
-    result = await ia.fetch_with_retry(fetch_fn=fake_apify_call, max_retries=2)
+    with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        with patch("agents.instagram_agent.get_settings", return_value=MagicMock(
+            apify_api_token="tok", anthropic_api_key="key"
+        )):
+            with patch("agents.instagram_agent.ApifyClientAsync"):
+                agent = ia.InstagramAgent()
+                agent._call_apify_actor_once = fake_once
+                result = await agent._call_apify_actor_with_retry(run_input={})
+
+    assert result == [{"shortCode": "abc"}], f"Expected success result, got {result}"
     assert call_count == 3, f"Expected 3 total attempts, got {call_count}"
-    assert result is not None and len(result) > 0, "Should return results on third attempt"
+    sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
+    assert sleep_calls == [1, 2], f"Expected backoff [1, 2], got {sleep_calls}"
 
 
 # ---------------------------------------------------------------------------
