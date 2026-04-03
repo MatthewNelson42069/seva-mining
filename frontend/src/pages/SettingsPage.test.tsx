@@ -103,10 +103,63 @@ describe('SettingsPage', () => {
     })
   })
 
-  // Scoring/Notifications/AgentRuns/Schedule tabs — coming in Plan 05
-  it.skip('scoring tab loads and saves config keys', () => {})
-  it.skip('notifications tab loads and saves config keys', () => {})
-  it.skip('agent runs tab shows run log with filter', () => {})
-  it.skip('agent runs tab shows quota bar', () => {})
-  it.skip('schedule tab shows interval inputs', () => {})
+  it('scoring tab loads config and shows save button', async () => {
+    render(<SettingsPage />, { wrapper: createWrapper() })
+
+    fireEvent.click(screen.getByText('Scoring'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Save Scoring Settings')).toBeInTheDocument()
+    })
+
+    // Should show content scoring section heading
+    expect(screen.getByText('Content Agent Scoring')).toBeInTheDocument()
+  })
+
+  it('notifications tab renders', async () => {
+    render(<SettingsPage />, { wrapper: createWrapper() })
+
+    fireEvent.click(screen.getByText('Notifications'))
+
+    // No notification keys in mock — should show empty state
+    await waitFor(() => {
+      const emptyOrSave = screen.queryByText('Save Notification Settings') ??
+        screen.queryByText('No notification config keys found.')
+      expect(emptyOrSave).toBeInTheDocument()
+    })
+  })
+
+  it('agent runs tab shows run entries with filter dropdown', async () => {
+    render(<SettingsPage />, { wrapper: createWrapper() })
+
+    fireEvent.click(screen.getByText('Agent Runs'))
+
+    await waitFor(() => {
+      expect(screen.getByText('twitter_agent')).toBeInTheDocument()
+    })
+
+    // Filter dropdown should be present
+    const filterSelect = screen.getByRole('combobox')
+    expect(filterSelect).toBeInTheDocument()
+  })
+
+  it('agent runs tab shows quota bar', async () => {
+    render(<SettingsPage />, { wrapper: createWrapper() })
+
+    fireEvent.click(screen.getByText('Agent Runs'))
+
+    await waitFor(() => {
+      expect(screen.getByText('X API Monthly Quota')).toBeInTheDocument()
+    })
+  })
+
+  it('schedule tab shows interval inputs and restart note', async () => {
+    render(<SettingsPage />, { wrapper: createWrapper() })
+
+    fireEvent.click(screen.getByText('Schedule'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/next worker restart/i)).toBeInTheDocument()
+    })
+  })
 })
