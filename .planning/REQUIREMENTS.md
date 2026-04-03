@@ -129,10 +129,10 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SETT-01**: Watchlist management for X (add/remove accounts, set relationship value 1-5, notes)
 - [ ] **SETT-02**: Watchlist management for Instagram (add/remove accounts, set follower threshold)
 - [ ] **SETT-03**: Keyword management (add/remove keywords, adjust weights, toggle active, filter by platform)
-- [ ] **SETT-04**: Scoring parameter configuration (all weights, thresholds, decay curves editable)
+- [x] **SETT-04**: Scoring parameter configuration (all weights, thresholds, decay curves editable)
 - [ ] **SETT-05**: Agent run log display (last 7 days, filterable by agent)
-- [ ] **SETT-06**: Notification preferences (WhatsApp timing, alert thresholds)
-- [ ] **SETT-07**: Agent schedule configuration (change run intervals for each agent)
+- [x] **SETT-06**: Notification preferences (WhatsApp timing, alert thresholds)
+- [x] **SETT-07**: Agent schedule configuration (change run intervals for each agent)
 - [ ] **SETT-08**: X API quota usage display with visual indicator
 
 ### Agent Execution
@@ -279,10 +279,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SETT-01 | Phase 8 | Pending |
 | SETT-02 | Phase 8 | Pending |
 | SETT-03 | Phase 8 | Pending |
-| SETT-04 | Phase 8 | Pending |
+| SETT-04 | Phase 8 | Complete |
 | SETT-05 | Phase 8 | Pending |
-| SETT-06 | Phase 8 | Pending |
-| SETT-07 | Phase 8 | Pending |
+| SETT-06 | Phase 8 | Complete |
+| SETT-07 | Phase 8 | Complete |
 | SETT-08 | Phase 8 | Pending |
 | EXEC-02 | Phase 9 | Pending |
 
