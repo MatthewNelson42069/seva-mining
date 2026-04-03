@@ -19,7 +19,7 @@ def test_missing_env_var_raises(monkeypatch):
     get_settings.cache_clear()
     with pytest.raises(ValidationError):
         from app.config import Settings
-        Settings()
+        Settings(_env_file=None)  # type: ignore[call-arg]
 
 
 def test_settings_loads_from_env(monkeypatch):
