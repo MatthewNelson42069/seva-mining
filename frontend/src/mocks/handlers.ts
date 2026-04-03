@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { DraftItemResponse, QueueListResponse, TokenResponse } from '@/api/types'
+import type { ContentBundleResponse, DraftItemResponse, QueueListResponse, TokenResponse } from '@/api/types'
 
 const mockItems: DraftItemResponse[] = [
   {
@@ -138,6 +138,36 @@ export const handlers = [
     const item = mockItems.find(i => i.id === params.id)
     if (!item) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json({ ...item, status: 'rejected' } as DraftItemResponse)
+  }),
+
+  http.get('/content/today', () => {
+    const bundle: ContentBundleResponse = {
+      id: 'bundle-001',
+      story_headline: 'Central banks bought record gold in 2023',
+      story_url: 'https://www.kitco.com/news/gold-central-banks-2023',
+      source_name: 'Kitco',
+      format_type: 'thread',
+      score: 8.7,
+      quality_score: 9.1,
+      no_story_flag: false,
+      deep_research: {
+        corroborating_sources: [
+          { title: 'WGC Gold Demand Trends', url: 'https://www.gold.org/goldhub/research/gold-demand-trends', domain: 'gold.org' },
+          { title: 'IMF Reserve Assets', url: 'https://www.imf.org/en/Topics/imf-and-covid19/Special-Drawing-Rights', domain: 'imf.org' },
+        ],
+        rationale: 'Central bank buying at record pace with clear structural shift away from USD reserves.',
+      },
+      draft_content: {
+        tweets: [
+          'Central banks bought 1,037 tonnes of gold in 2023 — 24% of annual mine supply.',
+          'The buyers: Turkey, China, Poland, India. All reducing USD reserve concentration.',
+          'This is generational reserve diversification, not tactical hedging.',
+        ],
+      },
+      compliance_passed: true,
+      created_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(bundle)
   }),
 
   http.post('/auth/login', async ({ request }) => {
