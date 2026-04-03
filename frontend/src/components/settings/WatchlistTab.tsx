@@ -28,10 +28,12 @@ export function WatchlistTab() {
   const [addHandle, setAddHandle] = useState('')
   const [addRelValue, setAddRelValue] = useState(5)
   const [addNotes, setAddNotes] = useState('')
+  const [addFollowerThreshold, setAddFollowerThreshold] = useState(10000)
 
   // Edit form state
   const [editRelValue, setEditRelValue] = useState(5)
   const [editNotes, setEditNotes] = useState('')
+  const [editFollowerThreshold, setEditFollowerThreshold] = useState(10000)
 
   const { data: watchlists = [], isLoading } = useQuery({
     queryKey: ['watchlists', platform],
@@ -46,6 +48,7 @@ export function WatchlistTab() {
       setAddHandle('')
       setAddRelValue(5)
       setAddNotes('')
+      setAddFollowerThreshold(10000)
     },
   })
 
@@ -70,10 +73,18 @@ export function WatchlistTab() {
     setEditingId(entry.id)
     setEditRelValue(entry.relationship_value ?? 5)
     setEditNotes(entry.notes ?? '')
+    setEditFollowerThreshold(entry.follower_threshold ?? 10000)
   }
 
   function handleSaveEdit(id: string) {
-    updateMutation.mutate({ id, body: { relationship_value: editRelValue, notes: editNotes } })
+    updateMutation.mutate({
+      id,
+      body: {
+        relationship_value: editRelValue,
+        notes: editNotes,
+        ...(platform === 'instagram' ? { follower_threshold: editFollowerThreshold } : {}),
+      },
+    })
   }
 
   function handleAdd() {
@@ -82,6 +93,7 @@ export function WatchlistTab() {
       platform,
       account_handle: addHandle.trim(),
       relationship_value: addRelValue,
+      ...(platform === 'instagram' ? { follower_threshold: addFollowerThreshold } : {}),
       notes: addNotes,
       active: true,
     })
@@ -120,6 +132,7 @@ export function WatchlistTab() {
               <th className="px-4 py-3 text-left font-medium">Account Handle</th>
               <th className="px-4 py-3 text-left font-medium">Platform</th>
               <th className="px-4 py-3 text-left font-medium">Relationship Value</th>
+              <th className="px-4 py-3 text-left font-medium">Follower Threshold</th>
               <th className="px-4 py-3 text-left font-medium">Notes</th>
               <th className="px-4 py-3 text-left font-medium">Active</th>
               <th className="px-4 py-3 text-left font-medium">Actions</th>
@@ -149,6 +162,20 @@ export function WatchlistTab() {
                   />
                 </td>
                 <td className="px-4 py-2">
+                  {platform === 'instagram' ? (
+                    <input
+                      className="border rounded px-2 py-1 text-sm w-24"
+                      type="number"
+                      min={0}
+                      step={1000}
+                      value={addFollowerThreshold}
+                      onChange={e => setAddFollowerThreshold(Number(e.target.value))}
+                    />
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-2">
                   <textarea
                     className="border rounded px-2 py-1 text-sm w-full"
                     rows={1}
@@ -174,6 +201,7 @@ export function WatchlistTab() {
                         setAddHandle('')
                         setAddRelValue(5)
                         setAddNotes('')
+                        setAddFollowerThreshold(10000)
                       }}
                     >
                       Cancel
@@ -186,7 +214,7 @@ export function WatchlistTab() {
             {/* Loading */}
             {isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   Loading...
                 </td>
               </tr>
@@ -195,7 +223,7 @@ export function WatchlistTab() {
             {/* Empty state */}
             {!isLoading && watchlists.length === 0 && !showAddForm && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                   No {platform} watchlist entries yet. Add accounts for the agent to monitor.
                 </td>
               </tr>
@@ -217,6 +245,20 @@ export function WatchlistTab() {
                         value={editRelValue}
                         onChange={e => setEditRelValue(Number(e.target.value))}
                       />
+                    </td>
+                    <td className="px-4 py-2">
+                      {entry.platform === 'instagram' ? (
+                        <input
+                          className="border rounded px-2 py-1 text-sm w-24"
+                          type="number"
+                          min={0}
+                          step={1000}
+                          value={editFollowerThreshold}
+                          onChange={e => setEditFollowerThreshold(Number(e.target.value))}
+                        />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-2">
                       <textarea
@@ -251,6 +293,9 @@ export function WatchlistTab() {
                     <td className="px-4 py-2">{entry.account_handle}</td>
                     <td className="px-4 py-2">{entry.platform}</td>
                     <td className="px-4 py-2">{entry.relationship_value ?? '—'}</td>
+                    <td className="px-4 py-2">
+                      {entry.platform === 'instagram' ? (entry.follower_threshold?.toLocaleString() ?? '—') : '—'}
+                    </td>
                     <td className="px-4 py-2 text-muted-foreground">{entry.notes ?? '—'}</td>
                     <td className="px-4 py-2">{entry.active ? 'Yes' : 'No'}</td>
                     <td className="px-4 py-2">

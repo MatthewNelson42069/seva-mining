@@ -227,6 +227,7 @@ export const handlers = [
         platform: 'instagram',
         account_handle: '@goldanalysis_ig',
         relationship_value: 4,
+        follower_threshold: 15000,
         notes: 'IG gold account',
         active: true,
         created_at: new Date().toISOString(),

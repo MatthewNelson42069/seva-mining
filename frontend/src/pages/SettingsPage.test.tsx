@@ -62,6 +62,44 @@ describe('SettingsPage', () => {
     expect(screen.getByPlaceholderText('@handle')).toBeInTheDocument()
   })
 
+  it('watchlists tab shows follower threshold for instagram entries', async () => {
+    render(<SettingsPage />, { wrapper: createWrapper() })
+
+    // Switch to Instagram tab
+    fireEvent.click(screen.getByText('Instagram'))
+
+    await waitFor(() => {
+      expect(screen.getByText('@goldanalysis_ig')).toBeInTheDocument()
+    })
+
+    // Follower Threshold column header should be visible
+    expect(screen.getByText('Follower Threshold')).toBeInTheDocument()
+
+    // The instagram entry should display its follower_threshold value (15,000 formatted)
+    expect(screen.getByText('15,000')).toBeInTheDocument()
+  })
+
+  it('watchlists tab add form shows follower threshold input for instagram', async () => {
+    render(<SettingsPage />, { wrapper: createWrapper() })
+
+    // Switch to Instagram
+    fireEvent.click(screen.getByText('Instagram'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Add Account')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Add Account'))
+
+    // The follower threshold input should be visible (type=number, step=1000)
+    const thresholdInputs = screen.getAllByRole('spinbutton')
+    // One of the spinbuttons should have value 10000 (the default follower threshold)
+    const thresholdInput = thresholdInputs.find(
+      input => (input as HTMLInputElement).value === '10000'
+    )
+    expect(thresholdInput).toBeDefined()
+  })
+
   it('keywords tab shows entries with term column', async () => {
     render(<SettingsPage />, { wrapper: createWrapper() })
 
