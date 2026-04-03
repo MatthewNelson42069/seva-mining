@@ -169,8 +169,16 @@ Plans:
   3. Settings page lets operator add or remove X and Instagram watchlist accounts, manage keywords with weights, and adjust scoring parameters; all changes persist to the database and take effect on the next agent run without a service restart
   4. Agent run log in Settings shows the last 7 days of runs filterable by agent, with items found, queued, filtered, and any errors per execution
   5. X API quota usage is displayed on the Settings page with a visual indicator showing current consumption against the 10,000/month cap
-**Plans**: TBD
+**Plans**: 6 plans
 **UI hint**: yes
+
+Plans:
+- [ ] 08-01-PLAN.md — Foundation: TypeScript types, API modules, MSW handlers, backend config endpoints, test stubs
+- [ ] 08-02-PLAN.md — DigestPage: daily digest with top stories, queue snapshot, yesterday summary, prev/next navigation
+- [ ] 08-03-PLAN.md — ContentPage: content bundle review with format rendering, infographic preview, approve/reject flow
+- [ ] 08-04-PLAN.md — SettingsPage shell + Watchlists tab + Keywords tab (CRUD with confirmation dialogs)
+- [ ] 08-05-PLAN.md — SettingsPage: Scoring, Notifications, Agent Runs, Schedule tabs + QuotaBar
+- [ ] 08-06-PLAN.md — Human verification of all 3 dashboard pages (checkpoint)
 
 ### Phase 9: Agent Execution Polish
 **Goal**: All agent configuration is fully DB-driven with no hardcoded values, agent schedule intervals are configurable from Settings, and the system is resilient to individual agent failures without crashing the scheduler worker
@@ -185,7 +193,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -196,5 +204,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Senior Agent Core | 0/6 | Planned    |  |
 | 6. Instagram Agent | 0/5 | Planned    |  |
 | 7. Content Agent | 1/5 | In Progress|  |
-| 8. Dashboard Views and Digest | 0/TBD | Not started | - |
+| 8. Dashboard Views and Digest | 0/6 | Planned | - |
 | 9. Agent Execution Polish | 0/TBD | Not started | - |
