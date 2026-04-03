@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getConfig, updateConfig } from '@/api/settings'
@@ -20,15 +20,8 @@ export function ScheduleTab() {
   const queryClient = useQueryClient()
   const { data: config = [] } = useQuery({ queryKey: ['config'], queryFn: getConfig })
 
-  const [formState, setFormState] = useState<Record<string, string>>({})
+  const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    const initial: Record<string, string> = {}
-    config.forEach(e => { initial[e.key] = e.value })
-    setFormState(initial)
-    setDirtyKeys(new Set())
-  }, [config])
 
   const { mutateAsync, isPending } = useMutation({
     mutationFn: ({ key, value }: { key: string; value: string }) => updateConfig(key, value),
@@ -39,7 +32,7 @@ export function ScheduleTab() {
   )
 
   function handleInputChange(key: string, value: string) {
-    setFormState(prev => ({ ...prev, [key]: value }))
+    setOverrides(prev => ({ ...prev, [key]: value }))
     const original = config.find(e => e.key === key)?.value
     setDirtyKeys(prev => {
       const next = new Set(prev)
@@ -56,8 +49,16 @@ export function ScheduleTab() {
     const dirty = scheduleKeys.map(e => e.key).filter(k => dirtyKeys.has(k))
     if (dirty.length === 0) return
     try {
-      await Promise.all(dirty.map(k => mutateAsync({ key: k, value: formState[k] })))
+      await Promise.all(dirty.map(k => mutateAsync({
+        key: k,
+        value: overrides[k] !== undefined ? overrides[k] : (config.find(e => e.key === k)?.value ?? ''),
+      })))
       toast.success('Schedule saved')
+      setOverrides(prev => {
+        const next = { ...prev }
+        dirty.forEach(k => delete next[k])
+        return next
+      })
       setDirtyKeys(prev => {
         const next = new Set(prev)
         dirty.forEach(k => next.delete(k))
@@ -79,19 +80,22 @@ export function ScheduleTab() {
       ) : (
         <>
           <div className="space-y-3 mb-4">
-            {scheduleKeys.map(entry => (
-              <div key={entry.key} className="flex items-center gap-4">
-                <label className="w-56 text-sm text-muted-foreground">{toLabel(entry.key)}</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={formState[entry.key] ?? entry.value}
-                  onChange={e => handleInputChange(entry.key, e.target.value)}
-                  className="border rounded-md px-2 py-1 text-sm w-24"
-                />
-                <span className="text-sm text-muted-foreground">{unitForKey(entry.key)}</span>
-              </div>
-            ))}
+            {scheduleKeys.map(entry => {
+              const displayValue = overrides[entry.key] !== undefined ? overrides[entry.key] : entry.value
+              return (
+                <div key={entry.key} className="flex items-center gap-4">
+                  <label className="w-56 text-sm text-muted-foreground">{toLabel(entry.key)}</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={displayValue}
+                    onChange={e => handleInputChange(entry.key, e.target.value)}
+                    className="border rounded-md px-2 py-1 text-sm w-24"
+                  />
+                  <span className="text-sm text-muted-foreground">{unitForKey(entry.key)}</span>
+                </div>
+              )
+            })}
           </div>
           <Button
             size="sm"

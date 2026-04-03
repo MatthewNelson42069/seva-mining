@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { getConfig, updateConfig } from '@/api/settings'
@@ -15,31 +15,34 @@ function toLabel(key: string): string {
 interface NotificationSectionProps {
   title: string
   keys: ConfigEntry[]
-  formState: Record<string, string>
+  overrides: Record<string, string>
   onInputChange: (key: string, value: string) => void
   dirtyKeys: Set<string>
   onSave: (sectionKeys: string[]) => void
   isPending: boolean
 }
 
-function NotificationSection({ title, keys, formState, onInputChange, dirtyKeys, onSave, isPending }: NotificationSectionProps) {
+function NotificationSection({ title, keys, overrides, onInputChange, dirtyKeys, onSave, isPending }: NotificationSectionProps) {
   const sectionDirty = keys.some(e => dirtyKeys.has(e.key))
 
   return (
     <div className="mb-6">
       <h3 className="text-sm font-semibold mb-3">{title}</h3>
       <div className="space-y-3">
-        {keys.map(entry => (
-          <div key={entry.key} className="flex items-center gap-4">
-            <label className="w-56 text-sm text-muted-foreground">{toLabel(entry.key)}</label>
-            <input
-              type="text"
-              value={formState[entry.key] ?? entry.value}
-              onChange={e => onInputChange(entry.key, e.target.value)}
-              className="border rounded-md px-2 py-1 text-sm w-64"
-            />
-          </div>
-        ))}
+        {keys.map(entry => {
+          const displayValue = overrides[entry.key] !== undefined ? overrides[entry.key] : entry.value
+          return (
+            <div key={entry.key} className="flex items-center gap-4">
+              <label className="w-56 text-sm text-muted-foreground">{toLabel(entry.key)}</label>
+              <input
+                type="text"
+                value={displayValue}
+                onChange={e => onInputChange(entry.key, e.target.value)}
+                className="border rounded-md px-2 py-1 text-sm w-64"
+              />
+            </div>
+          )
+        })}
       </div>
       <Button
         size="sm"
@@ -57,22 +60,15 @@ export function NotificationsTab() {
   const queryClient = useQueryClient()
   const { data: config = [] } = useQuery({ queryKey: ['config'], queryFn: getConfig })
 
-  const [formState, setFormState] = useState<Record<string, string>>({})
+  const [overrides, setOverrides] = useState<Record<string, string>>({})
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    const initial: Record<string, string> = {}
-    config.forEach(e => { initial[e.key] = e.value })
-    setFormState(initial)
-    setDirtyKeys(new Set())
-  }, [config])
 
   const { mutateAsync, isPending } = useMutation({
     mutationFn: ({ key, value }: { key: string; value: string }) => updateConfig(key, value),
   })
 
   function handleInputChange(key: string, value: string) {
-    setFormState(prev => ({ ...prev, [key]: value }))
+    setOverrides(prev => ({ ...prev, [key]: value }))
     const original = config.find(e => e.key === key)?.value
     setDirtyKeys(prev => {
       const next = new Set(prev)
@@ -89,8 +85,16 @@ export function NotificationsTab() {
     const dirty = sectionKeys.filter(k => dirtyKeys.has(k))
     if (dirty.length === 0) return
     try {
-      await Promise.all(dirty.map(k => mutateAsync({ key: k, value: formState[k] })))
+      await Promise.all(dirty.map(k => mutateAsync({
+        key: k,
+        value: overrides[k] !== undefined ? overrides[k] : (config.find(e => e.key === k)?.value ?? ''),
+      })))
       toast.success('Notification settings saved')
+      setOverrides(prev => {
+        const next = { ...prev }
+        dirty.forEach(k => delete next[k])
+        return next
+      })
       setDirtyKeys(prev => {
         const next = new Set(prev)
         dirty.forEach(k => next.delete(k))
@@ -119,7 +123,7 @@ export function NotificationsTab() {
       <NotificationSection
         title="Notification Settings"
         keys={notifKeys}
-        formState={formState}
+        overrides={overrides}
         onInputChange={handleInputChange}
         dirtyKeys={dirtyKeys}
         onSave={handleSave}

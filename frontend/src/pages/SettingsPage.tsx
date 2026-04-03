@@ -2,6 +2,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { WatchlistTab } from '@/components/settings/WatchlistTab'
 import { KeywordsTab } from '@/components/settings/KeywordsTab'
+import { ScoringTab } from '@/components/settings/ScoringTab'
+import { NotificationsTab } from '@/components/settings/NotificationsTab'
+import { AgentRunsTab } from '@/components/settings/AgentRunsTab'
+import { ScheduleTab } from '@/components/settings/ScheduleTab'
 
 export function SettingsPage() {
   return (
@@ -24,16 +28,16 @@ export function SettingsPage() {
           <KeywordsTab />
         </TabsContent>
         <TabsContent value="scoring">
-          <p className="text-sm text-muted-foreground p-4">Coming soon</p>
+          <ScoringTab />
         </TabsContent>
         <TabsContent value="notifications">
-          <p className="text-sm text-muted-foreground p-4">Coming soon</p>
+          <NotificationsTab />
         </TabsContent>
         <TabsContent value="agent-runs">
-          <p className="text-sm text-muted-foreground p-4">Coming soon</p>
+          <AgentRunsTab />
         </TabsContent>
         <TabsContent value="schedule">
-          <p className="text-sm text-muted-foreground p-4">Coming soon</p>
+          <ScheduleTab />
         </TabsContent>
       </Tabs>
     </div>
