@@ -107,7 +107,10 @@ export interface WatchlistResponse extends WatchlistCreate {
 }
 
 export interface KeywordCreate {
+
   term: string          // CRITICAL: "term" not "keyword" — matches backend schema
+  term: string
+
   platform?: string
   weight?: number
   active?: boolean
@@ -118,7 +121,10 @@ export interface KeywordUpdate {
 }
 export interface KeywordResponse {
   id: string
+
   term: string          // CRITICAL: "term" not "keyword"
+  term: string
+
   platform?: string
   weight?: number
   active: boolean
