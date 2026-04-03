@@ -1,5 +1,8 @@
 import { http, HttpResponse } from 'msw'
-import type { DraftItemResponse, QueueListResponse, TokenResponse } from '@/api/types'
+import type {
+  DraftItemResponse, QueueListResponse, TokenResponse,
+  WatchlistResponse, KeywordResponse,
+} from '@/api/types'
 
 const mockItems: DraftItemResponse[] = [
   {
@@ -150,5 +153,167 @@ export const handlers = [
       return HttpResponse.json(response)
     }
     return new HttpResponse(null, { status: 401 })
+  }),
+
+  http.get('/digests/latest', () => {
+    return HttpResponse.json({
+      id: 'digest-1',
+      digest_date: '2026-04-02',
+      top_stories: [
+        { headline: 'Gold hits $2,400', source: 'Kitco', url: 'https://kitco.com/1', score: 8.5 },
+        { headline: 'Central bank buying accelerates', source: 'Mining.com', url: 'https://mining.com/1', score: 8.2 },
+        { headline: 'Silver ratio at extremes', source: 'JMN', url: 'https://jmn.com/1', score: 7.8 },
+        { headline: 'Kinross Q1 beats', source: 'WGC', url: 'https://wgc.com/1', score: 7.5 },
+        { headline: 'Inflation data boosts gold', source: 'Kitco', url: 'https://kitco.com/2', score: 7.2 },
+      ],
+      queue_snapshot: { twitter: 3, instagram: 2, content: 1 },
+      yesterday_approved: { count: 4, items: [] },
+      yesterday_rejected: { count: 1, items: [] },
+      yesterday_expired: { count: 2, items: [] },
+      priority_alert: null,
+      created_at: new Date().toISOString(),
+    })
+  }),
+
+  http.get('/digests/:date', ({ params }) => {
+    if (params.date === '1999-01-01') {
+      return new HttpResponse(null, { status: 404 })
+    }
+    return HttpResponse.json({
+      id: 'digest-2',
+      digest_date: params.date,
+      top_stories: [],
+      queue_snapshot: { twitter: 0, instagram: 0, content: 0 },
+      yesterday_approved: { count: 0, items: [] },
+      yesterday_rejected: { count: 0, items: [] },
+      yesterday_expired: { count: 0, items: [] },
+      priority_alert: null,
+      created_at: new Date().toISOString(),
+    })
+  }),
+
+  http.get('/content/today', () => {
+    return HttpResponse.json({
+      id: 'bundle-1',
+      story_headline: 'Central Bank Gold Accumulation',
+      format_type: 'thread',
+      no_story_flag: false,
+      draft_content: { tweets: ['Tweet 1', 'Tweet 2', 'Tweet 3'] },
+      deep_research: {
+        corroborating_sources: [
+          { title: 'Source 1', url: 'https://example.com/1' },
+          { title: 'Source 2', url: 'https://example.com/2' },
+        ],
+      },
+      created_at: new Date().toISOString(),
+    })
+  }),
+
+  http.get('/watchlists', ({ request }) => {
+    const url = new URL(request.url)
+    const platform = url.searchParams.get('platform')
+    const allWatchlists: WatchlistResponse[] = [
+      {
+        id: 'wl-1',
+        platform: 'twitter',
+        account_handle: '@goldwatcher',
+        relationship_value: 5,
+        notes: 'Top gold analyst',
+        active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'wl-2',
+        platform: 'instagram',
+        account_handle: '@goldanalysis_ig',
+        relationship_value: 4,
+        notes: 'IG gold account',
+        active: true,
+        created_at: new Date().toISOString(),
+      },
+    ]
+    const filtered = platform ? allWatchlists.filter(w => w.platform === platform) : allWatchlists
+    return HttpResponse.json(filtered)
+  }),
+
+  http.post('/watchlists', async ({ request }) => {
+    const body = await request.json() as WatchlistResponse
+    return HttpResponse.json({ id: 'wl-new', ...body, active: true, created_at: new Date().toISOString() }, { status: 201 })
+  }),
+
+  http.patch('/watchlists/:id', async ({ params, request }) => {
+    const body = await request.json() as Partial<WatchlistResponse>
+    return HttpResponse.json({ id: params.id, platform: 'twitter', account_handle: '@updated', active: true, created_at: new Date().toISOString(), ...body })
+  }),
+
+  http.delete('/watchlists/:id', () => {
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get('/keywords', () => {
+    const keywords: KeywordResponse[] = [
+      {
+        id: 'kw-1',
+        term: 'gold price',
+        platform: 'twitter',
+        weight: 1.0,
+        active: true,
+        created_at: new Date().toISOString(),
+      },
+      {
+        id: 'kw-2',
+        term: 'central bank',
+        platform: 'content',
+        weight: 0.8,
+        active: true,
+        created_at: new Date().toISOString(),
+      },
+    ]
+    return HttpResponse.json(keywords)
+  }),
+
+  http.post('/keywords', async ({ request }) => {
+    const body = await request.json() as KeywordResponse
+    return HttpResponse.json({ id: 'kw-new', ...body, active: true, created_at: new Date().toISOString() }, { status: 201 })
+  }),
+
+  http.patch('/keywords/:id', async ({ params, request }) => {
+    const body = await request.json() as Partial<KeywordResponse>
+    return HttpResponse.json({ id: params.id, term: 'gold price', active: true, created_at: new Date().toISOString(), ...body })
+  }),
+
+  http.delete('/keywords/:id', () => {
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.get('/agent-runs', () => {
+    return HttpResponse.json([
+      { id: 'run-1', agent_name: 'twitter_agent', started_at: new Date().toISOString(), status: 'success', items_found: 12, items_queued: 5, items_filtered: 7, created_at: new Date().toISOString() },
+      { id: 'run-2', agent_name: 'instagram_agent', started_at: new Date().toISOString(), status: 'success', items_found: 8, items_queued: 3, items_filtered: 5, created_at: new Date().toISOString() },
+      { id: 'run-3', agent_name: 'content_agent', started_at: new Date().toISOString(), status: 'error', items_found: 0, items_queued: 0, items_filtered: 0, errors: { message: 'API timeout' }, created_at: new Date().toISOString() },
+    ])
+  }),
+
+  http.get('/config', () => {
+    return HttpResponse.json([
+      { key: 'content_relevance_weight', value: '0.4' },
+      { key: 'content_recency_weight', value: '0.3' },
+      { key: 'content_credibility_weight', value: '0.3' },
+      { key: 'content_quality_threshold', value: '7.0' },
+    ])
+  }),
+
+  http.patch('/config/:key', async ({ params, request }) => {
+    const body = await request.json() as { value: string }
+    return HttpResponse.json({ key: params.key, value: body.value })
+  }),
+
+  http.get('/config/quota', () => {
+    return HttpResponse.json({
+      monthly_tweet_count: 3400,
+      quota_safety_margin: 1500,
+      monthly_cap: 10000,
+      reset_date: '2026-05-01',
+    })
   }),
 ]

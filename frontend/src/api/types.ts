@@ -56,3 +56,84 @@ export type RejectionCategory = typeof REJECTION_CATEGORIES[number]
 
 export interface LoginRequest { password: string }
 export interface TokenResponse { access_token: string; token_type: string }
+
+export interface DailyDigestResponse {
+  id: string
+  digest_date: string
+  top_stories: unknown
+  queue_snapshot: unknown
+  yesterday_approved: unknown
+  yesterday_rejected: unknown
+  yesterday_expired: unknown
+  priority_alert: unknown
+  whatsapp_sent_at?: string
+  created_at: string
+}
+
+export interface AgentRunResponse {
+  id: string
+  agent_name: string
+  started_at: string
+  ended_at?: string
+  items_found?: number
+  items_queued?: number
+  items_filtered?: number
+  errors?: unknown
+  status?: string
+  notes?: string
+  created_at: string
+}
+
+export interface WatchlistCreate {
+  platform: string
+  account_handle: string
+  relationship_value?: number
+  follower_threshold?: number
+  notes?: string
+  active?: boolean
+}
+export interface WatchlistUpdate {
+  relationship_value?: number
+  follower_threshold?: number
+  notes?: string
+  active?: boolean
+}
+export interface WatchlistResponse extends WatchlistCreate {
+  id: string
+  platform_user_id?: string
+  active: boolean
+  created_at: string
+  updated_at?: string
+}
+
+export interface KeywordCreate {
+  term: string
+  platform?: string
+  weight?: number
+  active?: boolean
+}
+export interface KeywordUpdate {
+  weight?: number
+  active?: boolean
+}
+export interface KeywordResponse {
+  id: string
+  term: string
+  platform?: string
+  weight?: number
+  active: boolean
+  created_at: string
+  updated_at?: string
+}
+
+export interface ConfigEntry {
+  key: string
+  value: string
+}
+
+export interface QuotaResponse {
+  monthly_tweet_count: number
+  quota_safety_margin: number
+  monthly_cap: number
+  reset_date?: string
+}
