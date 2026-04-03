@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 08-01 — Types, API modules, MSW handlers, backend config CRUD
-last_updated: "2026-04-03T03:26:32.775Z"
+stopped_at: "Completed 08-02 — DigestPage full implementation: 9/9 tests pass"
+last_updated: "2026-04-03T03:33:43.500Z"
 progress:
   total_phases: 9
   completed_phases: 5
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 08 (dashboard-views-and-digest) — EXECUTING
-Plan: 2 of 6
+Plan: 5 of 6
 
 ## Performance Metrics
 
@@ -75,6 +75,9 @@ Plan: 2 of 6
 | Phase 07-content-agent P04 | - | 1 tasks | 1 files |
 | Phase 07-content-agent P05 | 5 | 2 tasks | 3 files |
 | Phase 08-dashboard-views-and-digest P01 | 8 | 2 tasks | 10 files |
+| Phase 08-dashboard-views-and-digest P03 | 15 | 2 tasks | 7 files |
+| Phase 08 P02 | 32 | 1 tasks | 6 files |
+| Phase 08-dashboard-views-and-digest P04 | 612 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -139,6 +142,10 @@ Recent decisions affecting current work:
 - [Phase 07-content-agent]: _extract_check_text is module-level (not class method) — consistent with established pattern for testable pure functions
 - [Phase 08-dashboard-views-and-digest]: MSW /config/quota handler listed before /config/:key to prevent generic param matching quota path
 - [Phase 08-dashboard-views-and-digest]: KeywordCreate.term field (not keyword) throughout frontend types — matches backend schema exactly
+- [Phase 08-dashboard-views-and-digest]: ContentPage tests use vi.mock for API modules instead of MSW server.use() — relative fetch URLs cannot be intercepted in jsdom/Node.js MSW environment
+- [Phase 08]: localStorage mock via vi.stubGlobal required for apiFetch tests — jsdom does not provide localStorage by default; any component calling apiFetch on render needs this mock in beforeEach
+- [Phase 08]: useEffect syncs TanStack Query data to local state in DigestPage — direct render-time setState causes silent test failures
+- [Phase 08-dashboard-views-and-digest]: JSDOM URL must be set to http://localhost:3000 in vitest config so MSW relative path handlers resolve to matching fetch URLs
 
 ### Pending Todos
 
@@ -152,6 +159,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T03:26:32.772Z
-Stopped at: Completed 08-01 — Types, API modules, MSW handlers, backend config CRUD
+Last session: 2026-04-03T03:33:17.213Z
+Stopped at: Completed 08-02 — DigestPage full implementation: 9/9 tests pass
 Resume file: None

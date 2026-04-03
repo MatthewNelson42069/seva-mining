@@ -104,17 +104,17 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Daily Digest View
 
-- [ ] **DGST-01**: Dashboard page renders today's morning digest cleanly
-- [ ] **DGST-02**: Shows top 5 gold sector stories, queue snapshot, yesterday's summary, priority alert
-- [ ] **DGST-03**: Historical digests viewable
+- [x] **DGST-01**: Dashboard page renders today's morning digest cleanly
+- [x] **DGST-02**: Shows top 5 gold sector stories, queue snapshot, yesterday's summary, priority alert
+- [x] **DGST-03**: Historical digests viewable
 
 ### Content Review
 
-- [ ] **CREV-01**: Dashboard page for today's content bundle
-- [ ] **CREV-02**: Full draft displayed with format choice and rationale
-- [ ] **CREV-03**: All sources listed with links
-- [ ] **CREV-04**: Infographic preview when applicable
-- [ ] **CREV-05**: Approve to queue for posting
+- [x] **CREV-01**: Dashboard page for today's content bundle
+- [x] **CREV-02**: Full draft displayed with format choice and rationale
+- [x] **CREV-03**: All sources listed with links
+- [x] **CREV-04**: Infographic preview when applicable
+- [x] **CREV-05**: Approve to queue for posting
 
 ### WhatsApp Notifications
 
@@ -268,14 +268,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONT-15 | Phase 7 | Complete |
 | CONT-16 | Phase 7 | Complete |
 | CONT-17 | Phase 7 | Complete |
-| DGST-01 | Phase 8 | Pending |
-| DGST-02 | Phase 8 | Pending |
-| DGST-03 | Phase 8 | Pending |
-| CREV-01 | Phase 8 | Pending |
-| CREV-02 | Phase 8 | Pending |
-| CREV-03 | Phase 8 | Pending |
-| CREV-04 | Phase 8 | Pending |
-| CREV-05 | Phase 8 | Pending |
+| DGST-01 | Phase 8 | Complete |
+| DGST-02 | Phase 8 | Complete |
+| DGST-03 | Phase 8 | Complete |
+| CREV-01 | Phase 8 | Complete |
+| CREV-02 | Phase 8 | Complete |
+| CREV-03 | Phase 8 | Complete |
+| CREV-04 | Phase 8 | Complete |
+| CREV-05 | Phase 8 | Complete |
 | SETT-01 | Phase 8 | Pending |
 | SETT-02 | Phase 8 | Pending |
 | SETT-03 | Phase 8 | Pending |

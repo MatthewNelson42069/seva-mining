@@ -1,8 +1,9 @@
 import { http, HttpResponse } from 'msw'
 import type {
   DraftItemResponse, QueueListResponse, TokenResponse,
-  DailyDigestResponse, WatchlistResponse, KeywordResponse,
-  AgentRunResponse, ConfigEntry, QuotaResponse,
+  DailyDigestResponse, ContentBundleResponse,
+  WatchlistResponse, KeywordCreate, KeywordResponse, AgentRunResponse,
+  ConfigEntry, QuotaResponse,
 } from '@/api/types'
 
 const mockItems: DraftItemResponse[] = [
@@ -158,15 +159,15 @@ export const handlers = [
 
   // Digests
   http.get('/digests/latest', () => {
-    const digest: DailyDigestResponse = {
+    const response: DailyDigestResponse = {
       id: 'aaaaaaaa-0000-0000-0000-000000000001',
       digest_date: '2026-04-02',
       top_stories: [
         { headline: 'Gold hits $2,400', source: 'Kitco', url: 'https://kitco.com/1', score: 8.5 },
-        { headline: 'Central banks buy record gold', source: 'WGC', url: 'https://wgc.com/1', score: 8.2 },
-        { headline: 'Mining output up 3% in Q1', source: 'Mining.com', url: 'https://mining.com/1', score: 7.9 },
-        { headline: 'Silver-gold ratio hits 88:1', source: 'Kitco', url: 'https://kitco.com/2', score: 7.5 },
-        { headline: 'Fed hold signals gold strength', source: 'JMN', url: 'https://jmn.com/1', score: 7.2 },
+        { headline: 'Central banks add 1,037t in 2023', source: 'WGC', url: 'https://wgc.com/1', score: 8.2 },
+        { headline: 'Mining costs stabilise at $1,248/oz AISC', source: 'Mining.com', url: 'https://mining.com/1', score: 7.9 },
+        { headline: 'Silver-gold ratio hits 88:1', source: 'Kitco', url: 'https://kitco.com/2', score: 7.4 },
+        { headline: 'Gold ETF inflows accelerate in Q1', source: 'JMN', url: 'https://jmn.com/1', score: 7.1 },
       ],
       queue_snapshot: { twitter: 3, instagram: 2, content: 1 },
       yesterday_approved: { count: 4, items: [] },
@@ -175,39 +176,39 @@ export const handlers = [
       priority_alert: null,
       created_at: new Date().toISOString(),
     }
-    return HttpResponse.json(digest)
+    return HttpResponse.json(response)
   }),
 
   http.get('/digests/:date', ({ params }) => {
     if (params.date === '1999-01-01') {
       return new HttpResponse(null, { status: 404 })
     }
-    const digest: DailyDigestResponse = {
+    const response: DailyDigestResponse = {
       id: 'aaaaaaaa-0000-0000-0000-000000000002',
       digest_date: params.date as string,
       top_stories: [
-        { headline: 'Gold at $2,350', source: 'Kitco', url: 'https://kitco.com/3', score: 7.8 },
+        { headline: 'Gold steady at $2,350', source: 'Kitco', url: 'https://kitco.com/3', score: 7.8 },
       ],
       queue_snapshot: { twitter: 2, instagram: 1, content: 0 },
-      yesterday_approved: { count: 2, items: [] },
+      yesterday_approved: { count: 3, items: [] },
       yesterday_rejected: { count: 0, items: [] },
       yesterday_expired: { count: 1, items: [] },
       priority_alert: null,
       created_at: new Date().toISOString(),
     }
-    return HttpResponse.json(digest)
+    return HttpResponse.json(response)
   }),
 
   // Content
   http.get('/content/today', () => {
-    return HttpResponse.json({
+    const response: ContentBundleResponse = {
       id: 'bbbbbbbb-0000-0000-0000-000000000001',
-      story_headline: 'Gold breaks $2,400 resistance on central bank demand',
-      story_url: 'https://kitco.com/news/gold-2400',
+      story_headline: 'Central Bank Gold Accumulation: The Structural Shift',
+      story_url: 'https://kitco.com/news/gold-reserves-2024',
       source_name: 'Kitco',
       format_type: 'thread',
-      score: 8.5,
-      quality_score: 8.2,
+      score: 8.7,
+      quality_score: 9.1,
       no_story_flag: false,
       deep_research: {
         corroborating_sources: [
@@ -218,23 +219,23 @@ export const handlers = [
       draft_content: { tweets: ['Tweet 1', 'Tweet 2', 'Tweet 3'] },
       compliance_passed: true,
       created_at: new Date().toISOString(),
-    })
+    }
+    return HttpResponse.json(response)
   }),
 
   // Watchlists
   http.get('/watchlists', () => {
     const items: WatchlistResponse[] = [
       {
-        id: 'cccccccc-0000-0000-0000-000000000001',
+        id: 'w1111111-0000-0000-0000-000000000001',
         platform: 'twitter',
         account_handle: '@goldwatcher',
         relationship_value: 5,
-        follower_threshold: 1000,
         active: true,
         created_at: new Date().toISOString(),
       },
       {
-        id: 'cccccccc-0000-0000-0000-000000000002',
+        id: 'w2222222-0000-0000-0000-000000000002',
         platform: 'instagram',
         account_handle: '@goldanalysis_ig',
         relationship_value: 4,
@@ -247,22 +248,27 @@ export const handlers = [
 
   http.post('/watchlists', async ({ request }) => {
     const body = await request.json() as WatchlistResponse
-    return HttpResponse.json(
-      { id: 'cccccccc-0000-0000-0000-000000000099', ...body, active: body.active ?? true, created_at: new Date().toISOString() },
-      { status: 201 }
-    )
+    const created: WatchlistResponse = {
+      id: 'w3333333-0000-0000-0000-000000000003',
+      platform: body.platform,
+      account_handle: body.account_handle,
+      relationship_value: body.relationship_value,
+      active: body.active ?? true,
+      created_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(created, { status: 201 })
   }),
 
   http.patch('/watchlists/:id', async ({ params, request }) => {
-    const body = await request.json() as Partial<WatchlistResponse>
-    return HttpResponse.json({
-      id: params.id,
+    const body = await request.json() as WatchlistResponse
+    const updated: WatchlistResponse = {
+      id: params.id as string,
       platform: 'twitter',
       account_handle: '@goldwatcher',
-      active: true,
-      created_at: new Date().toISOString(),
       ...body,
-    })
+      created_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(updated)
   }),
 
   http.delete('/watchlists/:id', () => {
@@ -273,7 +279,7 @@ export const handlers = [
   http.get('/keywords', () => {
     const items: KeywordResponse[] = [
       {
-        id: 'dddddddd-0000-0000-0000-000000000001',
+        id: 'k1111111-0000-0000-0000-000000000001',
         term: 'gold mining',
         platform: 'twitter',
         weight: 1.5,
@@ -281,10 +287,10 @@ export const handlers = [
         created_at: new Date().toISOString(),
       },
       {
-        id: 'dddddddd-0000-0000-0000-000000000002',
+        id: 'k2222222-0000-0000-0000-000000000002',
         term: '$GLD',
-        platform: undefined,
-        weight: 1.0,
+        platform: 'twitter',
+        weight: 2.0,
         active: true,
         created_at: new Date().toISOString(),
       },
@@ -293,22 +299,28 @@ export const handlers = [
   }),
 
   http.post('/keywords', async ({ request }) => {
-    const body = await request.json() as KeywordResponse
-    return HttpResponse.json(
-      { id: 'dddddddd-0000-0000-0000-000000000099', ...body, active: body.active ?? true, created_at: new Date().toISOString() },
-      { status: 201 }
-    )
+    const body = await request.json() as KeywordCreate
+    const created: KeywordResponse = {
+      id: 'k3333333-0000-0000-0000-000000000003',
+      term: body.term,
+      platform: body.platform,
+      weight: body.weight,
+      active: body.active ?? true,
+      created_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(created, { status: 201 })
   }),
 
   http.patch('/keywords/:id', async ({ params, request }) => {
-    const body = await request.json() as Partial<KeywordResponse>
-    return HttpResponse.json({
-      id: params.id,
+    const body = await request.json() as KeywordResponse
+    const updated: KeywordResponse = {
+      id: params.id as string,
       term: 'gold mining',
-      active: true,
-      created_at: new Date().toISOString(),
       ...body,
-    })
+      active: body.active ?? true,
+      created_at: new Date().toISOString(),
+    }
+    return HttpResponse.json(updated)
   }),
 
   http.delete('/keywords/:id', () => {
@@ -319,7 +331,7 @@ export const handlers = [
   http.get('/agent-runs', () => {
     const items: AgentRunResponse[] = [
       {
-        id: 'eeeeeeee-0000-0000-0000-000000000001',
+        id: 'ar111111-0000-0000-0000-000000000001',
         agent_name: 'twitter_agent',
         started_at: new Date(Date.now() - 7200000).toISOString(),
         ended_at: new Date(Date.now() - 7100000).toISOString(),
@@ -330,7 +342,7 @@ export const handlers = [
         created_at: new Date(Date.now() - 7200000).toISOString(),
       },
       {
-        id: 'eeeeeeee-0000-0000-0000-000000000002',
+        id: 'ar222222-0000-0000-0000-000000000002',
         agent_name: 'instagram_agent',
         started_at: new Date(Date.now() - 14400000).toISOString(),
         ended_at: new Date(Date.now() - 14300000).toISOString(),
@@ -341,7 +353,7 @@ export const handlers = [
         created_at: new Date(Date.now() - 14400000).toISOString(),
       },
       {
-        id: 'eeeeeeee-0000-0000-0000-000000000003',
+        id: 'ar333333-0000-0000-0000-000000000003',
         agent_name: 'content_agent',
         started_at: new Date(Date.now() - 3600000).toISOString(),
         ended_at: new Date(Date.now() - 3500000).toISOString(),
@@ -355,15 +367,15 @@ export const handlers = [
     return HttpResponse.json(items)
   }),
 
-  // Config — IMPORTANT: /config/quota must be listed before /config/:key
+  // Config (must come before /config/:key to avoid route conflict)
   http.get('/config/quota', () => {
-    const quota: QuotaResponse = {
+    const response: QuotaResponse = {
       monthly_tweet_count: 3400,
       quota_safety_margin: 1500,
       monthly_cap: 10000,
       reset_date: '2026-05-01',
     }
-    return HttpResponse.json(quota)
+    return HttpResponse.json(response)
   }),
 
   http.get('/config', () => {
@@ -378,6 +390,10 @@ export const handlers = [
 
   http.patch('/config/:key', async ({ params, request }) => {
     const body = await request.json() as { value: string }
-    return HttpResponse.json({ key: params.key, value: body.value })
+    const entry: ConfigEntry = {
+      key: params.key as string,
+      value: body.value,
+    }
+    return HttpResponse.json(entry)
   }),
 ]
