@@ -104,17 +104,17 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Daily Digest View
 
-- [ ] **DGST-01**: Dashboard page renders today's morning digest cleanly
-- [ ] **DGST-02**: Shows top 5 gold sector stories, queue snapshot, yesterday's summary, priority alert
-- [ ] **DGST-03**: Historical digests viewable
+- [x] **DGST-01**: Dashboard page renders today's morning digest cleanly
+- [x] **DGST-02**: Shows top 5 gold sector stories, queue snapshot, yesterday's summary, priority alert
+- [x] **DGST-03**: Historical digests viewable
 
 ### Content Review
 
-- [ ] **CREV-01**: Dashboard page for today's content bundle
-- [ ] **CREV-02**: Full draft displayed with format choice and rationale
-- [ ] **CREV-03**: All sources listed with links
-- [ ] **CREV-04**: Infographic preview when applicable
-- [ ] **CREV-05**: Approve to queue for posting
+- [x] **CREV-01**: Dashboard page for today's content bundle
+- [x] **CREV-02**: Full draft displayed with format choice and rationale
+- [x] **CREV-03**: All sources listed with links
+- [x] **CREV-04**: Infographic preview when applicable
+- [x] **CREV-05**: Approve to queue for posting
 
 ### WhatsApp Notifications
 
@@ -129,10 +129,10 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SETT-01**: Watchlist management for X (add/remove accounts, set relationship value 1-5, notes)
 - [ ] **SETT-02**: Watchlist management for Instagram (add/remove accounts, set follower threshold)
 - [ ] **SETT-03**: Keyword management (add/remove keywords, adjust weights, toggle active, filter by platform)
-- [ ] **SETT-04**: Scoring parameter configuration (all weights, thresholds, decay curves editable)
+- [x] **SETT-04**: Scoring parameter configuration (all weights, thresholds, decay curves editable)
 - [ ] **SETT-05**: Agent run log display (last 7 days, filterable by agent)
-- [ ] **SETT-06**: Notification preferences (WhatsApp timing, alert thresholds)
-- [ ] **SETT-07**: Agent schedule configuration (change run intervals for each agent)
+- [x] **SETT-06**: Notification preferences (WhatsApp timing, alert thresholds)
+- [x] **SETT-07**: Agent schedule configuration (change run intervals for each agent)
 - [ ] **SETT-08**: X API quota usage display with visual indicator
 
 ### Agent Execution
@@ -268,21 +268,21 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONT-15 | Phase 7 | Complete |
 | CONT-16 | Phase 7 | Complete |
 | CONT-17 | Phase 7 | Complete |
-| DGST-01 | Phase 8 | Pending |
-| DGST-02 | Phase 8 | Pending |
-| DGST-03 | Phase 8 | Pending |
-| CREV-01 | Phase 8 | Pending |
-| CREV-02 | Phase 8 | Pending |
-| CREV-03 | Phase 8 | Pending |
-| CREV-04 | Phase 8 | Pending |
-| CREV-05 | Phase 8 | Pending |
+| DGST-01 | Phase 8 | Complete |
+| DGST-02 | Phase 8 | Complete |
+| DGST-03 | Phase 8 | Complete |
+| CREV-01 | Phase 8 | Complete |
+| CREV-02 | Phase 8 | Complete |
+| CREV-03 | Phase 8 | Complete |
+| CREV-04 | Phase 8 | Complete |
+| CREV-05 | Phase 8 | Complete |
 | SETT-01 | Phase 8 | Pending |
 | SETT-02 | Phase 8 | Pending |
 | SETT-03 | Phase 8 | Pending |
-| SETT-04 | Phase 8 | Pending |
+| SETT-04 | Phase 8 | Complete |
 | SETT-05 | Phase 8 | Pending |
-| SETT-06 | Phase 8 | Pending |
-| SETT-07 | Phase 8 | Pending |
+| SETT-06 | Phase 8 | Complete |
+| SETT-07 | Phase 8 | Complete |
 | SETT-08 | Phase 8 | Pending |
 | EXEC-02 | Phase 9 | Pending |
 
