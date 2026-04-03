@@ -12,7 +12,9 @@ Every piece of content the system drafts must be genuinely valuable to the gold 
 
 ### Validated
 
-(None yet — ship to validate)
+- Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
+- Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
+- Validated in Phase 8: SettingsPage with 6 tabs — Watchlists, Keywords, Scoring, Notifications, Agent Runs, Schedule (SETT-01..08)
 
 ### Active
 
