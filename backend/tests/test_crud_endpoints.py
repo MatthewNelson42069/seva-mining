@@ -41,6 +41,7 @@ class _Watchlist(_TestBase):
     id = Col(String(36), primary_key=True, default=_uuid_default)
     platform = Col(String(20), nullable=False)
     account_handle = Col(String(255), nullable=False)
+    platform_user_id = Col(String(50))
     relationship_value = Col(Integer)
     follower_threshold = Col(Integer)
     notes = Col(Text)
@@ -103,6 +104,13 @@ class _ContentBundle(_TestBase):
     draft_content = Col(SQLiteJSON)
     compliance_passed = Col(Boolean)
     created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class _Config(_TestBase):
+    __tablename__ = "config"
+    key = Col(String(100), primary_key=True)
+    value = Col(Text, nullable=False)
+    updated_at = Col(DateTime(timezone=True))
 
 
 # ---------------------------------------------------------------------------
@@ -393,3 +401,54 @@ async def test_all_crud_require_auth(db_client):
         assert response.status_code in (401, 403), (
             f"{method} {path} should require auth, got {response.status_code}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Config tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_list_config_empty(authed_db_client):
+    """GET /config returns empty list when no config entries exist."""
+    response = await authed_db_client.get("/config")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.asyncio
+async def test_patch_config_create(authed_db_client):
+    """PATCH /config/{key} creates a new config entry when key does not exist."""
+    response = await authed_db_client.patch(
+        "/config/content_quality_threshold",
+        json={"value": "7.5"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["key"] == "content_quality_threshold"
+    assert data["value"] == "7.5"
+
+    # Verify it appears in list
+    list_resp = await authed_db_client.get("/config")
+    assert len(list_resp.json()) == 1
+
+
+@pytest.mark.asyncio
+async def test_patch_config_update(authed_db_client):
+    """PATCH /config/{key} updates existing config entry."""
+    # Create first
+    await authed_db_client.patch(
+        "/config/content_quality_threshold",
+        json={"value": "7.0"},
+    )
+    # Update
+    response = await authed_db_client.patch(
+        "/config/content_quality_threshold",
+        json={"value": "8.0"},
+    )
+    assert response.status_code == 200
+    assert response.json()["value"] == "8.0"
+
+    # Verify only one entry
+    list_resp = await authed_db_client.get("/config")
+    assert len(list_resp.json()) == 1
+    assert list_resp.json()[0]["value"] == "8.0"
