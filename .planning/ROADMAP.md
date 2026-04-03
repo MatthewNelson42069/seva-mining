@@ -173,12 +173,12 @@ Plans:
 **UI hint**: yes
 
 Plans:
-- [ ] 08-01-PLAN.md — Foundation: TypeScript types, API modules, MSW handlers, backend config endpoints, test stubs
-- [ ] 08-02-PLAN.md — DigestPage: daily digest with top stories, queue snapshot, yesterday summary, prev/next navigation
-- [ ] 08-03-PLAN.md — ContentPage: content bundle review with format rendering, infographic preview, approve/reject flow
-- [ ] 08-04-PLAN.md — SettingsPage shell + Watchlists tab + Keywords tab (CRUD with confirmation dialogs)
-- [ ] 08-05-PLAN.md — SettingsPage: Scoring, Notifications, Agent Runs, Schedule tabs + QuotaBar
-- [ ] 08-06-PLAN.md — Human verification of all 3 dashboard pages (checkpoint)
+- [x] 08-01-PLAN.md — Foundation: TypeScript types, API modules, MSW handlers, backend config endpoints, test stubs
+- [x] 08-02-PLAN.md — DigestPage: daily digest with top stories, queue snapshot, yesterday summary, prev/next navigation
+- [x] 08-03-PLAN.md — ContentPage: content bundle review with format rendering, infographic preview, approve/reject flow
+- [x] 08-04-PLAN.md — SettingsPage shell + Watchlists tab + Keywords tab (CRUD with confirmation dialogs)
+- [x] 08-05-PLAN.md — SettingsPage: Scoring, Notifications, Agent Runs, Schedule tabs + QuotaBar
+- [x] 08-06-PLAN.md — Human verification of all 3 dashboard pages (checkpoint)
 
 ### Phase 9: Agent Execution Polish
 **Goal**: All agent configuration is fully DB-driven with no hardcoded values, agent schedule intervals are configurable from Settings, and the system is resilient to individual agent failures without crashing the scheduler worker
