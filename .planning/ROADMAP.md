@@ -209,4 +209,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 6. Instagram Agent | 0/5 | Planned    |  |
 | 7. Content Agent | 1/5 | In Progress|  |
 | 8. Dashboard Views and Digest | 0/6 | Planned    |  |
-| 9. Agent Execution Polish | 0/2 | Not started | - |
+| 9. Agent Execution Polish | 0/2 | Planned    |  |

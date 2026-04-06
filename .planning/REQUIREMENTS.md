@@ -138,7 +138,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Agent Execution
 
 - [x] **EXEC-01**: Every agent run logged: agent name, start/end time, items found, items queued, items filtered, errors
-- [ ] **EXEC-02**: Agents read scoring settings from database at start of each run (no cached config)
+- [x] **EXEC-02**: Agents read scoring settings from database at start of each run (no cached config)
 - [x] **EXEC-03**: All agent functions are async (AsyncAnthropic + AsyncIOScheduler)
 - [x] **EXEC-04**: Graceful error handling — agent failures logged and alerted, do not crash the worker process
 
@@ -284,7 +284,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SETT-06 | Phase 8 | Complete |
 | SETT-07 | Phase 8 | Complete |
 | SETT-08 | Phase 8 | Complete |
-| EXEC-02 | Phase 9 | Pending |
+| EXEC-02 | Phase 9 | Complete |
 
 **Coverage:**
 - v1 requirements: 99 total (note: REQUIREMENTS.md previously stated 78 — actual count from requirement IDs is 99)

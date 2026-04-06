@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 08-06-PLAN.md — Phase 8 complete
-last_updated: "2026-04-03T22:29:54.033Z"
+status: Milestone complete
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-04-06T20:55:00.376Z"
 progress:
   total_phases: 9
-  completed_phases: 6
-  total_plans: 44
-  completed_plans: 33
+  completed_phases: 7
+  total_plans: 46
+  completed_plans: 35
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
-**Current focus:** Phase 08 — dashboard-views-and-digest
+**Current focus:** Phase 09 — agent-execution-polish
 
 ## Current Position
 
-Phase: 9
+Phase: 09
 Plan: Not started
 
 ## Performance Metrics
@@ -79,6 +79,8 @@ Plan: Not started
 | Phase 08 P02 | 32 | 1 tasks | 6 files |
 | Phase 08-dashboard-views-and-digest P04 | 612 | 2 tasks | 9 files |
 | Phase 08-dashboard-views-and-digest P06 | checkpoint | 1 tasks | 0 files |
+| Phase 09-agent-execution-polish P01 | 8 | 2 tasks | 4 files |
+| Phase 09-agent-execution-polish P02 | 2 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -148,6 +150,10 @@ Recent decisions affecting current work:
 - [Phase 08]: useEffect syncs TanStack Query data to local state in DigestPage — direct render-time setState causes silent test failures
 - [Phase 08-dashboard-views-and-digest]: JSDOM URL must be set to http://localhost:3000 in vitest config so MSW relative path handlers resolve to matching fetch URLs
 - [Phase 08-dashboard-views-and-digest]: Human verification checkpoint approved — all three dashboard pages confirmed correct by operator
+- [Phase 09-agent-execution-polish]: Twitter _get_config returns Optional[Config], so threshold reads use int(_cfg.value) if _cfg else default pattern — consistent with existing quota reads
+- [Phase 09-agent-execution-polish]: Default parameter values in passes_engagement_gate match previous hardcoded values — backward compatibility preserved for existing tests without changes
+- [Phase 09-agent-execution-polish]: expiry_sweep and morning_digest scheduler config keys placed in seed_content_data.py — scheduler-level concerns with no agent home; content seed is closest match
+- [Phase 09-agent-execution-polish]: build_scheduler changed to async def to support await _read_schedule_config(engine) at startup; APScheduler API unaffected since main() already async
 
 ### Pending Todos
 
@@ -161,6 +167,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T20:36:09.387Z
-Stopped at: Completed 08-06-PLAN.md — Phase 8 complete
+Last session: 2026-04-06T20:47:30.236Z
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None
