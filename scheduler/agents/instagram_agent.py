@@ -56,23 +56,31 @@ def calculate_instagram_score(likes: int, comment_count: int, follower_count: in
     return float(likes * 1 + comment_count * 2 + normalize_followers(follower_count) * 1.5)
 
 
-def passes_engagement_gate(likes: int, created_at: datetime) -> bool:
-    """INST-03: 200+ likes AND post created within last 8 hours (strictly < 8.0h).
+def passes_engagement_gate(
+    likes: int,
+    created_at: datetime,
+    *,
+    min_likes: int = 200,
+    max_post_age_hours: float = 8.0,
+) -> bool:
+    """INST-03: min_likes+ likes AND post created within last max_post_age_hours (strictly < threshold).
 
     Args:
         likes: Number of likes on the post.
         created_at: Timezone-aware datetime when the post was published.
+        min_likes: Minimum likes required (default 200, DB-driven via EXEC-02).
+        max_post_age_hours: Maximum post age in hours (default 8.0, DB-driven via EXEC-02).
 
     Returns:
         True if both thresholds are satisfied, False otherwise.
     """
-    if likes < 200:
+    if likes < min_likes:
         return False
     now = datetime.now(timezone.utc)
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=timezone.utc)
     age_hours = (now - created_at).total_seconds() / 3600.0
-    return age_hours < 8.0
+    return age_hours < max_post_age_hours
 
 
 def select_top_posts(scored_posts: list[dict], top_n: int = 3) -> list[dict]:
@@ -139,6 +147,14 @@ class InstagramAgent:
         max_per_account = int(await self._get_config(session, "instagram_max_posts_per_account", "10"))
         top_n = int(await self._get_config(session, "instagram_top_n", "3"))
 
+        # Step 1b: Read engagement gate thresholds from DB (EXEC-02)
+        min_likes = int(await self._get_config(session, "instagram_min_likes", "200"))
+        max_post_age_hours = float(await self._get_config(session, "instagram_max_post_age_hours", "8"))
+        logger.info(
+            "InstagramAgent: engagement thresholds — min_likes=%d, max_age=%.1fh",
+            min_likes, max_post_age_hours,
+        )
+
         # Step 2: Load hashtags and watchlist
         hashtags = await self._load_keywords(session)
         watchlist = await self._load_watchlist(session)
@@ -166,7 +182,7 @@ class InstagramAgent:
                     created = ts
                 if created.tzinfo is None:
                     created = created.replace(tzinfo=timezone.utc)
-                if passes_engagement_gate(likes=p.get("likesCount", 0), created_at=created):
+                if passes_engagement_gate(likes=p.get("likesCount", 0), created_at=created, min_likes=min_likes, max_post_age_hours=max_post_age_hours):
                     qualifying.append(p)
             except (ValueError, TypeError):
                 continue

@@ -147,11 +147,15 @@ def passes_engagement_gate(
     is_watchlist: bool = False,
     *,
     impression_count: Optional[int] = None,
+    min_likes_general: int = 500,
+    min_views_general: int = 40000,
+    min_likes_watchlist: int = 50,
+    min_views_watchlist: int = 5000,
 ) -> bool:
     """TWIT-04: Engagement gate check.
 
-    Watchlist: 50+ likes AND 5000+ views (both required).
-    Non-watchlist: 500+ likes AND 40000+ views (both required).
+    Watchlist: min_likes_watchlist+ likes AND min_views_watchlist+ views (both required).
+    Non-watchlist: min_likes_general+ likes AND min_views_general+ views (both required).
     None views treated as 0 — conservative, fails gate.
 
     Args:
@@ -159,6 +163,10 @@ def passes_engagement_gate(
         views: impression_count from public_metrics (may be None).
         is_watchlist: True if tweet is from a watchlist account.
         impression_count: Alias for views (keyword-only). Takes precedence when provided.
+        min_likes_general: Minimum likes for non-watchlist tweets (default 500, DB-driven via EXEC-02).
+        min_views_general: Minimum views for non-watchlist tweets (default 40000, DB-driven via EXEC-02).
+        min_likes_watchlist: Minimum likes for watchlist tweets (default 50, DB-driven via EXEC-02).
+        min_views_watchlist: Minimum views for watchlist tweets (default 5000, DB-driven via EXEC-02).
 
     Returns:
         True if tweet passes the gate, False otherwise.
@@ -166,9 +174,9 @@ def passes_engagement_gate(
     effective_views = impression_count if impression_count is not None else views
     safe_views = effective_views if effective_views is not None else 0
     if is_watchlist:
-        return likes >= 50 and safe_views >= 5000
+        return likes >= min_likes_watchlist and safe_views >= min_views_watchlist
     else:
-        return likes >= 500 and safe_views >= 40000
+        return likes >= min_likes_general and safe_views >= min_views_general
 
 
 def select_top_posts(
@@ -1015,6 +1023,20 @@ class TwitterAgent:
             await session.commit()
             return
 
+        # Step 1b: Read engagement gate thresholds from DB (EXEC-02)
+        _cfg = await self._get_config(session, "twitter_min_likes_general")
+        min_likes_general = int(_cfg.value) if _cfg else 500
+        _cfg = await self._get_config(session, "twitter_min_views_general")
+        min_views_general = int(_cfg.value) if _cfg else 40000
+        _cfg = await self._get_config(session, "twitter_min_likes_watchlist")
+        min_likes_watchlist = int(_cfg.value) if _cfg else 50
+        _cfg = await self._get_config(session, "twitter_min_views_watchlist")
+        min_views_watchlist = int(_cfg.value) if _cfg else 5000
+        logger.info(
+            "TwitterAgent: engagement thresholds — general: %d likes/%d views, watchlist: %d likes/%d views",
+            min_likes_general, min_views_general, min_likes_watchlist, min_views_watchlist,
+        )
+
         # Step 3: Load data
         watchlist = await self._load_watchlist(session)
         keywords = await self._load_keywords(session)
@@ -1063,6 +1085,10 @@ class TwitterAgent:
                 likes=tweet["likes"],
                 views=tweet["views"],
                 is_watchlist=tweet["is_watchlist"],
+                min_likes_general=min_likes_general,
+                min_views_general=min_views_general,
+                min_likes_watchlist=min_likes_watchlist,
+                min_views_watchlist=min_views_watchlist,
             ):
                 gate_passed.append(tweet)
 
