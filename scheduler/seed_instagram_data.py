@@ -88,6 +88,7 @@ CONFIG_DEFAULTS = [
     ("instagram_health_baseline_runs",   "3"),
     ("instagram_min_likes",              "200"),
     ("instagram_max_post_age_hours",     "8"),
+    ("instagram_interval_hours",         "4"),
 ]
 
 

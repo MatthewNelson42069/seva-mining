@@ -111,6 +111,7 @@ CONFIG_DEFAULTS = [
     ("twitter_min_views_general",    "40000"),
     ("twitter_min_likes_watchlist",  "50"),
     ("twitter_min_views_watchlist",  "5000"),
+    ("twitter_interval_hours",       "2"),
 ]
 
 

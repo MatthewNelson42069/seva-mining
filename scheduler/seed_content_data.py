@@ -23,10 +23,13 @@ from models.config import Config
 # Config defaults — Content Agent runtime parameters
 # ---------------------------------------------------------------------------
 CONFIG_DEFAULTS = [
-    ("content_relevance_weight",   "0.40"),
-    ("content_recency_weight",     "0.30"),
-    ("content_credibility_weight", "0.30"),
-    ("content_quality_threshold",  "7.0"),
+    ("content_relevance_weight",          "0.40"),
+    ("content_recency_weight",            "0.30"),
+    ("content_credibility_weight",        "0.30"),
+    ("content_quality_threshold",         "7.0"),
+    ("content_agent_schedule_hour",       "6"),
+    ("expiry_sweep_interval_minutes",     "30"),
+    ("morning_digest_hour",               "8"),
 ]
 
 
