@@ -175,7 +175,7 @@ async def _read_schedule_config(engine) -> dict[str, str]:
         "instagram_interval_hours": "4",
         "content_agent_schedule_hour": "6",
         "expiry_sweep_interval_minutes": "30",
-        "morning_digest_hour": "8",
+        "morning_digest_schedule_hour": "8",
     }
     try:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -209,7 +209,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     - instagram_interval_hours (default: 4)
     - content_agent_schedule_hour (default: 6)
     - expiry_sweep_interval_minutes (default: 30)
-    - morning_digest_hour (default: 8)
+    - morning_digest_schedule_hour (default: 8)
     """
     cfg = await _read_schedule_config(engine)
 
@@ -217,7 +217,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     instagram_hours = int(cfg["instagram_interval_hours"])
     content_hour = int(cfg["content_agent_schedule_hour"])
     expiry_minutes = int(cfg["expiry_sweep_interval_minutes"])
-    digest_hour = int(cfg["morning_digest_hour"])
+    digest_hour = int(cfg["morning_digest_schedule_hour"])
 
     logger.info(
         "Schedule config: twitter=%dh, instagram=%dh, content=cron(%d:00), expiry=%dmin, digest=cron(%d:00)",
