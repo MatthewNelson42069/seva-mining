@@ -86,6 +86,7 @@ CONFIG_DEFAULTS = [
     ("instagram_max_posts_per_account",  "10"),
     ("instagram_top_n",                  "3"),
     ("instagram_health_baseline_runs",   "3"),
+    ("instagram_interval_hours",         "4"),
 ]
 
 

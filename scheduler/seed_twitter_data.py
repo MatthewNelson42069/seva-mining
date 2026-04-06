@@ -107,6 +107,7 @@ CONFIG_DEFAULTS = [
     ("twitter_monthly_tweet_count",  "0"),
     ("twitter_monthly_reset_date",   datetime.now(timezone.utc).date().isoformat()),
     ("twitter_quota_safety_margin",  "1500"),
+    ("twitter_interval_hours",       "2"),
 ]
 
 
