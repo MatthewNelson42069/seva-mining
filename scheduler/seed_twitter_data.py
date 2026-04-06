@@ -107,6 +107,10 @@ CONFIG_DEFAULTS = [
     ("twitter_monthly_tweet_count",  "0"),
     ("twitter_monthly_reset_date",   datetime.now(timezone.utc).date().isoformat()),
     ("twitter_quota_safety_margin",  "1500"),
+    ("twitter_min_likes_general",    "500"),
+    ("twitter_min_views_general",    "40000"),
+    ("twitter_min_likes_watchlist",  "50"),
+    ("twitter_min_views_watchlist",  "5000"),
 ]
 
 
