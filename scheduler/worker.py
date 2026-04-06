@@ -14,9 +14,10 @@ import inspect
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection
-from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection, async_sessionmaker
+from sqlalchemy import text, select
 
+from models.config import Config
 from agents.content_agent import ContentAgent
 from agents.twitter_agent import TwitterAgent
 from agents.instagram_agent import InstagramAgent
@@ -163,55 +164,104 @@ def _make_job(job_name: str, engine):
     return job
 
 
-def build_scheduler(engine) -> AsyncIOScheduler:
-    """
-    Create and configure AsyncIOScheduler with all 5 placeholder jobs.
+async def _read_schedule_config(engine) -> dict[str, str]:
+    """Read schedule-related config keys from DB at startup.
 
-    Job schedule (D-14):
-    - content_agent: daily at 6:00 AM (cron)
-    - twitter_agent: every 2 hours (interval)
-    - instagram_agent: every 4 hours (interval)
-    - expiry_sweep: every 30 minutes (interval)
-    - morning_digest: daily at 8:00 AM (cron)
+    Returns a dict of {key: value} for schedule config keys.
+    Falls back to hardcoded defaults if DB is unreachable or keys are missing.
     """
+    defaults = {
+        "twitter_interval_hours": "2",
+        "instagram_interval_hours": "4",
+        "content_agent_schedule_hour": "6",
+        "expiry_sweep_interval_minutes": "30",
+        "morning_digest_hour": "8",
+    }
+    try:
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            result = await session.execute(
+                select(Config.key, Config.value).where(
+                    Config.key.in_(list(defaults.keys()))
+                )
+            )
+            rows = {row.key: row.value for row in result.all()}
+        config = {}
+        for key, default in defaults.items():
+            value = rows.get(key, default)
+            if key not in rows:
+                logger.warning("Schedule config key '%s' not in DB — using default: %s", key, default)
+            config[key] = value
+        return config
+    except Exception as exc:
+        logger.error("Failed to read schedule config from DB: %s — using all defaults", exc)
+        return defaults
+
+
+async def build_scheduler(engine) -> AsyncIOScheduler:
+    """Build the APScheduler instance with jobs registered.
+
+    Job schedule intervals read from DB config (EXEC-02).
+    Falls back to hardcoded defaults if config keys are missing.
+
+    Config keys:
+    - twitter_interval_hours (default: 2)
+    - instagram_interval_hours (default: 4)
+    - content_agent_schedule_hour (default: 6)
+    - expiry_sweep_interval_minutes (default: 30)
+    - morning_digest_hour (default: 8)
+    """
+    cfg = await _read_schedule_config(engine)
+
+    twitter_hours = int(cfg["twitter_interval_hours"])
+    instagram_hours = int(cfg["instagram_interval_hours"])
+    content_hour = int(cfg["content_agent_schedule_hour"])
+    expiry_minutes = int(cfg["expiry_sweep_interval_minutes"])
+    digest_hour = int(cfg["morning_digest_hour"])
+
+    logger.info(
+        "Schedule config: twitter=%dh, instagram=%dh, content=cron(%d:00), expiry=%dmin, digest=cron(%d:00)",
+        twitter_hours, instagram_hours, content_hour, expiry_minutes, digest_hour,
+    )
+
     scheduler = AsyncIOScheduler()
 
     scheduler.add_job(
         _make_job("content_agent", engine),
         trigger="cron",
-        hour=6,
+        hour=content_hour,
         minute=0,
         id="content_agent",
-        name="Content Agent — daily at 6am",
+        name=f"Content Agent — daily at {content_hour}am",
     )
     scheduler.add_job(
         _make_job("twitter_agent", engine),
         trigger="interval",
-        hours=2,
+        hours=twitter_hours,
         id="twitter_agent",
-        name="Twitter Agent — every 2 hours",
+        name=f"Twitter Agent — every {twitter_hours} hours",
     )
     scheduler.add_job(
         _make_job("instagram_agent", engine),
         trigger="interval",
-        hours=4,
+        hours=instagram_hours,
         id="instagram_agent",
-        name="Instagram Agent — every 4 hours",
+        name=f"Instagram Agent — every {instagram_hours} hours",
     )
     scheduler.add_job(
         _make_job("expiry_sweep", engine),
         trigger="interval",
-        minutes=30,
+        minutes=expiry_minutes,
         id="expiry_sweep",
-        name="Expiry Sweep — every 30 minutes",
+        name=f"Expiry Sweep — every {expiry_minutes} minutes",
     )
     scheduler.add_job(
         _make_job("morning_digest", engine),
         trigger="cron",
-        hour=8,
+        hour=digest_hour,
         minute=0,
         id="morning_digest",
-        name="Morning Digest — daily at 8am",
+        name=f"Morning Digest — daily at {digest_hour}am",
     )
 
     return scheduler
@@ -230,7 +280,7 @@ async def main() -> None:
     # Seed Senior Agent config defaults (idempotent — safe to run on every startup)
     await seed_senior_config()
 
-    scheduler = build_scheduler(engine)
+    scheduler = await build_scheduler(engine)
     scheduler.start()
     logger.info("Scheduler worker started. %d jobs registered.", len(scheduler.get_jobs()))
 
