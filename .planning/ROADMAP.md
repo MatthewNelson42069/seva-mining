@@ -188,7 +188,11 @@ Plans:
   1. Every agent reads its scoring weights, thresholds, and decay parameters from the database at the start of each run — a weight change in Settings affects the very next run without a deploy
   2. Agent run intervals (Twitter 2h, Instagram 4h, Content 6am) are adjustable from the Settings page schedule configuration and take effect on the next scheduled trigger
   3. An agent crash is caught, logged with full error detail, and does not crash the scheduler worker process — remaining agents continue running on schedule
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Engagement gate thresholds to DB config (Twitter + Instagram agents, seed scripts)
+- [ ] 09-02-PLAN.md — Schedule intervals to DB config (worker.py, seed scripts)
 
 ## Progress
 
@@ -205,4 +209,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 6. Instagram Agent | 0/5 | Planned    |  |
 | 7. Content Agent | 1/5 | In Progress|  |
 | 8. Dashboard Views and Digest | 0/6 | Planned    |  |
-| 9. Agent Execution Polish | 0/TBD | Not started | - |
+| 9. Agent Execution Polish | 0/2 | Not started | - |
