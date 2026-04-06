@@ -15,6 +15,7 @@ Every piece of content the system drafts must be genuinely valuable to the gold 
 - Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
 - Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
 - Validated in Phase 8: SettingsPage with 6 tabs — Watchlists, Keywords, Scoring, Notifications, Agent Runs, Schedule (SETT-01..08)
+- Validated in Phase 9: All agent engagement gate thresholds and schedule intervals DB-driven — tunable from Settings without a deploy (EXEC-02)
 
 ### Active
 
@@ -130,4 +131,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after initialization*
+*Last updated: 2026-04-06 after Phase 9 completion*
