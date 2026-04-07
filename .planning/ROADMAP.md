@@ -160,10 +160,10 @@ Plans:
 - [x] 07-03-PLAN.md — Deep research + drafting: article fetch, corroboration, Claude Sonnet format+draft prompt
 - [x] 07-04-PLAN.md — Compliance checker, no-story flag, DraftItem builder, Senior Agent integration
 - [x] 07-05-PLAN.md — Full pipeline wiring, worker.py integration, human verification checkpoint
-- [ ] 07-06-PLAN.md — DB migration: rename format_type to content_type across entire codebase
-- [ ] 07-07-PLAN.md — Breaking news format, expanded sourcing (8 RSS / 10 SerpAPI), cross-run dedup, multi-story pipeline
-- [ ] 07-08-PLAN.md — Video clip + quote formats: Twitter API search, Claude drafting, dual-platform output
-- [ ] 07-09-PLAN.md — Infographic Instagram dual-platform output, expanded Sonnet prompt with all 7 formats, historical mode
+- [x] 07-06-PLAN.md — DB migration: rename format_type to content_type across entire codebase
+- [x] 07-07-PLAN.md — Breaking news format, expanded sourcing (8 RSS / 10 SerpAPI), cross-run dedup, multi-story pipeline
+- [x] 07-08-PLAN.md — Video clip + quote formats: Twitter API search, Claude drafting, dual-platform output
+- [x] 07-09-PLAN.md — Infographic Instagram dual-platform output, expanded Sonnet prompt with all 7 formats, historical mode
 - [ ] 07-10-PLAN.md — Gold History Agent, 12pm midday run, APScheduler job registration, config seed
 
 ### Phase 8: Dashboard Views and Digest
@@ -214,6 +214,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/6 | Planned    |  |
 | 6. Instagram Agent | 0/5 | Planned    |  |
-| 7. Content Agent | 5/10 | In Progress|  |
+| 7. Content Agent | 9/10 | In Progress|  |
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |
