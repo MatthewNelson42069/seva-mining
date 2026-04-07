@@ -1142,6 +1142,16 @@ class TwitterAgent:
             items_queued,
         )
 
+        # Step 13: WhatsApp new-item notification
+        if items_queued > 0:
+            try:
+                from services.whatsapp import send_whatsapp_message  # noqa: PLC0415
+                await send_whatsapp_message(
+                    f"🐦 Twitter Agent — {items_queued} new item{'s' if items_queued != 1 else ''} ready for review"
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("WhatsApp notification failed (non-fatal): %s", exc)
+
 
 # ---------------------------------------------------------------------------
 # Module-level helper functions — exposed for direct testability

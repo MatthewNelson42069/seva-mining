@@ -349,24 +349,16 @@ async def test_critical_failure_alert():
     assert consecutive_zeros == 2, f"Expected 2 consecutive zeros, got {consecutive_zeros}"
 
     # Verify alert fires at exactly 2 via patch on services.whatsapp
-    with patch("services.whatsapp.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+    with patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
         if consecutive_zeros == 2:
-            from services.whatsapp import send_whatsapp_template
-            settings = MagicMock(frontend_url="https://x.com")
-            await send_whatsapp_template("breaking_news", {
-                "1": "Instagram scraper failure",
-                "2": "instagram_agent",
-                "3": str(consecutive_zeros),
-                "4": settings.frontend_url,
-            })
+            from services.whatsapp import send_whatsapp_message
+            await send_whatsapp_message(
+                "⚠️ Instagram scraper failure — 0 posts fetched for 2 consecutive runs. "
+                "Check Apify actor health."
+            )
         mock_send.assert_called_once_with(
-            "breaking_news",
-            {
-                "1": "Instagram scraper failure",
-                "2": "instagram_agent",
-                "3": "2",
-                "4": "https://x.com",
-            },
+            "⚠️ Instagram scraper failure — 0 posts fetched for 2 consecutive runs. "
+            "Check Apify actor health."
         )
 
 
@@ -399,10 +391,10 @@ async def test_no_duplicate_alert():
     assert consecutive_zeros == 3, f"Expected 3 consecutive zeros, got {consecutive_zeros}"
 
     # Verify NO alert fires at 3 (only fires at exactly 2)
-    with patch("services.whatsapp.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+    with patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
         if consecutive_zeros == 2:  # This is False for consecutive_zeros=3
-            from services.whatsapp import send_whatsapp_template
-            await send_whatsapp_template("breaking_news", {})
+            from services.whatsapp import send_whatsapp_message
+            await send_whatsapp_message("⚠️ Instagram scraper failure — should not fire at 3")
         mock_send.assert_not_called()
 
 
@@ -450,3 +442,73 @@ async def test_expiry_12h():
     assert draft_item.platform == "instagram", (
         f"DraftItem platform must be 'instagram', got '{draft_item.platform}'"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 — WhatsApp new-item notification tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_instagram_whatsapp_notification_fires_when_items_queued():
+    """send_whatsapp_message called with Instagram count when items_queued > 0."""
+    from agents.instagram_agent import InstagramAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    ia = _get_instagram_agent()
+    with patch("agents.instagram_agent.get_settings", return_value=MagicMock(
+        apify_api_token="tok", anthropic_api_key="key"
+    )):
+        with patch("agents.instagram_agent.ApifyClientAsync"):
+            agent = ia.InstagramAgent()
+
+    with patch.object(agent, "_run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
+         patch("agents.instagram_agent.AsyncSessionLocal") as mock_session_cls, \
+         patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
+
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        async def pipeline_sets_items(session, agent_run):
+            agent_run.items_queued = 2
+
+        mock_pipeline.side_effect = pipeline_sets_items
+
+        await agent.run()
+
+    mock_wa.assert_called_once()
+    call_msg = mock_wa.call_args[0][0]
+    assert "Instagram" in call_msg
+    assert "2" in call_msg
+
+
+@pytest.mark.asyncio
+async def test_instagram_whatsapp_notification_skipped_when_no_items():
+    """send_whatsapp_message not called when items_queued == 0."""
+    ia = _get_instagram_agent()
+    with patch("agents.instagram_agent.get_settings", return_value=MagicMock(
+        apify_api_token="tok", anthropic_api_key="key"
+    )):
+        with patch("agents.instagram_agent.ApifyClientAsync"):
+            agent = ia.InstagramAgent()
+
+    with patch.object(agent, "_run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
+         patch("agents.instagram_agent.AsyncSessionLocal") as mock_session_cls, \
+         patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
+
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        async def pipeline_zero_items(session, agent_run):
+            agent_run.items_queued = 0
+
+        mock_pipeline.side_effect = pipeline_zero_items
+
+        await agent.run()
+
+    mock_wa.assert_not_called()

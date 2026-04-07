@@ -140,6 +140,17 @@ class InstagramAgent:
                 agent_run.ended_at = datetime.now(timezone.utc)
                 await session.commit()
 
+                # WhatsApp new-item notification (fires after commit, non-fatal)
+                items_queued_count = agent_run.items_queued or 0
+                if items_queued_count > 0:
+                    try:
+                        from services.whatsapp import send_whatsapp_message  # noqa: PLC0415
+                        await send_whatsapp_message(
+                            f"📸 Instagram Agent — {items_queued_count} new item{'s' if items_queued_count != 1 else ''} ready for review"
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("WhatsApp notification failed (non-fatal): %s", exc)
+
     async def _run_pipeline(self, session: AsyncSession, agent_run: AgentRun) -> None:
         """Full pipeline: fetch, filter, score, draft, persist. Implemented across Plans 02-04."""
         # Step 1: Load config
@@ -239,14 +250,14 @@ class InstagramAgent:
         total_fetched = sum(hashtag_counts.values()) + len(account_posts)
         consecutive_zeros = await self._check_critical_failure(session, total_fetched)
         if consecutive_zeros == 2:
-            settings = get_settings()
-            from services.whatsapp import send_whatsapp_template  # noqa: PLC0415
-            await send_whatsapp_template("breaking_news", {
-                "1": "Instagram scraper failure",
-                "2": "instagram_agent",
-                "3": str(consecutive_zeros),
-                "4": settings.frontend_url,
-            })
+            try:
+                from services.whatsapp import send_whatsapp_message  # noqa: PLC0415
+                await send_whatsapp_message(
+                    "⚠️ Instagram scraper failure — 0 posts fetched for 2 consecutive runs. "
+                    "Check Apify actor health."
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("WhatsApp scraper-failure alert failed (non-fatal): %s", exc)
 
         await session.commit()
 

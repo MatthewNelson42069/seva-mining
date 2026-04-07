@@ -296,3 +296,93 @@ def test_scheduler_wiring():
     source = inspect.getsource(worker._make_job)
     assert "ContentAgent" in source, "_make_job must reference ContentAgent class"
     assert "content_agent" in source, "_make_job must handle content_agent job name"
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 — WhatsApp new-item notification tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_content_agent_whatsapp_fires_when_items_queued():
+    """send_whatsapp_message called with Content count when items_queued > 0."""
+    ca = _get_content_agent()
+
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+
+    with patch.object(agent, "_run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
+         patch("agents.content_agent.AsyncSessionLocal") as mock_session_cls, \
+         patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
+
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        async def pipeline_sets_items(session, agent_run):
+            agent_run.items_queued = 4
+
+        mock_pipeline.side_effect = pipeline_sets_items
+
+        await agent.run()
+
+    mock_wa.assert_called_once()
+    call_msg = mock_wa.call_args[0][0]
+    assert "Content" in call_msg
+    assert "4" in call_msg
+
+
+@pytest.mark.asyncio
+async def test_content_agent_whatsapp_skipped_when_no_items():
+    """send_whatsapp_message not called when items_queued == 0."""
+    ca = _get_content_agent()
+
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+
+    with patch.object(agent, "_run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
+         patch("agents.content_agent.AsyncSessionLocal") as mock_session_cls, \
+         patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
+
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        async def pipeline_zero_items(session, agent_run):
+            agent_run.items_queued = 0
+
+        mock_pipeline.side_effect = pipeline_zero_items
+
+        await agent.run()
+
+    mock_wa.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_content_agent_whatsapp_failure_is_non_fatal():
+    """WhatsApp exception in finally block does not prevent commit or status update."""
+    ca = _get_content_agent()
+
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+
+    with patch.object(agent, "_run_pipeline", new_callable=AsyncMock) as mock_pipeline, \
+         patch("agents.content_agent.AsyncSessionLocal") as mock_session_cls, \
+         patch("services.whatsapp.send_whatsapp_message", side_effect=Exception("Twilio down")):
+
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        async def pipeline_with_items(session, agent_run):
+            agent_run.items_queued = 2
+
+        mock_pipeline.side_effect = pipeline_with_items
+
+        # Must NOT raise even though WhatsApp blows up
+        await agent.run()
+
+    # commit was still called (session.commit called at least once in finally)
+    assert mock_session.commit.call_count >= 1

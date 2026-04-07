@@ -1501,3 +1501,14 @@ For "quote" format, draft_content must have:
             finally:
                 agent_run.ended_at = datetime.now(timezone.utc)
                 await session.commit()
+
+                # WhatsApp new-item notification (fires after commit, non-fatal)
+                items_queued_count = agent_run.items_queued or 0
+                if items_queued_count > 0:
+                    try:
+                        from services.whatsapp import send_whatsapp_message  # noqa: PLC0415
+                        await send_whatsapp_message(
+                            f"📰 Content Agent — {items_queued_count} new item{'s' if items_queued_count != 1 else ''} ready for review"
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("WhatsApp notification failed (non-fatal): %s", exc)

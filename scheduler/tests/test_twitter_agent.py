@@ -506,3 +506,112 @@ async def test_rationale_populated():
     assert draft_item.rationale is not None, "DraftItem.rationale must not be None"
     assert isinstance(draft_item.rationale, str), "DraftItem.rationale must be a string"
     assert len(draft_item.rationale.strip()) > 0, "DraftItem.rationale must be non-empty"
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 — WhatsApp new-item notification tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_twitter_whatsapp_notification_fires_when_items_queued():
+    """send_whatsapp_message is called with Twitter item count when items_queued > 0."""
+    import sys
+    from agents.twitter_agent import TwitterAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    agent = TwitterAgent.__new__(TwitterAgent)
+
+    mock_session = AsyncMock()
+    mock_agent_run = MagicMock()
+    mock_agent_run.items_found = 0
+    mock_agent_run.items_filtered = None
+    mock_agent_run.errors = []
+
+    # Inject a mock senior_agent module so lazy import inside _run_pipeline succeeds
+    mock_senior = MagicMock()
+    mock_senior.process_new_items = AsyncMock()
+
+    # Patch all internal steps to return minimal valid data
+    with patch.dict(sys.modules, {"agents.senior_agent": mock_senior}), \
+         patch.object(agent, "_check_quota", return_value=(True, 0)), \
+         patch.object(agent, "_get_config", return_value=MagicMock(value="500")), \
+         patch.object(agent, "_load_watchlist", return_value=[]), \
+         patch.object(agent, "_load_keywords", return_value=[]), \
+         patch.object(agent, "_get_last_run_time", return_value=datetime.now(timezone.utc)), \
+         patch.object(agent, "_fetch_watchlist_tweets", return_value=[]), \
+         patch.object(agent, "_fetch_keyword_tweets", return_value=[]), \
+         patch.object(agent, "_process_drafts", return_value=(3, 0, [], ["id1", "id2", "id3"])), \
+         patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
+
+        mock_session.commit = AsyncMock()
+        await agent._run_pipeline(mock_session, mock_agent_run)
+
+    mock_wa.assert_called_once()
+    call_args = mock_wa.call_args[0][0]
+    assert "Twitter" in call_args
+    assert "3" in call_args
+
+
+@pytest.mark.asyncio
+async def test_twitter_whatsapp_notification_skipped_when_no_items():
+    """send_whatsapp_message is NOT called when items_queued == 0."""
+    from agents.twitter_agent import TwitterAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    agent = TwitterAgent.__new__(TwitterAgent)
+
+    mock_session = AsyncMock()
+    mock_agent_run = MagicMock()
+    mock_agent_run.items_found = 0
+    mock_agent_run.items_filtered = None
+    mock_agent_run.errors = []
+
+    # No items queued so senior_agent lazy import is never triggered
+    with patch.object(agent, "_check_quota", return_value=(True, 0)), \
+         patch.object(agent, "_get_config", return_value=MagicMock(value="500")), \
+         patch.object(agent, "_load_watchlist", return_value=[]), \
+         patch.object(agent, "_load_keywords", return_value=[]), \
+         patch.object(agent, "_get_last_run_time", return_value=datetime.now(timezone.utc)), \
+         patch.object(agent, "_fetch_watchlist_tweets", return_value=[]), \
+         patch.object(agent, "_fetch_keyword_tweets", return_value=[]), \
+         patch.object(agent, "_process_drafts", return_value=(0, 0, [], [])), \
+         patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
+
+        mock_session.commit = AsyncMock()
+        await agent._run_pipeline(mock_session, mock_agent_run)
+
+    mock_wa.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_twitter_whatsapp_failure_is_non_fatal():
+    """WhatsApp exception does not propagate — agent_run is still completed."""
+    import sys
+    from agents.twitter_agent import TwitterAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    agent = TwitterAgent.__new__(TwitterAgent)
+
+    mock_session = AsyncMock()
+    mock_agent_run = MagicMock()
+    mock_agent_run.items_found = 0
+    mock_agent_run.items_filtered = None
+    mock_agent_run.errors = []
+
+    mock_senior = MagicMock()
+    mock_senior.process_new_items = AsyncMock()
+
+    with patch.dict(sys.modules, {"agents.senior_agent": mock_senior}), \
+         patch.object(agent, "_check_quota", return_value=(True, 0)), \
+         patch.object(agent, "_get_config", return_value=MagicMock(value="500")), \
+         patch.object(agent, "_load_watchlist", return_value=[]), \
+         patch.object(agent, "_load_keywords", return_value=[]), \
+         patch.object(agent, "_get_last_run_time", return_value=datetime.now(timezone.utc)), \
+         patch.object(agent, "_fetch_watchlist_tweets", return_value=[]), \
+         patch.object(agent, "_fetch_keyword_tweets", return_value=[]), \
+         patch.object(agent, "_process_drafts", return_value=(2, 0, [], ["id1", "id2"])), \
+         patch("services.whatsapp.send_whatsapp_message", side_effect=Exception("Twilio down")):
+
+        mock_session.commit = AsyncMock()
+        # Must NOT raise
+        await agent._run_pipeline(mock_session, mock_agent_run)
