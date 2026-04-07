@@ -7,17 +7,18 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 # Copy dependency spec first (layer caching)
-COPY pyproject.toml .
-COPY uv.lock* .
+COPY scheduler/pyproject.toml .
+COPY scheduler/uv.lock* .
 
 # Install production dependencies only
 RUN uv sync --no-dev
 
 # Copy scheduler source files
-COPY worker.py .
-COPY config.py .
-COPY database.py .
-COPY agents/ ./agents/
+COPY scheduler/worker.py .
+COPY scheduler/config.py .
+COPY scheduler/database.py .
+COPY scheduler/agents/ ./agents/
+COPY scheduler/models/ ./models/
 
 # No EXPOSE — scheduler worker has no HTTP port
 

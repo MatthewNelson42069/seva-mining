@@ -1,6 +1,6 @@
 [build]
 builder = "dockerfile"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "scheduler/Dockerfile"
 
 [deploy]
 numReplicas = 1          # CRITICAL: never set to 2+ — creates duplicate APScheduler instances
