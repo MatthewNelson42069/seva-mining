@@ -20,7 +20,6 @@ from datetime import date, datetime, timezone
 import feedparser
 import httpx
 import serpapi
-import tweepy.asynchronous
 from anthropic import AsyncAnthropic
 from bs4 import BeautifulSoup
 from sqlalchemy import func, select

@@ -14,16 +14,16 @@ import inspect
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncConnection, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy import text, select
 
+from database import engine  # single shared engine — avoids duplicate connection pools
 from models.config import Config
 from agents.content_agent import ContentAgent
 from agents.gold_history_agent import GoldHistoryAgent
 from agents.twitter_agent import TwitterAgent
 from agents.instagram_agent import InstagramAgent
 from agents.senior_agent import SeniorAgent, seed_senior_config
-from config import get_settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -314,26 +314,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     return scheduler
 
 
-def _make_async_url(url: str) -> str:
-    """Convert a standard PostgreSQL URL to asyncpg-compatible format."""
-    url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-    url = url.replace("sslmode=require", "ssl=require")
-    url = url.replace("sslmode=prefer", "ssl=prefer")
-    url = url.replace("sslmode=disable", "ssl=False")
-    return url
-
-
 async def main() -> None:
-    settings = get_settings()
-    engine = create_async_engine(
-        _make_async_url(settings.database_url),
-        pool_size=2,
-        max_overflow=2,
-        pool_pre_ping=True,
-        pool_recycle=300,
-    )
-
     # Seed Senior Agent config defaults (idempotent — safe to run on every startup)
     await seed_senior_config()
 

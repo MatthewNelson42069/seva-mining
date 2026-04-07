@@ -24,4 +24,4 @@ COPY scheduler/services/ ./services/
 # No EXPOSE — scheduler worker has no HTTP port
 
 # Entry point: run the scheduler worker directly
-CMD ["uv", "run", "python", "worker.py"]
+CMD ["/app/.venv/bin/python", "worker.py"]

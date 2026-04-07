@@ -25,10 +25,13 @@ def _make_async_url(url: str) -> str:
 
 settings = get_settings()
 
+# Scheduler worker runs one job at a time (advisory locks enforce this).
+# pool_size=3 covers: the active job + seed calls + headroom for retries.
+# max_overflow=2 allows brief spikes without blocking.
 engine = create_async_engine(
     _make_async_url(settings.database_url),
-    pool_size=5,
-    max_overflow=10,
+    pool_size=3,
+    max_overflow=2,
     pool_pre_ping=True,
     pool_recycle=300,
     echo=False,
