@@ -29,7 +29,10 @@ CONFIG_DEFAULTS = [
     ("content_quality_threshold",         "7.0"),
     ("content_agent_schedule_hour",       "6"),
     ("expiry_sweep_interval_minutes",     "30"),
-    ("morning_digest_schedule_hour",               "8"),
+    ("morning_digest_schedule_hour",      "8"),
+    ("content_agent_midday_hour",         "12"),
+    ("gold_history_hour",                 "9"),
+    ("gold_history_used_topics",          "[]"),
 ]
 
 

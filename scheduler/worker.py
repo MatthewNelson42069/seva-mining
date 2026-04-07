@@ -19,6 +19,7 @@ from sqlalchemy import text, select
 
 from models.config import Config
 from agents.content_agent import ContentAgent
+from agents.gold_history_agent import GoldHistoryAgent
 from agents.twitter_agent import TwitterAgent
 from agents.instagram_agent import InstagramAgent
 from agents.senior_agent import SeniorAgent, seed_senior_config
@@ -39,6 +40,8 @@ JOB_LOCK_IDS: dict[str, int] = {
     "content_agent": 1003,
     "expiry_sweep": 1004,
     "morning_digest": 1005,
+    "content_agent_midday": 1008,
+    "gold_history_agent": 1009,
 }
 
 
@@ -154,6 +157,22 @@ def _make_job(job_name: str, engine):
                     job_name,
                     agent.run,
                 )
+            elif job_name == "content_agent_midday":
+                agent = ContentAgent()
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    agent.run,
+                )
+            elif job_name == "gold_history_agent":
+                agent = GoldHistoryAgent()
+                await with_advisory_lock(
+                    conn,
+                    JOB_LOCK_IDS[job_name],
+                    job_name,
+                    agent.run,
+                )
             else:
                 await with_advisory_lock(
                     conn,
@@ -176,6 +195,8 @@ async def _read_schedule_config(engine) -> dict[str, str]:
         "content_agent_schedule_hour": "6",
         "expiry_sweep_interval_minutes": "30",
         "morning_digest_schedule_hour": "8",
+        "content_agent_midday_hour": "12",
+        "gold_history_hour": "9",
     }
     try:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -218,10 +239,14 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     content_hour = int(cfg["content_agent_schedule_hour"])
     expiry_minutes = int(cfg["expiry_sweep_interval_minutes"])
     digest_hour = int(cfg["morning_digest_schedule_hour"])
+    midday_hour = int(cfg["content_agent_midday_hour"])
+    gold_history_hour = int(cfg["gold_history_hour"])
 
     logger.info(
-        "Schedule config: twitter=%dh, instagram=%dh, content=cron(%d:00), expiry=%dmin, digest=cron(%d:00)",
-        twitter_hours, instagram_hours, content_hour, expiry_minutes, digest_hour,
+        "Schedule config: twitter=%dh, instagram=%dh, content=cron(%d:00), expiry=%dmin, "
+        "digest=cron(%d:00), midday=cron(%d:00), gold_history=cron(%d:00 bi-weekly Sun)",
+        twitter_hours, instagram_hours, content_hour, expiry_minutes,
+        digest_hour, midday_hour, gold_history_hour,
     )
 
     scheduler = AsyncIOScheduler()
@@ -262,6 +287,28 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         minute=0,
         id="morning_digest",
         name=f"Morning Digest — daily at {digest_hour}am",
+    )
+    scheduler.add_job(
+        _make_job("content_agent_midday", engine),
+        trigger="cron",
+        hour=midday_hour,
+        minute=0,
+        id="content_agent_midday",
+        name=f"Content Agent (midday) — daily at {midday_hour}pm",
+    )
+    # NOTE: week="*/2" fires on alternating ISO weeks. At ISO week 52/53 → week 1 rollover,
+    # two consecutive Sunday firings may occur (one extra Gold History post in early January).
+    # Low-stakes for this content type — acceptable edge case.
+    scheduler.add_job(
+        _make_job("gold_history_agent", engine),
+        trigger="cron",
+        day_of_week="sun",
+        week="*/2",
+        hour=gold_history_hour,
+        minute=0,
+        id="gold_history_agent",
+        name="Gold History Agent — bi-weekly Sunday",
+        timezone="UTC",
     )
 
     return scheduler
