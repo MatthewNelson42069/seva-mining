@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Twitter Agent** - X API v2 monitoring, engagement scoring with recency decay, dual-format drafting with compliance checker, monthly quota counter with hard-stop logic (completed 2026-04-02)
 - [ ] **Phase 5: Senior Agent Core** - Story fingerprint deduplication, 15-item queue cap, auto-expiry sweep, WhatsApp morning digest and alert dispatch
 - [ ] **Phase 6: Instagram Agent** - Apify scraper integration, per-hashtag baseline tracking, retry/health logic, comment draft alternatives with compliance checker
-- [ ] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), dual-platform output (Twitter + Instagram), cross-run dedup, 12pm midday run, bi-weekly Gold History agent, compliance checker
+- [x] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), dual-platform output (Twitter + Instagram), cross-run dedup, 12pm midday run, bi-weekly Gold History agent, compliance checker (completed 2026-04-07)
 - [ ] **Phase 8: Dashboard Views and Digest** - Daily digest view, content review page, full Settings page wired to live DB config
 - [ ] **Phase 9: Agent Execution Polish** - All scoring weights DB-driven and configurable, agent schedule config from Settings, run logs, quota display, graceful failure handling
 
@@ -164,7 +164,7 @@ Plans:
 - [x] 07-07-PLAN.md — Breaking news format, expanded sourcing (8 RSS / 10 SerpAPI), cross-run dedup, multi-story pipeline
 - [x] 07-08-PLAN.md — Video clip + quote formats: Twitter API search, Claude drafting, dual-platform output
 - [x] 07-09-PLAN.md — Infographic Instagram dual-platform output, expanded Sonnet prompt with all 7 formats, historical mode
-- [ ] 07-10-PLAN.md — Gold History Agent, 12pm midday run, APScheduler job registration, config seed
+- [x] 07-10-PLAN.md — Gold History Agent, 12pm midday run, APScheduler job registration, config seed
 
 ### Phase 8: Dashboard Views and Digest
 **Goal**: Operator has a dedicated daily digest view showing morning digest output, a content review page for today's Content Agent bundle, and the full Settings page wired to live database configuration
@@ -214,6 +214,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/6 | Planned    |  |
 | 6. Instagram Agent | 0/5 | Planned    |  |
-| 7. Content Agent | 9/10 | In Progress|  |
+| 7. Content Agent | 10/10 | Complete   | 2026-04-07 |
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |
