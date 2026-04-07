@@ -510,7 +510,7 @@ def test_expiry_sweep_marks_expired():
         with patch.object(agent, "_get_config", new=mock_get_config), \
              patch("agents.senior_agent.AsyncSessionLocal") as mock_session_local, \
              patch("agents.senior_agent.AgentRun", return_value=mock_run), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock):
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock):
             mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session_local.return_value.__aexit__ = AsyncMock(return_value=False)
             await agent.run_expiry_sweep()
@@ -556,17 +556,13 @@ def test_breaking_news_alert_fires():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             await agent._check_breaking_news_alert(mock_session, item_id)
-            mock_send.assert_called_once_with(
-                "breaking_news",
-                {
-                    "1": "Gold hits all-time high amid central bank buying.",
-                    "2": "@KitcoNews",
-                    "3": "9.0",
-                    "4": "https://app.sevamining.com",
-                },
-            )
+            mock_send.assert_called_once()
+            msg = mock_send.call_args[0][0]
+            assert "@KitcoNews" in msg, f"Expected '@KitcoNews' in message: {msg!r}"
+            assert "9.0" in msg, f"Expected score '9.0' in message: {msg!r}"
+            assert "https://app.sevamining.com" in msg, f"Expected dashboard URL in message: {msg!r}"
 
     asyncio.run(run_test())
 
@@ -602,7 +598,7 @@ def test_breaking_news_alert_no_fire():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             await agent._check_breaking_news_alert(mock_session, item_id)
             mock_send.assert_not_called()
 
@@ -652,14 +648,12 @@ def test_expiry_alert_fires():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             await agent._check_expiry_alerts(mock_session)
             mock_send.assert_called_once()
-            call_args = mock_send.call_args
-            assert call_args[0][0] == "expiry_alert", f"Expected 'expiry_alert', got {call_args[0][0]}"
-            variables = call_args[0][1]
-            assert variables["1"] == "twitter"
-            assert "4" in variables and variables["4"] == "https://app.sevamining.com"
+            msg = mock_send.call_args[0][0]
+            assert "twitter" in msg, f"Expected 'twitter' in expiry message: {msg!r}"
+            assert "https://app.sevamining.com" in msg, f"Expected dashboard URL in expiry message: {msg!r}"
 
         # alerted_expiry_at must be set
         assert item.alerted_expiry_at is not None, "Expected alerted_expiry_at to be set"
@@ -709,7 +703,7 @@ def test_expiry_alert_no_double_send():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             await agent._check_expiry_alerts(mock_session)
             mock_send.assert_not_called()
 
@@ -760,7 +754,7 @@ def test_engagement_alert_watchlist_early():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             # Patch the items query to return our watchlist item
             call_count = 0
             original_execute = mock_session.execute.side_effect
@@ -782,8 +776,8 @@ def test_engagement_alert_watchlist_early():
             mock_session.execute = AsyncMock(side_effect=execute_side_effect)
             await agent._check_engagement_alerts(mock_session)
             mock_send.assert_called_once()
-            call_args = mock_send.call_args
-            assert call_args[0][0] == "breaking_news", f"Expected 'breaking_news', got {call_args[0][0]}"
+            msg = mock_send.call_args[0][0]
+            assert "@KitcoNews" in msg, f"Expected '@KitcoNews' in engagement alert message: {msg!r}"
 
         assert item.engagement_alert_level == "watchlist", \
             f"Expected 'watchlist', got '{item.engagement_alert_level}'"
@@ -827,7 +821,7 @@ def test_engagement_alert_watchlist_viral():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             call_count = 0
 
             async def execute_side_effect(stmt):
@@ -887,7 +881,7 @@ def test_engagement_alert_nonwatchlist_viral():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             call_count = 0
 
             async def execute_side_effect(stmt):
@@ -949,7 +943,7 @@ def test_engagement_alert_no_repeat_viral():
             return default
 
         with patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             call_count = 0
 
             async def execute_side_effect(stmt):
@@ -1089,7 +1083,8 @@ def test_morning_digest_assembly():
 
 
 def test_morning_digest_whatsapp_send():
-    """WHAT-01/WHAT-05: Morning digest sends WhatsApp with 7 template variables including dashboard URL."""
+    """WHAT-01/WHAT-05: Morning digest sends WhatsApp free-form message including date, queue total, and dashboard URL.
+    Updated in Phase 10-03: uses send_whatsapp_message() (not send_whatsapp_template)."""
     import asyncio
     from datetime import date
     from unittest.mock import AsyncMock, MagicMock, patch
@@ -1142,47 +1137,30 @@ def test_morning_digest_whatsapp_send():
              patch.object(agent, "_get_config", new=mock_get_config), \
              patch("agents.senior_agent.AsyncSessionLocal") as mock_session_local, \
              patch("agents.senior_agent.AgentRun", return_value=mock_run), \
-             patch("agents.senior_agent.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
 
             mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session_local.return_value.__aexit__ = AsyncMock(return_value=False)
 
             await agent.run_morning_digest()
 
-            # Assert send_whatsapp_template called once with "morning_digest" and 7 variables
+            # Assert send_whatsapp_message called once with a free-form string
             mock_send.assert_called_once()
             call_args = mock_send.call_args
-            assert call_args[0][0] == "morning_digest", \
-                f"Expected template 'morning_digest', got '{call_args[0][0]}'"
-            variables = call_args[0][1]
+            message = call_args[0][0]
 
-            # Variable 1: today's date as YYYY-MM-DD
+            # Must contain date, queue total, approved count, and dashboard URL
             today_str = date.today().isoformat()
-            assert variables["1"] == today_str, \
-                f"Variable 1 (date) expected '{today_str}', got '{variables['1']}'"
-
-            # Variable 2: headlines joined, <= 200 chars
-            assert "2" in variables, "Variable 2 (headlines) missing"
-            assert len(variables["2"]) <= 200, \
-                f"Variable 2 length {len(variables['2'])} > 200 chars: {variables['2']}"
-            assert "Gold hits all-time high" in variables["2"], \
-                f"Expected first headline in variable 2: {variables['2']}"
-
-            # Variable 3: total queue count
-            assert variables["3"] == "5", f"Variable 3 (queue total) expected '5', got '{variables['3']}'"
-
-            # Variable 4: approved count
-            assert variables["4"] == "3", f"Variable 4 (approved) expected '3', got '{variables['4']}'"
-
-            # Variable 5: rejected count
-            assert variables["5"] == "1", f"Variable 5 (rejected) expected '1', got '{variables['5']}'"
-
-            # Variable 6: expired count
-            assert variables["6"] == "2", f"Variable 6 (expired) expected '2', got '{variables['6']}'"
-
-            # Variable 7: dashboard URL
-            assert variables["7"] == "https://app.sevamining.com", \
-                f"Variable 7 (dashboard_url) expected 'https://app.sevamining.com', got '{variables['7']}'"
+            assert today_str in message, \
+                f"Expected today's date '{today_str}' in message, got: {message!r}"
+            assert "5" in message, \
+                f"Expected queue total '5' in message, got: {message!r}"
+            assert "3" in message, \
+                f"Expected approved count '3' in message, got: {message!r}"
+            assert "https://app.sevamining.com" in message, \
+                f"Expected dashboard URL in message, got: {message!r}"
+            assert "Morning Digest" in message, \
+                f"Expected 'Morning Digest' header in message, got: {message!r}"
 
         # Assert DailyDigest was added to the session
         daily_digest_objects = [obj for obj in added_objects if type(obj).__name__ == "DailyDigest"]
@@ -1195,3 +1173,96 @@ def test_morning_digest_whatsapp_send():
             "Expected DailyDigest.whatsapp_sent_at to be set after send"
 
     asyncio.run(run_test())
+
+
+# ---------------------------------------------------------------------------
+# Phase 10-03 — Morning digest WhatsApp tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_morning_digest_calls_send_whatsapp_message():
+    """run_morning_digest uses send_whatsapp_message (not send_whatsapp_template)."""
+    from agents.senior_agent import SeniorAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+    from datetime import date
+
+    agent = SeniorAgent()
+
+    mock_digest = {
+        "top_stories": [{"headline": "Gold hits $3000", "score": 9.5}],
+        "queue_snapshot": {"total": 5},
+        "yesterday_approved": {"count": 3},
+        "yesterday_rejected": {"count": 1},
+        "yesterday_expired": {"count": 2},
+        "priority_alert": None,
+    }
+
+    with patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest), \
+         patch.object(agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"), \
+         patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls, \
+         patch("agents.senior_agent.DailyDigest") as mock_digest_cls, \
+         patch("agents.senior_agent.AgentRun") as mock_run_cls, \
+         patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
+
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.flush = AsyncMock()
+        mock_session.add = MagicMock()
+
+        mock_run = MagicMock()
+        mock_run_cls.return_value = mock_run
+
+        mock_digest_record = MagicMock()
+        mock_digest_cls.return_value = mock_digest_record
+
+        await agent.run_morning_digest()
+
+    mock_wa.assert_called_once()
+    msg = mock_wa.call_args[0][0]
+    assert "Morning Digest" in msg
+    assert "5" in msg   # queue total
+    assert "3" in msg   # approved
+
+
+@pytest.mark.asyncio
+async def test_morning_digest_whatsapp_failure_still_commits():
+    """WhatsApp failure in run_morning_digest does not prevent DailyDigest commit."""
+    from agents.senior_agent import SeniorAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    agent = SeniorAgent()
+
+    mock_digest = {
+        "top_stories": [],
+        "queue_snapshot": {"total": 0},
+        "yesterday_approved": {"count": 0},
+        "yesterday_rejected": {"count": 0},
+        "yesterday_expired": {"count": 0},
+        "priority_alert": None,
+    }
+
+    with patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest), \
+         patch.object(agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"), \
+         patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls, \
+         patch("agents.senior_agent.DailyDigest"), \
+         patch("agents.senior_agent.AgentRun") as mock_run_cls, \
+         patch("agents.senior_agent.send_whatsapp_message", side_effect=Exception("Twilio down")):
+
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.flush = AsyncMock()
+        mock_session.add = MagicMock()
+
+        mock_run = MagicMock()
+        mock_run_cls.return_value = mock_run
+
+        await agent.run_morning_digest()
+
+    # commit must have been called (digest record persisted)
+    assert mock_session.commit.called
+    # run status should be "completed" (WhatsApp failure is non-fatal)
+    assert mock_run.status == "completed"
