@@ -240,13 +240,11 @@ class InstagramAgent:
         consecutive_zeros = await self._check_critical_failure(session, total_fetched)
         if consecutive_zeros == 2:
             settings = get_settings()
-            from services.whatsapp import send_whatsapp_template  # noqa: PLC0415
-            await send_whatsapp_template("breaking_news", {
-                "1": "Instagram scraper failure",
-                "2": "instagram_agent",
-                "3": str(consecutive_zeros),
-                "4": settings.frontend_url,
-            })
+            from services.whatsapp import send_whatsapp_message  # noqa: PLC0415
+            await send_whatsapp_message(
+                f"Instagram scraper failure — {consecutive_zeros} consecutive zero-result runs.\n"
+                f"Review: {settings.frontend_url}"
+            )
 
         await session.commit()
 
