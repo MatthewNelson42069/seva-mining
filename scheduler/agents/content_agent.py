@@ -20,6 +20,7 @@ from datetime import date, datetime, timezone
 import feedparser
 import httpx
 import serpapi
+import tweepy.asynchronous
 from anthropic import AsyncAnthropic
 from bs4 import BeautifulSoup
 from sqlalchemy import func, select
@@ -525,7 +526,11 @@ class ContentAgent:
     def __init__(self) -> None:
         settings = get_settings()
         self.anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        self.serpapi_client = serpapi.Client(api_key=settings.serpapi_api_key)
+        self.serpapi_client = (
+            serpapi.Client(api_key=settings.serpapi_api_key)
+            if settings.serpapi_api_key
+            else None
+        )
         self.tweepy_client = tweepy.asynchronous.AsyncClient(
             bearer_token=settings.x_api_bearer_token,
             wait_on_rate_limit=True,
@@ -1097,6 +1102,9 @@ For "quote" format, draft_content must have:
 
     async def _fetch_all_serpapi(self) -> list[dict]:
         """CONT-03: Run SerpAPI keyword searches concurrently via asyncio.gather + run_in_executor."""
+        if self.serpapi_client is None:
+            logger.warning("SerpAPI key not configured — skipping keyword searches, using RSS only.")
+            return []
         loop = asyncio.get_event_loop()
         tasks = []
         for keyword in SERPAPI_KEYWORDS:

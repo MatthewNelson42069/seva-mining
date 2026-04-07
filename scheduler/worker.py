@@ -14,7 +14,7 @@ import inspect
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
 from sqlalchemy import text, select
 
 from database import engine  # single shared engine — avoids duplicate connection pools
