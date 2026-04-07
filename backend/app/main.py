@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import get_settings
 from app.database import engine
 from app.routers.auth import router as auth_router
 from app.routers.queue import router as queue_router
@@ -27,11 +28,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:4173",
+        _settings.frontend_url,
     ],
     allow_credentials=True,
     allow_methods=["*"],
