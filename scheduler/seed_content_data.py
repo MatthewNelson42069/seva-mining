@@ -27,9 +27,9 @@ CONFIG_DEFAULTS = [
     ("content_recency_weight",            "0.30"),
     ("content_credibility_weight",        "0.30"),
     ("content_quality_threshold",         "7.0"),
-    ("content_agent_schedule_hour",       "6"),
+    ("content_agent_schedule_hour",       "14"),
     ("morning_digest_schedule_hour",      "15"),
-    ("content_agent_midday_hour",         "12"),
+    ("content_agent_midday_hour",         "20"),
     ("gold_history_hour",                 "9"),
     ("gold_history_used_topics",          "[]"),
 ]

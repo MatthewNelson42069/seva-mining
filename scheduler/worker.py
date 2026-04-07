@@ -185,9 +185,9 @@ async def _read_schedule_config(engine) -> dict[str, str]:
     defaults = {
         "twitter_interval_hours": "2",
         "instagram_interval_hours": "4",
-        "content_agent_schedule_hour": "6",
+        "content_agent_schedule_hour": "14",
         "morning_digest_schedule_hour": "8",
-        "content_agent_midday_hour": "12",
+        "content_agent_midday_hour": "20",
         "gold_history_hour": "9",
     }
     try:
