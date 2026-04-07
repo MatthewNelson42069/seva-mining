@@ -102,3 +102,50 @@ async def test_all_five_jobs_registered():
     # Scheduler is not started (just built), so only shutdown if running
     if scheduler.running:
         scheduler.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Phase 10-03 — Remove expiry_sweep tests
+# ---------------------------------------------------------------------------
+
+def test_expiry_sweep_removed_from_job_lock_ids():
+    """expiry_sweep must not be in JOB_LOCK_IDS after Phase 10."""
+    assert "expiry_sweep" not in JOB_LOCK_IDS
+
+
+@pytest.mark.asyncio
+async def test_build_scheduler_has_6_jobs_no_expiry_sweep():
+    """build_scheduler() returns 6 jobs; expiry_sweep is absent."""
+    mock_engine = AsyncMock()
+    mock_session = AsyncMock()
+
+    # _read_schedule_config reads from DB — mock the session result
+    with patch("worker.async_sessionmaker") as mock_sm, \
+         patch("worker.select"), \
+         patch("worker._make_job", return_value=AsyncMock()):
+
+        mock_sm.return_value.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_sm.return_value.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        # Simulate DB returning no rows (all defaults used)
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        scheduler = await build_scheduler(mock_engine)
+
+    job_ids = {job.id for job in scheduler.get_jobs()}
+    assert "expiry_sweep" not in job_ids
+    assert "morning_digest" in job_ids
+    assert "twitter_agent" in job_ids
+    assert len(job_ids) == 6
+    scheduler.shutdown()
+
+
+def test_read_schedule_config_defaults_no_expiry_sweep():
+    """_read_schedule_config defaults dict must not contain expiry_sweep_interval_minutes."""
+    from worker import _read_schedule_config
+    import inspect
+    # Read the source to verify the defaults dict
+    source = inspect.getsource(_read_schedule_config)
+    assert "expiry_sweep_interval_minutes" not in source
