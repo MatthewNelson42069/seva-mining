@@ -314,10 +314,20 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     return scheduler
 
 
+def _make_async_url(url: str) -> str:
+    """Convert a standard PostgreSQL URL to asyncpg-compatible format."""
+    url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    url = url.replace("sslmode=require", "ssl=require")
+    url = url.replace("sslmode=prefer", "ssl=prefer")
+    url = url.replace("sslmode=disable", "ssl=False")
+    return url
+
+
 async def main() -> None:
     settings = get_settings()
     engine = create_async_engine(
-        settings.database_url,
+        _make_async_url(settings.database_url),
         pool_size=2,
         max_overflow=2,
         pool_pre_ping=True,
