@@ -87,17 +87,17 @@ async def test_placeholder_job_is_async():
 @pytest.mark.asyncio
 async def test_all_five_jobs_registered():
     """
-    build_scheduler() must register exactly 6 jobs with the correct IDs.
+    build_scheduler() must register exactly 5 jobs with the correct IDs.
     Covers: INFRA-05 (D-14 job schedule skeleton); updated in 07-10 for midday + gold history jobs.
     Updated in Phase 10-03: expiry_sweep removed (run_expiry_sweep preserved but not scheduled).
+    Updated in 260407-neq: content_agent_midday removed; content_agent uses interval trigger.
     """
     mock_engine = MagicMock()
     scheduler = await build_scheduler(mock_engine)
     job_ids = {job.id for job in scheduler.get_jobs()}
     expected_ids = {
         "content_agent", "twitter_agent", "instagram_agent",
-        "morning_digest",
-        "content_agent_midday", "gold_history_agent",
+        "morning_digest", "gold_history_agent",
     }
     assert job_ids == expected_ids, f"Got job IDs: {job_ids}"
     # Scheduler is not started (just built), so only shutdown if running
@@ -115,8 +115,8 @@ def test_expiry_sweep_removed_from_job_lock_ids():
 
 
 @pytest.mark.asyncio
-async def test_build_scheduler_has_6_jobs_no_expiry_sweep():
-    """build_scheduler() returns 6 jobs; expiry_sweep is absent."""
+async def test_build_scheduler_has_5_jobs_no_expiry_sweep():
+    """build_scheduler() returns 5 jobs; expiry_sweep is absent."""
     mock_engine = AsyncMock()
     mock_session = AsyncMock()
 
@@ -137,9 +137,10 @@ async def test_build_scheduler_has_6_jobs_no_expiry_sweep():
 
     job_ids = {job.id for job in scheduler.get_jobs()}
     assert "expiry_sweep" not in job_ids
+    assert "content_agent_midday" not in job_ids
     assert "morning_digest" in job_ids
     assert "twitter_agent" in job_ids
-    assert len(job_ids) == 6
+    assert len(job_ids) == 5
     if scheduler.running:
         scheduler.shutdown()
 
@@ -151,3 +152,5 @@ def test_read_schedule_config_defaults_no_expiry_sweep():
     # Read the source to verify the defaults dict
     source = inspect.getsource(_read_schedule_config)
     assert "expiry_sweep_interval_minutes" not in source
+    assert "content_agent_midday_hour" not in source
+    assert "content_agent_interval_hours" in source

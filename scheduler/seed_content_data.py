@@ -9,6 +9,15 @@ the DATABASE_URL environment variable and does NOT import Settings (which
 requires all env vars to be set). This matches the seed_instagram_data.py pattern.
 
 Idempotent: existing records are skipped, not overwritten.
+
+-- DB migration — run once against production DB to remove old keys ----------
+-- Remove old content agent cron config keys
+DELETE FROM config WHERE key IN ('content_agent_schedule_hour', 'content_agent_midday_hour');
+
+-- Insert new interval config key (skip if already seeded by updated seed script)
+INSERT INTO config (key, value) VALUES ('content_agent_interval_hours', '2')
+ON CONFLICT (key) DO NOTHING;
+-- ---------------------------------------------------------------------------
 """
 import asyncio
 import os
@@ -27,9 +36,8 @@ CONFIG_DEFAULTS = [
     ("content_recency_weight",            "0.30"),
     ("content_credibility_weight",        "0.30"),
     ("content_quality_threshold",         "7.0"),
-    ("content_agent_schedule_hour",       "14"),
+    ("content_agent_interval_hours",       "2"),
     ("morning_digest_schedule_hour",      "15"),
-    ("content_agent_midday_hour",         "20"),
     ("gold_history_hour",                 "9"),
     ("gold_history_used_topics",          "[]"),
 ]
