@@ -19,6 +19,7 @@ COPY scheduler/config.py .
 COPY scheduler/database.py .
 COPY scheduler/agents/ ./agents/
 COPY scheduler/models/ ./models/
+COPY scheduler/services/ ./services/
 
 # No EXPOSE — scheduler worker has no HTTP port
 
