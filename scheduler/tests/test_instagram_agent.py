@@ -349,24 +349,16 @@ async def test_critical_failure_alert():
     assert consecutive_zeros == 2, f"Expected 2 consecutive zeros, got {consecutive_zeros}"
 
     # Verify alert fires at exactly 2 via patch on services.whatsapp
-    with patch("services.whatsapp.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+    with patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
         if consecutive_zeros == 2:
-            from services.whatsapp import send_whatsapp_template
-            settings = MagicMock(frontend_url="https://x.com")
-            await send_whatsapp_template("breaking_news", {
-                "1": "Instagram scraper failure",
-                "2": "instagram_agent",
-                "3": str(consecutive_zeros),
-                "4": settings.frontend_url,
-            })
+            from services.whatsapp import send_whatsapp_message
+            await send_whatsapp_message(
+                "⚠️ Instagram scraper failure — 0 posts fetched for 2 consecutive runs. "
+                "Check Apify actor health."
+            )
         mock_send.assert_called_once_with(
-            "breaking_news",
-            {
-                "1": "Instagram scraper failure",
-                "2": "instagram_agent",
-                "3": "2",
-                "4": "https://x.com",
-            },
+            "⚠️ Instagram scraper failure — 0 posts fetched for 2 consecutive runs. "
+            "Check Apify actor health."
         )
 
 
@@ -399,10 +391,10 @@ async def test_no_duplicate_alert():
     assert consecutive_zeros == 3, f"Expected 3 consecutive zeros, got {consecutive_zeros}"
 
     # Verify NO alert fires at 3 (only fires at exactly 2)
-    with patch("services.whatsapp.send_whatsapp_template", new_callable=AsyncMock) as mock_send:
+    with patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
         if consecutive_zeros == 2:  # This is False for consecutive_zeros=3
-            from services.whatsapp import send_whatsapp_template
-            await send_whatsapp_template("breaking_news", {})
+            from services.whatsapp import send_whatsapp_message
+            await send_whatsapp_message("⚠️ Instagram scraper failure — should not fire at 3")
         mock_send.assert_not_called()
 
 
