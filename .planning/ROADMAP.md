@@ -201,10 +201,26 @@ Plans:
 - [ ] 09-01-PLAN.md — Engagement gate thresholds to DB config (Twitter + Instagram agents, seed scripts)
 - [ ] 09-02-PLAN.md — Schedule intervals to DB config (worker.py, seed scripts)
 
+### Phase 10: Senior Agent WhatsApp Notifications
+**Goal**: The Senior Agent sends real WhatsApp notifications via the Twilio sandbox — a morning digest at 7am PST and an instant alert every time any agent (Twitter, Instagram, Content) creates new draft items for review. The expiry sweep job is removed. The WhatsApp service is rewritten to use free-form sandbox messages instead of pre-approved Meta templates.
+**Depends on**: Phase 9
+**Requirements**: WHAT-01, WHAT-02, WHAT-05
+**Success Criteria** (what must be TRUE):
+  1. Morning digest WhatsApp message arrives on the operator's phone at 7am PST (15:00 UTC) summarising overnight queue activity
+  2. A WhatsApp notification arrives within seconds of the Twitter, Instagram, or Content agent creating new draft items — message names the agent and item count
+  3. The expiry_sweep job no longer runs — it is removed from the APScheduler worker
+  4. Twilio sandbox credentials (Account SID, Auth Token, from/to numbers) are loaded from environment variables and the service sends messages successfully
+**Plans**: 3 plans
+
+Plans:
+- [x] 10-01-PLAN.md — Rewrite WhatsApp service for sandbox free-form messages, wire Twilio credentials
+- [ ] 10-02-PLAN.md — New item notification: hook into Twitter, Instagram, Content agents post-run
+- [ ] 10-03-PLAN.md — Morning digest at 15:00 UTC, remove expiry_sweep job, human verification checkpoint
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -217,3 +233,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 7. Content Agent | 10/10 | Complete   | 2026-04-07 |
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |
+| 10. Senior Agent WhatsApp Notifications | 1/3 | In Progress|  |
