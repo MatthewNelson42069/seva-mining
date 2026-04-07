@@ -29,13 +29,17 @@ app = FastAPI(
 )
 
 _settings = get_settings()
+# Build allowed origins: always include localhost for dev, plus the
+# production frontend URL from env (with and without trailing slash).
+_origins = [
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "https://seva-mining-smm.vercel.app",
+    _settings.frontend_url.rstrip("/"),
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:4173",
-        _settings.frontend_url,
-    ],
+    allow_origins=list(dict.fromkeys(_origins)),  # deduplicate, preserve order
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
