@@ -372,7 +372,11 @@ def build_draft_item(content_bundle, rationale: str):
     # Build a brief summary from draft_content for the alternatives field
     draft = content_bundle.draft_content or {}
     fmt = draft.get("format", "unknown")
-    if fmt == "thread":
+    if fmt == "breaking_news":
+        tweet = draft.get("tweet", "")
+        has_infographic = draft.get("infographic_brief") is not None
+        summary = f"Breaking news ({len(tweet)} chars)" + (" + infographic brief" if has_infographic else "")
+    elif fmt == "thread":
         summary = f"Thread ({len(draft.get('tweets', []))} tweets) + long-form post"
     elif fmt == "long_form":
         summary = f"Long-form post ({len(draft.get('post', ''))} chars)"
@@ -427,7 +431,13 @@ def _extract_check_text(draft_content: dict) -> str:
     """Extract all text from draft_content for compliance checking."""
     fmt = draft_content.get("format", "")
     parts = []
-    if fmt == "thread":
+    if fmt == "breaking_news":
+        parts.append(draft_content.get("tweet", ""))
+        brief = draft_content.get("infographic_brief")
+        if brief and isinstance(brief, dict):
+            parts.append(brief.get("headline", ""))
+            parts.append(brief.get("caption", ""))
+    elif fmt == "thread":
         parts.extend(draft_content.get("tweets", []))
         parts.append(draft_content.get("long_form_post", ""))
     elif fmt == "long_form":
@@ -527,6 +537,7 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
 ## Instructions
 1. Extract 5-8 key data points from the research (numbers, percentages, dates, production figures).
 2. Decide the best format for this content:
+   - "breaking_news" — for urgent/speed stories ("this just happened"). 1-3 punchy lines, ALL CAPS for key terms, no hashtags. Optional infographic_brief if story has strong visual data.
    - "thread" — for multi-faceted stories that benefit from sequential presentation (produces BOTH a tweet thread of 3-5 tweets each <=280 chars AND a single long-form X post <=2200 chars)
    - "long_form" — for focused stories that work as a single extended post (<=2200 chars)
    - "infographic" — for data-heavy stories with strong visual potential (produces headline, 5-8 key stats with sources, visual structure suggestion from ["bar chart", "timeline", "comparison table", "stat callouts", "map"], and full caption text)
@@ -535,21 +546,27 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
 
 Respond in valid JSON with this structure:
 {{
-  "format": "thread" | "long_form" | "infographic",
+  "format": "breaking_news" | "thread" | "long_form" | "infographic",
   "rationale": "...",
   "key_data_points": ["...", "..."],
   "draft_content": {{ ... }}
 }}
 
+For "breaking_news" format, draft_content must have: {{"format": "breaking_news", "tweet": "1-3 line breaking news tweet with ALL CAPS key terms", "infographic_brief": null}}
 For "thread" format, draft_content must have: {{"format": "thread", "tweets": ["t1", ...], "long_form_post": "..."}}
 For "long_form" format, draft_content must have: {{"format": "long_form", "post": "..."}}
 For "infographic" format, draft_content must have: {{"format": "infographic", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "visual_structure": "bar chart", "caption_text": "..."}}"""
 
         system_prompt = (
-            "You are a senior gold market analyst. You produce original content about the gold and mining sector "
-            "based on research provided. You write in a data-driven, measured tone. You cite specific numbers, "
-            "dates, and sources. You never mention Seva Mining. You never give financial advice. You never use "
-            'phrases like "buy", "sell", "invest in", "I recommend", or "you should".'
+            "You are a senior gold market analyst with an authoritative, inside-the-room perspective. "
+            "You produce original content about the gold and mining sector based on research provided. "
+            "You write in a data-driven, measured tone — precise and punchy. Every sentence earns its place. "
+            "First line is always the most impactful data point. Lead with the number. "
+            "Surface ONE non-obvious insight not in the original article — a pattern, implication, or comparison. "
+            "You cite specific numbers, dates, and sources. "
+            "You never mention Seva Mining. You never give financial advice. You never use "
+            'phrases like "buy", "sell", "invest in", "I recommend", or "you should". '
+            "When a story has clear urgency (major price moves, major announcements), prefer breaking_news format."
         )
 
         try:
