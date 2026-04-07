@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,18 +10,21 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # Required — scheduler cannot start without these
     database_url: str
     anthropic_api_key: str
-    twilio_account_sid: str
-    twilio_auth_token: str
-    twilio_whatsapp_from: str
-    digest_whatsapp_to: str
     x_api_bearer_token: str
-    x_api_key: str
-    x_api_secret: str
-    apify_api_token: str
-    serpapi_api_key: str
-    frontend_url: str
+
+    # Optional — agents that need these will fail gracefully if absent
+    x_api_key: Optional[str] = None
+    x_api_secret: Optional[str] = None
+    apify_api_token: Optional[str] = None
+    serpapi_api_key: Optional[str] = None
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_whatsapp_from: Optional[str] = None
+    digest_whatsapp_to: Optional[str] = None
+    frontend_url: str = "http://localhost:5173"
 
 
 @lru_cache
