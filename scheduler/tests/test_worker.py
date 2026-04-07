@@ -87,18 +87,67 @@ async def test_placeholder_job_is_async():
 @pytest.mark.asyncio
 async def test_all_five_jobs_registered():
     """
-    build_scheduler() must register exactly 7 jobs with the correct IDs.
+    build_scheduler() must register exactly 6 jobs with the correct IDs.
     Covers: INFRA-05 (D-14 job schedule skeleton); updated in 07-10 for midday + gold history jobs.
+    Updated in Phase 10-03: expiry_sweep removed (run_expiry_sweep preserved but not scheduled).
     """
     mock_engine = MagicMock()
     scheduler = await build_scheduler(mock_engine)
     job_ids = {job.id for job in scheduler.get_jobs()}
     expected_ids = {
         "content_agent", "twitter_agent", "instagram_agent",
-        "expiry_sweep", "morning_digest",
+        "morning_digest",
         "content_agent_midday", "gold_history_agent",
     }
     assert job_ids == expected_ids, f"Got job IDs: {job_ids}"
     # Scheduler is not started (just built), so only shutdown if running
     if scheduler.running:
         scheduler.shutdown()
+
+
+# ---------------------------------------------------------------------------
+# Phase 10-03 — Remove expiry_sweep tests
+# ---------------------------------------------------------------------------
+
+def test_expiry_sweep_removed_from_job_lock_ids():
+    """expiry_sweep must not be in JOB_LOCK_IDS after Phase 10."""
+    assert "expiry_sweep" not in JOB_LOCK_IDS
+
+
+@pytest.mark.asyncio
+async def test_build_scheduler_has_6_jobs_no_expiry_sweep():
+    """build_scheduler() returns 6 jobs; expiry_sweep is absent."""
+    mock_engine = AsyncMock()
+    mock_session = AsyncMock()
+
+    # _read_schedule_config reads from DB — mock the session result
+    with patch("worker.async_sessionmaker") as mock_sm, \
+         patch("worker.select"), \
+         patch("worker._make_job", return_value=AsyncMock()):
+
+        mock_sm.return_value.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_sm.return_value.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        # Simulate DB returning no rows (all defaults used)
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        scheduler = await build_scheduler(mock_engine)
+
+    job_ids = {job.id for job in scheduler.get_jobs()}
+    assert "expiry_sweep" not in job_ids
+    assert "morning_digest" in job_ids
+    assert "twitter_agent" in job_ids
+    assert len(job_ids) == 6
+    if scheduler.running:
+        scheduler.shutdown()
+
+
+def test_read_schedule_config_defaults_no_expiry_sweep():
+    """_read_schedule_config defaults dict must not contain expiry_sweep_interval_minutes."""
+    from worker import _read_schedule_config
+    import inspect
+    # Read the source to verify the defaults dict
+    source = inspect.getsource(_read_schedule_config)
+    assert "expiry_sweep_interval_minutes" not in source
