@@ -20,6 +20,7 @@ from datetime import date, datetime, timezone
 import feedparser
 import httpx
 import serpapi
+import tweepy.asynchronous
 from anthropic import AsyncAnthropic
 from bs4 import BeautifulSoup
 from sqlalchemy import func, select
@@ -63,6 +64,28 @@ SERPAPI_KEYWORDS = [
     "Fed gold",
     "dollar gold",
     "recession gold",
+]
+
+# ---------------------------------------------------------------------------
+# Twitter video clip and quote account lists (CONT-09, CONT-13)
+# ---------------------------------------------------------------------------
+
+VIDEO_ACCOUNTS = [
+    "Kitco",
+    "CNBC",
+    "Bloomberg",
+    "BarrickGold",
+    "WorldGoldCouncil",
+    "Mining",
+    "Newaborngold",
+]
+
+QUOTE_ACCOUNTS = [
+    "PeterSchiff",
+    "jimrickards",
+    "JimRickards",
+    "RealJimRogers",
+    "RobertKiyosaki",
 ]
 
 # ---------------------------------------------------------------------------
@@ -382,6 +405,10 @@ def build_draft_item(content_bundle, rationale: str):
         summary = f"Long-form post ({len(draft.get('post', ''))} chars)"
     elif fmt == "infographic":
         summary = f"Infographic brief: {draft.get('headline', 'N/A')}"
+    elif fmt == "video_clip":
+        summary = f"Video clip from @{draft.get('source_account', 'unknown')}"
+    elif fmt == "quote":
+        summary = f"Quote from {draft.get('speaker', 'unknown')}: {draft.get('quote_text', '')[:80]}"
     else:
         summary = f"Content draft ({fmt})"
 
@@ -447,6 +474,13 @@ def _extract_check_text(draft_content: dict) -> str:
         parts.append(draft_content.get("caption_text", ""))
         for stat in draft_content.get("key_stats", []):
             parts.append(stat.get("stat", ""))
+    elif fmt == "video_clip":
+        parts.append(draft_content.get("twitter_caption", ""))
+        parts.append(draft_content.get("instagram_caption", ""))
+    elif fmt == "quote":
+        parts.append(draft_content.get("twitter_post", ""))
+        parts.append(draft_content.get("instagram_post", ""))
+        parts.append(draft_content.get("quote_text", ""))
     return " ".join(p for p in parts if p)
 
 
@@ -464,6 +498,10 @@ class ContentAgent:
         settings = get_settings()
         self.anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
         self.serpapi_client = serpapi.Client(api_key=settings.serpapi_api_key)
+        self.tweepy_client = tweepy.asynchronous.AsyncClient(
+            bearer_token=settings.x_api_bearer_token,
+            wait_on_rate_limit=True,
+        )
 
     async def _search_corroborating(self, headline: str) -> list[dict]:
         """CONT-09: Find 2-3 corroborating sources via SerpAPI Google News.
@@ -494,6 +532,319 @@ class ContentAgent:
         except Exception as exc:
             logger.warning("Corroboration search failed: %s", exc)
             return []
+
+    async def _search_video_clips(self, session: AsyncSession) -> list[dict]:
+        """Search Twitter for gold sector video posts from credible accounts.
+
+        Uses has:videos operator to find only tweets with video attachments.
+        Filters to only keep tweets where at least one media attachment is type='video'.
+        Respects monthly quota — returns empty list if quota is near cap.
+
+        Returns:
+            List of dicts with keys: tweet_id, text, author_username, author_name,
+            tweet_url, public_metrics, created_at.
+        """
+        # Quota check — within 500 of 10,000 cap → skip
+        current_count_str = await self._get_config(session, "twitter_monthly_tweet_count", "0")
+        quota_limit_str = await self._get_config(session, "twitter_monthly_quota_limit", "10000")
+        current_count = int(current_count_str)
+        quota_limit = int(quota_limit_str)
+        if quota_limit - current_count < 500:
+            logger.info(
+                "Twitter quota near cap (%d/%d) — skipping video clip search",
+                current_count, quota_limit,
+            )
+            return []
+
+        # Build query using first 5 VIDEO_ACCOUNTS (API query length limits)
+        accounts_clause = " OR ".join(f"from:{acct}" for acct in VIDEO_ACCOUNTS[:5])
+        query = f"({accounts_clause}) has:videos gold -is:retweet"
+
+        try:
+            response = await self.tweepy_client.search_recent_tweets(
+                query=query,
+                max_results=10,
+                tweet_fields=["created_at", "public_metrics", "author_id", "text", "attachments"],
+                expansions=["author_id", "attachments.media_keys"],
+                user_fields=["username", "public_metrics"],
+                media_fields=["type", "duration_ms", "preview_image_url"],
+            )
+
+            if not response.data:
+                return []
+
+            # Build lookup maps
+            users_data = (response.includes or {}).get("users") or []
+            media_data = (response.includes or {}).get("media") or []
+            user_map = {str(u.id): u for u in users_data}
+            media_map = {m.media_key: m for m in media_data} if media_data else {}
+
+            results = []
+            for tweet in response.data:
+                # Only keep tweets with at least one video attachment
+                attachment_keys = (tweet.attachments or {}).get("media_keys", []) if tweet.attachments else []
+                has_video = any(
+                    media_map.get(k) and media_map[k].type == "video"
+                    for k in attachment_keys
+                )
+                if not has_video:
+                    continue
+
+                user = user_map.get(str(tweet.author_id))
+                username = user.username if user else "unknown"
+                author_name = user.name if user else "unknown"
+                tweet_url = f"https://twitter.com/{username}/status/{tweet.id}"
+
+                results.append({
+                    "tweet_id": str(tweet.id),
+                    "text": tweet.text,
+                    "author_username": username,
+                    "author_name": author_name,
+                    "tweet_url": tweet_url,
+                    "public_metrics": tweet.public_metrics or {},
+                    "created_at": tweet.created_at,
+                })
+
+            # Increment quota by number of tweets returned by API (not filtered)
+            total_returned = len(response.data)
+            new_count = current_count + total_returned
+            await self._set_config_str(session, "twitter_monthly_tweet_count", str(new_count))
+
+            logger.info(
+                "Video clip search returned %d tweets (%d passed video filter)",
+                total_returned, len(results),
+            )
+            return results
+
+        except Exception as exc:
+            logger.warning("Video clip Twitter search failed: %s", exc)
+            return []
+
+    async def _search_quote_tweets(self, session: AsyncSession) -> list[dict]:
+        """Search Twitter for gold sector text quote posts from credible figures.
+
+        Uses -has:media operator to find text-only tweets (no media attachments).
+        Filters to minimum 10 likes (low bar for curated accounts).
+        Respects monthly quota — returns empty list if quota is near cap.
+
+        Returns:
+            List of dicts with keys: tweet_id, text, author_username, author_name,
+            tweet_url, public_metrics, created_at.
+        """
+        # Quota check — within 500 of 10,000 cap → skip
+        current_count_str = await self._get_config(session, "twitter_monthly_tweet_count", "0")
+        quota_limit_str = await self._get_config(session, "twitter_monthly_quota_limit", "10000")
+        current_count = int(current_count_str)
+        quota_limit = int(quota_limit_str)
+        if quota_limit - current_count < 500:
+            logger.info(
+                "Twitter quota near cap (%d/%d) — skipping quote tweet search",
+                current_count, quota_limit,
+            )
+            return []
+
+        # Build query using QUOTE_ACCOUNTS
+        accounts_clause = " OR ".join(f"from:{acct}" for acct in QUOTE_ACCOUNTS)
+        query = f"({accounts_clause}) gold -has:media -is:retweet"
+
+        try:
+            response = await self.tweepy_client.search_recent_tweets(
+                query=query,
+                max_results=10,
+                tweet_fields=["created_at", "public_metrics", "author_id", "text"],
+                expansions=["author_id"],
+                user_fields=["username", "public_metrics"],
+            )
+
+            if not response.data:
+                return []
+
+            # Build user map
+            users_data = (response.includes or {}).get("users") or []
+            user_map = {str(u.id): u for u in users_data}
+
+            results = []
+            for tweet in response.data:
+                # Filter: minimum 10 likes
+                metrics = tweet.public_metrics or {}
+                if metrics.get("like_count", 0) < 10:
+                    continue
+
+                user = user_map.get(str(tweet.author_id))
+                username = user.username if user else "unknown"
+                author_name = user.name if user else "unknown"
+                tweet_url = f"https://twitter.com/{username}/status/{tweet.id}"
+
+                results.append({
+                    "tweet_id": str(tweet.id),
+                    "text": tweet.text,
+                    "author_username": username,
+                    "author_name": author_name,
+                    "tweet_url": tweet_url,
+                    "public_metrics": metrics,
+                    "created_at": tweet.created_at,
+                })
+
+            # Increment quota by number of tweets returned by API (not filtered)
+            total_returned = len(response.data)
+            new_count = current_count + total_returned
+            await self._set_config_str(session, "twitter_monthly_tweet_count", str(new_count))
+
+            logger.info(
+                "Quote tweet search returned %d tweets (%d passed like filter)",
+                total_returned, len(results),
+            )
+            return results
+
+        except Exception as exc:
+            logger.warning("Quote tweet Twitter search failed: %s", exc)
+            return []
+
+    async def _set_config_str(self, session: AsyncSession, key: str, value: str) -> None:
+        """Upsert a config key with a string value."""
+        result = await session.execute(select(Config).where(Config.key == key))
+        row = result.scalar_one_or_none()
+        if row is None:
+            session.add(Config(key=key, value=value))
+        else:
+            row.value = value
+
+    async def _draft_video_caption(
+        self,
+        tweet_text: str,
+        author_username: str,
+        author_name: str,
+        tweet_url: str,
+    ) -> dict | None:
+        """Draft a quote-tweet style caption for a video clip from a credible account.
+
+        Calls Claude Sonnet with senior analyst voice. Produces dual-platform output:
+        a short caption for Twitter quote-tweet and an Instagram-adapted version.
+
+        Args:
+            tweet_text: Original tweet text accompanying the video.
+            author_username: Twitter handle of the account that posted the video.
+            author_name: Display name of the account.
+            tweet_url: Direct URL to the tweet.
+
+        Returns:
+            draft_content dict with format=video_clip, twitter_caption, instagram_caption.
+            Returns None on JSON parse failure.
+        """
+        system_prompt = (
+            "You are a senior gold market analyst. You write quote-tweet style captions "
+            "for video clips from gold sector figures. Write 1-3 sentences: who said it, "
+            "what the key claim is, why it matters to gold investors. Lead with the data "
+            "or the insight — not preamble. Also provide an Instagram-adapted version "
+            "(same content, slightly more context for a less technical audience). "
+            "You never mention Seva Mining. You never give financial advice."
+        )
+        user_prompt = f"""Write a caption for this video clip from @{author_username} ({author_name}).
+
+Tweet text: {tweet_text}
+Video URL: {tweet_url}
+
+Respond in valid JSON:
+{{
+  "twitter_caption": "1-3 sentences for X quote-tweet (data-forward, senior analyst voice)",
+  "instagram_caption": "same content adapted for Instagram (slightly more context)"
+}}"""
+
+        try:
+            response = await self.anthropic.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=512,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            raw = response.content[0].text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```", 2)[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.rsplit("```", 1)[0].strip()
+            parsed = json.loads(raw)
+        except Exception as exc:
+            logger.warning("_draft_video_caption JSON parse failed: %s", exc)
+            return None
+
+        return {
+            "format": "video_clip",
+            "source_account": author_username,
+            "tweet_url": tweet_url,
+            "twitter_caption": parsed.get("twitter_caption", ""),
+            "instagram_caption": parsed.get("instagram_caption", ""),
+        }
+
+    async def _draft_quote_post(
+        self,
+        quote_text: str,
+        speaker: str,
+        speaker_title: str,
+        source_url: str,
+    ) -> dict | None:
+        """Draft a pull-quote post for X and Instagram from a notable gold sector figure.
+
+        Calls Claude Sonnet with senior analyst voice. Formats quote with attribution
+        and 1-2 lines of analyst context. Produces dual-platform output.
+
+        Args:
+            quote_text: The tweet/quote text from the speaker.
+            speaker: Speaker's display name.
+            speaker_title: Speaker's title or credentials.
+            source_url: URL to the original tweet.
+
+        Returns:
+            draft_content dict with format=quote, speaker, speaker_title, quote_text,
+            source_url, twitter_post, instagram_post.
+            Returns None on JSON parse failure.
+        """
+        system_prompt = (
+            "You are a senior gold market analyst. You draft pull-quote posts about "
+            "notable statements from gold sector figures. Format: quote in quotation "
+            "marks, attribution line, then 1-2 lines of analyst context explaining why "
+            "this matters for the gold market. Lead with the quote. "
+            "Also provide an Instagram-adapted version (same structure, can expand slightly). "
+            "You never mention Seva Mining. You never give financial advice."
+        )
+        user_prompt = f"""Draft a pull-quote post for this statement from {speaker} ({speaker_title}).
+
+Quote: {quote_text}
+Source URL: {source_url}
+
+Respond in valid JSON:
+{{
+  "twitter_post": "full formatted quote post for X (quote + attribution + 1-2 lines analyst context)",
+  "instagram_post": "same formatted for Instagram (can expand slightly)"
+}}"""
+
+        try:
+            response = await self.anthropic.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=512,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            raw = response.content[0].text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```", 2)[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.rsplit("```", 1)[0].strip()
+            parsed = json.loads(raw)
+        except Exception as exc:
+            logger.warning("_draft_quote_post JSON parse failed: %s", exc)
+            return None
+
+        return {
+            "format": "quote",
+            "speaker": speaker,
+            "speaker_title": speaker_title,
+            "quote_text": quote_text,
+            "source_url": source_url,
+            "twitter_post": parsed.get("twitter_post", ""),
+            "instagram_post": parsed.get("instagram_post", ""),
+        }
 
     async def _research_and_draft(
         self, story: dict, deep_research: dict
@@ -541,12 +892,15 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
    - "thread" — for multi-faceted stories that benefit from sequential presentation (produces BOTH a tweet thread of 3-5 tweets each <=280 chars AND a single long-form X post <=2200 chars)
    - "long_form" — for focused stories that work as a single extended post (<=2200 chars)
    - "infographic" — for data-heavy stories with strong visual potential (produces headline, 5-8 key stats with sources, visual structure suggestion from ["bar chart", "timeline", "comparison table", "stat callouts", "map"], and full caption text)
+   - "quote" — when a strong text quote from a credible figure is found in article content. Produces a pull-quote post with attribution and 1-2 lines of analyst context.
+   - "video_clip" — NOT chosen here; produced by direct Twitter search of credible gold sector video accounts.
+   - "gold_history" — NOT chosen here; produced by a separate bi-weekly Gold History job.
 3. Draft the content in your chosen format.
 4. Provide a brief rationale for your format choice (1-2 sentences).
 
 Respond in valid JSON with this structure:
 {{
-  "format": "breaking_news" | "thread" | "long_form" | "infographic",
+  "format": "breaking_news" | "thread" | "long_form" | "infographic" | "quote",
   "rationale": "...",
   "key_data_points": ["...", "..."],
   "draft_content": {{ ... }}
@@ -555,7 +909,8 @@ Respond in valid JSON with this structure:
 For "breaking_news" format, draft_content must have: {{"format": "breaking_news", "tweet": "1-3 line breaking news tweet with ALL CAPS key terms", "infographic_brief": null}}
 For "thread" format, draft_content must have: {{"format": "thread", "tweets": ["t1", ...], "long_form_post": "..."}}
 For "long_form" format, draft_content must have: {{"format": "long_form", "post": "..."}}
-For "infographic" format, draft_content must have: {{"format": "infographic", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "visual_structure": "bar chart", "caption_text": "..."}}"""
+For "infographic" format, draft_content must have: {{"format": "infographic", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "visual_structure": "bar chart", "caption_text": "..."}}
+For "quote" format, draft_content must have: {{"format": "quote", "speaker": "...", "speaker_title": "...", "quote_text": "...", "source_url": "...", "twitter_post": "full formatted quote post for X", "instagram_post": "same formatted for Instagram"}}"""
 
         system_prompt = (
             "You are a senior gold market analyst with an authoritative, inside-the-room perspective. "
@@ -910,6 +1265,138 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
 
         agent_run.items_queued = items_queued
         agent_run.notes = json.dumps({"stories": story_notes})
+
+        # 11. Twitter video clip + quote search (runs after main RSS/SerpAPI story loop)
+        await self._run_twitter_content_search(session, agent_run)
+
+    async def _run_twitter_content_search(
+        self, session: AsyncSession, agent_run: AgentRun
+    ) -> None:
+        """Search Twitter for video clips and quotes; draft, comply, and persist each.
+
+        Called at the end of _run_pipeline() after the main RSS/SerpAPI story loop.
+        Each item is wrapped in try/except for error isolation — individual failures
+        do not abort remaining items.
+        """
+        from models.content_bundle import ContentBundle  # noqa: PLC0415
+        from agents.senior_agent import process_new_items  # noqa: PLC0415
+
+        # --- Video clips ---
+        video_clips = await self._search_video_clips(session)
+        for clip in video_clips:
+            try:
+                tweet_url = clip["tweet_url"]
+                # Cross-run dedup: skip if this tweet_url already in today's bundles
+                today_utc = datetime.now(timezone.utc).date()
+                from sqlalchemy import func as sqlfunc  # noqa: PLC0415
+                existing = await session.execute(
+                    select(ContentBundle).where(
+                        sqlfunc.date(ContentBundle.created_at) == today_utc,
+                        ContentBundle.story_url == tweet_url,
+                        ContentBundle.no_story_flag.is_(False),
+                    )
+                )
+                if existing.scalar_one_or_none() is not None:
+                    logger.info("Video clip already covered today: %s", tweet_url)
+                    continue
+
+                draft_content = await self._draft_video_caption(
+                    tweet_text=clip["text"],
+                    author_username=clip["author_username"],
+                    author_name=clip["author_name"],
+                    tweet_url=tweet_url,
+                )
+                if draft_content is None:
+                    logger.warning("Video caption draft failed for %s", tweet_url)
+                    continue
+
+                check_text = _extract_check_text(draft_content)
+                compliance_ok = await check_compliance(check_text, self.anthropic)
+
+                vc_bundle = ContentBundle(
+                    story_headline=clip["text"][:200],
+                    story_url=tweet_url,
+                    source_name=clip["author_username"],
+                    content_type="video_clip",
+                    score=7.5,  # Fixed score for Twitter-sourced content
+                    draft_content=draft_content,
+                    compliance_passed=compliance_ok,
+                )
+                session.add(vc_bundle)
+                await session.flush()
+
+                if compliance_ok:
+                    rationale = f"Video clip from @{clip['author_username']} on gold sector"
+                    vc_item = build_draft_item(vc_bundle, rationale)
+                    session.add(vc_item)
+                    await session.flush()
+                    await process_new_items([vc_item.id])
+                    agent_run.items_queued = (agent_run.items_queued or 0) + 1
+                    logger.info("Video clip queued from @%s", clip["author_username"])
+                else:
+                    logger.warning("Video clip compliance failed for %s", tweet_url)
+
+            except Exception as exc:
+                logger.error("Video clip processing error for %s: %s", clip.get("tweet_url", "?"), exc)
+
+        # --- Quote tweets ---
+        quote_tweets = await self._search_quote_tweets(session)
+        for qt in quote_tweets:
+            try:
+                tweet_url = qt["tweet_url"]
+                # Cross-run dedup
+                today_utc = datetime.now(timezone.utc).date()
+                from sqlalchemy import func as sqlfunc  # noqa: PLC0415
+                existing = await session.execute(
+                    select(ContentBundle).where(
+                        sqlfunc.date(ContentBundle.created_at) == today_utc,
+                        ContentBundle.story_url == tweet_url,
+                        ContentBundle.no_story_flag.is_(False),
+                    )
+                )
+                if existing.scalar_one_or_none() is not None:
+                    logger.info("Quote tweet already covered today: %s", tweet_url)
+                    continue
+
+                speaker_title = f"Author, macro investor"  # Default; Claude will improve
+                draft_content = await self._draft_quote_post(
+                    quote_text=qt["text"],
+                    speaker=qt["author_name"],
+                    speaker_title=speaker_title,
+                    source_url=tweet_url,
+                )
+                if draft_content is None:
+                    logger.warning("Quote post draft failed for %s", tweet_url)
+                    continue
+
+                check_text = _extract_check_text(draft_content)
+                compliance_ok = await check_compliance(check_text, self.anthropic)
+
+                q_bundle = ContentBundle(
+                    story_headline=qt["text"][:200],
+                    story_url=tweet_url,
+                    source_name=qt["author_username"],
+                    content_type="quote",
+                    score=7.5,  # Fixed score for Twitter-sourced content
+                    draft_content=draft_content,
+                    compliance_passed=compliance_ok,
+                )
+                session.add(q_bundle)
+                await session.flush()
+
+                if compliance_ok:
+                    rationale = f"Quote from {qt['author_name']} on gold sector"
+                    q_item = build_draft_item(q_bundle, rationale)
+                    session.add(q_item)
+                    await session.flush()
+                    await process_new_items([q_item.id])
+                    agent_run.items_queued = (agent_run.items_queued or 0) + 1
+                    logger.info("Quote tweet queued from %s", qt["author_name"])
+                else:
+                    logger.warning("Quote tweet compliance failed for %s", tweet_url)
+
+            except Exception as exc:
+                logger.error("Quote tweet processing error for %s: %s", qt.get("tweet_url", "?"), exc)
 
     async def run(self) -> None:
         """Entry point called by APScheduler. Runs the full pipeline."""
