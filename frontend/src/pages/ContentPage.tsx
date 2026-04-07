@@ -180,8 +180,8 @@ export function ContentPage() {
     )
   }
 
-  // Branch 3: No bundle (404)
-  if (bundle === null) {
+  // Branch 3: No bundle (404 or not yet fetched)
+  if (bundle == null) {
     return (
       <div className="p-8 max-w-3xl">
         <h1 className="text-xl font-semibold mb-1">Content Review</h1>

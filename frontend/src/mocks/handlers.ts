@@ -239,7 +239,7 @@ export const handlers = [
 
   http.post('/watchlists', async ({ request }) => {
     const body = await request.json() as WatchlistResponse
-    return HttpResponse.json({ id: 'wl-new', ...body, active: true, created_at: new Date().toISOString() }, { status: 201 })
+    return HttpResponse.json({ ...body, id: 'wl-new', active: true, created_at: new Date().toISOString() }, { status: 201 })
   }),
 
   http.patch('/watchlists/:id', async ({ params, request }) => {
@@ -275,7 +275,7 @@ export const handlers = [
 
   http.post('/keywords', async ({ request }) => {
     const body = await request.json() as KeywordResponse
-    return HttpResponse.json({ id: 'kw-new', ...body, active: true, created_at: new Date().toISOString() }, { status: 201 })
+    return HttpResponse.json({ ...body, id: 'kw-new', active: true, created_at: new Date().toISOString() }, { status: 201 })
   }),
 
   http.patch('/keywords/:id', async ({ params, request }) => {
