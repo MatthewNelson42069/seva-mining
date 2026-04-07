@@ -87,15 +87,16 @@ async def test_placeholder_job_is_async():
 @pytest.mark.asyncio
 async def test_all_five_jobs_registered():
     """
-    build_scheduler() must register exactly 7 jobs with the correct IDs.
+    build_scheduler() must register exactly 6 jobs with the correct IDs.
     Covers: INFRA-05 (D-14 job schedule skeleton); updated in 07-10 for midday + gold history jobs.
+    Updated in Phase 10-03: expiry_sweep removed (run_expiry_sweep preserved but not scheduled).
     """
     mock_engine = MagicMock()
     scheduler = await build_scheduler(mock_engine)
     job_ids = {job.id for job in scheduler.get_jobs()}
     expected_ids = {
         "content_agent", "twitter_agent", "instagram_agent",
-        "expiry_sweep", "morning_digest",
+        "morning_digest",
         "content_agent_midday", "gold_history_agent",
     }
     assert job_ids == expected_ids, f"Got job IDs: {job_ids}"
@@ -139,7 +140,8 @@ async def test_build_scheduler_has_6_jobs_no_expiry_sweep():
     assert "morning_digest" in job_ids
     assert "twitter_agent" in job_ids
     assert len(job_ids) == 6
-    scheduler.shutdown()
+    if scheduler.running:
+        scheduler.shutdown()
 
 
 def test_read_schedule_config_defaults_no_expiry_sweep():

@@ -38,7 +38,6 @@ JOB_LOCK_IDS: dict[str, int] = {
     "twitter_agent": 1001,
     "instagram_agent": 1002,
     "content_agent": 1003,
-    "expiry_sweep": 1004,
     "morning_digest": 1005,
     "content_agent_midday": 1008,
     "gold_history_agent": 1009,
@@ -110,10 +109,12 @@ def _make_job(job_name: str, engine):
     or placeholder with the advisory lock.
 
     - twitter_agent: TwitterAgent().run()
-    - instagram_agent: InstagramAgent().run()          [Phase 6 — INST-01]
-    - expiry_sweep: SeniorAgent().run_expiry_sweep()   [Phase 5 — SENR-09]
+    - instagram_agent: InstagramAgent().run()            [Phase 6 — INST-01]
     - morning_digest: SeniorAgent().run_morning_digest() [Phase 5 — SENR-01]
     - All other jobs use placeholder_job until their phases are built.
+
+    Note: expiry_sweep was removed in Phase 10. run_expiry_sweep() is preserved
+    in senior_agent.py but no longer scheduled.
     """
     async def job():
         async with engine.connect() as conn:
@@ -132,14 +133,6 @@ def _make_job(job_name: str, engine):
                     JOB_LOCK_IDS[job_name],
                     job_name,
                     agent.run,
-                )
-            elif job_name == "expiry_sweep":
-                agent = SeniorAgent()
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    agent.run_expiry_sweep,
                 )
             elif job_name == "morning_digest":
                 agent = SeniorAgent()
@@ -193,7 +186,6 @@ async def _read_schedule_config(engine) -> dict[str, str]:
         "twitter_interval_hours": "2",
         "instagram_interval_hours": "4",
         "content_agent_schedule_hour": "6",
-        "expiry_sweep_interval_minutes": "30",
         "morning_digest_schedule_hour": "8",
         "content_agent_midday_hour": "12",
         "gold_history_hour": "9",
@@ -229,7 +221,6 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     - twitter_interval_hours (default: 2)
     - instagram_interval_hours (default: 4)
     - content_agent_schedule_hour (default: 6)
-    - expiry_sweep_interval_minutes (default: 30)
     - morning_digest_schedule_hour (default: 8)
     """
     cfg = await _read_schedule_config(engine)
@@ -237,15 +228,14 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     twitter_hours = int(cfg["twitter_interval_hours"])
     instagram_hours = int(cfg["instagram_interval_hours"])
     content_hour = int(cfg["content_agent_schedule_hour"])
-    expiry_minutes = int(cfg["expiry_sweep_interval_minutes"])
     digest_hour = int(cfg["morning_digest_schedule_hour"])
     midday_hour = int(cfg["content_agent_midday_hour"])
     gold_history_hour = int(cfg["gold_history_hour"])
 
     logger.info(
-        "Schedule config: twitter=%dh, instagram=%dh, content=cron(%d:00), expiry=%dmin, "
-        "digest=cron(%d:00), midday=cron(%d:00), gold_history=cron(%d:00 bi-weekly Sun)",
-        twitter_hours, instagram_hours, content_hour, expiry_minutes,
+        "Schedule config: twitter=%dh, instagram=%dh, content=cron(%d:00), "
+        "digest=cron(%d:00 UTC), midday=cron(%d:00), gold_history=cron(%d:00 bi-weekly Sun)",
+        twitter_hours, instagram_hours, content_hour,
         digest_hour, midday_hour, gold_history_hour,
     )
 
@@ -272,13 +262,6 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         hours=instagram_hours,
         id="instagram_agent",
         name=f"Instagram Agent — every {instagram_hours} hours",
-    )
-    scheduler.add_job(
-        _make_job("expiry_sweep", engine),
-        trigger="interval",
-        minutes=expiry_minutes,
-        id="expiry_sweep",
-        name=f"Expiry Sweep — every {expiry_minutes} minutes",
     )
     scheduler.add_job(
         _make_job("morning_digest", engine),
