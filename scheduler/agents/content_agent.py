@@ -535,6 +535,7 @@ class ContentAgent:
             bearer_token=settings.x_api_bearer_token,
             wait_on_rate_limit=True,
         )
+        self._queued_titles: list[str] = []
 
     async def _search_corroborating(self, headline: str) -> list[dict]:
         """CONT-09: Find 2-3 corroborating sources via SerpAPI Google News.
@@ -1305,6 +1306,7 @@ For "quote" format, draft_content must have:
                 await process_new_items([item.id])
 
                 items_queued += 1
+                self._queued_titles.append(story["title"][:80])
                 story_notes.append({
                     "story": story["title"][:200],
                     "score": float(story["score"]),
@@ -1412,6 +1414,7 @@ For "quote" format, draft_content must have:
                     await session.flush()
                     await process_new_items([vc_item.id])
                     agent_run.items_queued = (agent_run.items_queued or 0) + 1
+                    self._queued_titles.append(f"Video: @{clip['author_username']}")
                     logger.info("Video clip queued from @%s", clip["author_username"])
                 else:
                     logger.warning("Video clip compliance failed for %s", tweet_url)
@@ -1471,6 +1474,7 @@ For "quote" format, draft_content must have:
                     await session.flush()
                     await process_new_items([q_item.id])
                     agent_run.items_queued = (agent_run.items_queued or 0) + 1
+                    self._queued_titles.append(f"Quote: {qt['author_name']}")
                     logger.info("Quote tweet queued from %s", qt["author_name"])
                 else:
                     logger.warning("Quote tweet compliance failed for %s", tweet_url)
@@ -1507,8 +1511,19 @@ For "quote" format, draft_content must have:
                 if items_queued_count > 0:
                     try:
                         from services.whatsapp import send_whatsapp_message  # noqa: PLC0415
-                        await send_whatsapp_message(
-                            f"📰 Content Agent — {items_queued_count} new item{'s' if items_queued_count != 1 else ''} ready for review"
-                        )
+                        titles = self._queued_titles
+                        if titles:
+                            title_lines = "\n".join(f"  • {t}" for t in titles)
+                            msg = (
+                                f"📰 Content Agent — {items_queued_count} new "
+                                f"item{'s' if items_queued_count != 1 else ''} ready for review:\n"
+                                f"{title_lines}"
+                            )
+                        else:
+                            msg = (
+                                f"📰 Content Agent — {items_queued_count} new "
+                                f"item{'s' if items_queued_count != 1 else ''} ready for review"
+                            )
+                        await send_whatsapp_message(msg)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning("WhatsApp notification failed (non-fatal): %s", exc)
