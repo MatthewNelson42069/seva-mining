@@ -96,7 +96,7 @@ class _ContentBundle(_TestBase):
     story_headline = Col(Text, nullable=False)
     story_url = Col(Text)
     source_name = Col(String(255))
-    format_type = Col(String(50))
+    content_type = Col(String(50))
     score = Col(Numeric(5, 2))
     quality_score = Col(Numeric(5, 2))
     no_story_flag = Col(Boolean, nullable=False, default=False)

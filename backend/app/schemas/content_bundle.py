@@ -10,7 +10,7 @@ class ContentBundleResponse(BaseModel):
     story_headline: str
     story_url: Optional[str] = None
     source_name: Optional[str] = None
-    format_type: Optional[str] = None
+    content_type: Optional[str] = None
     score: Optional[float] = None
     quality_score: Optional[float] = None
     no_story_flag: bool
