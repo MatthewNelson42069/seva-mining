@@ -369,6 +369,10 @@ def build_draft_item(content_bundle, rationale: str):
         summary = f"Long-form post ({len(draft.get('post', ''))} chars)"
     elif fmt == "infographic":
         summary = f"Infographic brief: {draft.get('headline', 'N/A')}"
+    elif fmt == "video_clip":
+        summary = f"Video clip from @{draft.get('source_account', 'unknown')}"
+    elif fmt == "quote":
+        summary = f"Quote from {draft.get('speaker', 'unknown')}: {draft.get('quote_text', '')[:80]}"
     else:
         summary = f"Content draft ({fmt})"
 
@@ -428,6 +432,13 @@ def _extract_check_text(draft_content: dict) -> str:
         parts.append(draft_content.get("caption_text", ""))
         for stat in draft_content.get("key_stats", []):
             parts.append(stat.get("stat", ""))
+    elif fmt == "video_clip":
+        parts.append(draft_content.get("twitter_caption", ""))
+        parts.append(draft_content.get("instagram_caption", ""))
+    elif fmt == "quote":
+        parts.append(draft_content.get("twitter_post", ""))
+        parts.append(draft_content.get("instagram_post", ""))
+        parts.append(draft_content.get("quote_text", ""))
     return " ".join(p for p in parts if p)
 
 
@@ -656,6 +667,143 @@ class ContentAgent:
         else:
             row.value = value
 
+    async def _draft_video_caption(
+        self,
+        tweet_text: str,
+        author_username: str,
+        author_name: str,
+        tweet_url: str,
+    ) -> dict | None:
+        """Draft a quote-tweet style caption for a video clip from a credible account.
+
+        Calls Claude Sonnet with senior analyst voice. Produces dual-platform output:
+        a short caption for Twitter quote-tweet and an Instagram-adapted version.
+
+        Args:
+            tweet_text: Original tweet text accompanying the video.
+            author_username: Twitter handle of the account that posted the video.
+            author_name: Display name of the account.
+            tweet_url: Direct URL to the tweet.
+
+        Returns:
+            draft_content dict with format=video_clip, twitter_caption, instagram_caption.
+            Returns None on JSON parse failure.
+        """
+        system_prompt = (
+            "You are a senior gold market analyst. You write quote-tweet style captions "
+            "for video clips from gold sector figures. Write 1-3 sentences: who said it, "
+            "what the key claim is, why it matters to gold investors. Lead with the data "
+            "or the insight — not preamble. Also provide an Instagram-adapted version "
+            "(same content, slightly more context for a less technical audience). "
+            "You never mention Seva Mining. You never give financial advice."
+        )
+        user_prompt = f"""Write a caption for this video clip from @{author_username} ({author_name}).
+
+Tweet text: {tweet_text}
+Video URL: {tweet_url}
+
+Respond in valid JSON:
+{{
+  "twitter_caption": "1-3 sentences for X quote-tweet (data-forward, senior analyst voice)",
+  "instagram_caption": "same content adapted for Instagram (slightly more context)"
+}}"""
+
+        try:
+            response = await self.anthropic.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=512,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            raw = response.content[0].text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```", 2)[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.rsplit("```", 1)[0].strip()
+            parsed = json.loads(raw)
+        except Exception as exc:
+            logger.warning("_draft_video_caption JSON parse failed: %s", exc)
+            return None
+
+        return {
+            "format": "video_clip",
+            "source_account": author_username,
+            "tweet_url": tweet_url,
+            "twitter_caption": parsed.get("twitter_caption", ""),
+            "instagram_caption": parsed.get("instagram_caption", ""),
+        }
+
+    async def _draft_quote_post(
+        self,
+        quote_text: str,
+        speaker: str,
+        speaker_title: str,
+        source_url: str,
+    ) -> dict | None:
+        """Draft a pull-quote post for X and Instagram from a notable gold sector figure.
+
+        Calls Claude Sonnet with senior analyst voice. Formats quote with attribution
+        and 1-2 lines of analyst context. Produces dual-platform output.
+
+        Args:
+            quote_text: The tweet/quote text from the speaker.
+            speaker: Speaker's display name.
+            speaker_title: Speaker's title or credentials.
+            source_url: URL to the original tweet.
+
+        Returns:
+            draft_content dict with format=quote, speaker, speaker_title, quote_text,
+            source_url, twitter_post, instagram_post.
+            Returns None on JSON parse failure.
+        """
+        system_prompt = (
+            "You are a senior gold market analyst. You draft pull-quote posts about "
+            "notable statements from gold sector figures. Format: quote in quotation "
+            "marks, attribution line, then 1-2 lines of analyst context explaining why "
+            "this matters for the gold market. Lead with the quote. "
+            "Also provide an Instagram-adapted version (same structure, can expand slightly). "
+            "You never mention Seva Mining. You never give financial advice."
+        )
+        user_prompt = f"""Draft a pull-quote post for this statement from {speaker} ({speaker_title}).
+
+Quote: {quote_text}
+Source URL: {source_url}
+
+Respond in valid JSON:
+{{
+  "twitter_post": "full formatted quote post for X (quote + attribution + 1-2 lines analyst context)",
+  "instagram_post": "same formatted for Instagram (can expand slightly)"
+}}"""
+
+        try:
+            response = await self.anthropic.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=512,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            raw = response.content[0].text.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```", 2)[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.rsplit("```", 1)[0].strip()
+            parsed = json.loads(raw)
+        except Exception as exc:
+            logger.warning("_draft_quote_post JSON parse failed: %s", exc)
+            return None
+
+        return {
+            "format": "quote",
+            "speaker": speaker,
+            "speaker_title": speaker_title,
+            "quote_text": quote_text,
+            "source_url": source_url,
+            "twitter_post": parsed.get("twitter_post", ""),
+            "instagram_post": parsed.get("instagram_post", ""),
+        }
+
     async def _research_and_draft(
         self, story: dict, deep_research: dict
     ) -> tuple[dict, dict, str] | None:
@@ -697,16 +845,20 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
 
 ## Instructions
 1. Extract 5-8 key data points from the research (numbers, percentages, dates, production figures).
-2. Decide the best format for this content:
+2. Decide the best format for this content (choose from the 3 formats you can produce directly from articles):
    - "thread" — for multi-faceted stories that benefit from sequential presentation (produces BOTH a tweet thread of 3-5 tweets each <=280 chars AND a single long-form X post <=2200 chars)
    - "long_form" — for focused stories that work as a single extended post (<=2200 chars)
    - "infographic" — for data-heavy stories with strong visual potential (produces headline, 5-8 key stats with sources, visual structure suggestion from ["bar chart", "timeline", "comparison table", "stat callouts", "map"], and full caption text)
+   - "video_clip" — NOT chosen here; produced by direct Twitter search of credible gold sector video accounts.
+   - "quote" — when a strong text quote from a credible figure is found in article content. Can be chosen from article content if a compelling quote is identified. Produces a pull-quote post with attribution and 1-2 lines of analyst context.
+   - "breaking_news" — NOT chosen here; reserved for direct breaking news sourcing.
+   - "gold_history" — NOT chosen here; produced by a separate bi-weekly Gold History job.
 3. Draft the content in your chosen format.
 4. Provide a brief rationale for your format choice (1-2 sentences).
 
 Respond in valid JSON with this structure:
 {{
-  "format": "thread" | "long_form" | "infographic",
+  "format": "thread" | "long_form" | "infographic" | "quote",
   "rationale": "...",
   "key_data_points": ["...", "..."],
   "draft_content": {{ ... }}
@@ -714,12 +866,16 @@ Respond in valid JSON with this structure:
 
 For "thread" format, draft_content must have: {{"format": "thread", "tweets": ["t1", ...], "long_form_post": "..."}}
 For "long_form" format, draft_content must have: {{"format": "long_form", "post": "..."}}
-For "infographic" format, draft_content must have: {{"format": "infographic", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "visual_structure": "bar chart", "caption_text": "..."}}"""
+For "infographic" format, draft_content must have: {{"format": "infographic", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "visual_structure": "bar chart", "caption_text": "..."}}
+For "quote" format, draft_content must have: {{"format": "quote", "speaker": "...", "speaker_title": "...", "quote_text": "...", "source_url": "...", "twitter_post": "full formatted quote post for X", "instagram_post": "same formatted for Instagram"}}"""
 
         system_prompt = (
             "You are a senior gold market analyst. You produce original content about the gold and mining sector "
             "based on research provided. You write in a data-driven, measured tone. You cite specific numbers, "
-            "dates, and sources. You never mention Seva Mining. You never give financial advice. You never use "
+            "dates, and sources. First line is always the most impactful data point. Lead with the number. "
+            "Every sentence earns its place. Surface ONE non-obvious insight not in the original article — "
+            "a pattern, implication, or comparison. "
+            "You never mention Seva Mining. You never give financial advice. You never use "
             'phrases like "buy", "sell", "invest in", "I recommend", or "you should".'
         )
 
