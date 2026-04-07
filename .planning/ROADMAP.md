@@ -215,7 +215,7 @@ Plans:
 Plans:
 - [x] 10-01-PLAN.md — Rewrite WhatsApp service for sandbox free-form messages, wire Twilio credentials
 - [ ] 10-02-PLAN.md — New item notification: hook into Twitter, Instagram, Content agents post-run
-- [ ] 10-03-PLAN.md — Morning digest at 15:00 UTC, remove expiry_sweep job, human verification checkpoint
+- [x] 10-03-PLAN.md — Morning digest at 15:00 UTC, remove expiry_sweep job, human verification checkpoint
 
 ## Progress
 
@@ -233,4 +233,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 7. Content Agent | 10/10 | Complete   | 2026-04-07 |
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |
-| 10. Senior Agent WhatsApp Notifications | 1/3 | In Progress|  |
+| 10. Senior Agent WhatsApp Notifications | 2/3 | In Progress|  |
