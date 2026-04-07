@@ -41,9 +41,9 @@ def _get_content_agent():
 
 def test_rss_feed_parsing():
     """_fetch_all_rss returns story dicts from feedparser entries."""
-    # This is an integration method — verify RSS_FEEDS constant exists and has 4 feeds
+    # This is an integration method — verify RSS_FEEDS constant exists and has 8 feeds (expanded in 07-07)
     ca = _get_content_agent()
-    assert len(ca.RSS_FEEDS) == 4
+    assert len(ca.RSS_FEEDS) == 8
     assert any("kitco" in url for url, _ in ca.RSS_FEEDS)
 
 
@@ -52,9 +52,9 @@ def test_rss_feed_parsing():
 # ---------------------------------------------------------------------------
 
 def test_serpapi_parsing():
-    """SERPAPI_KEYWORDS has 6 gold-sector keywords."""
+    """SERPAPI_KEYWORDS has 10 gold-sector keywords (expanded in 07-07)."""
     ca = _get_content_agent()
-    assert len(ca.SERPAPI_KEYWORDS) == 6
+    assert len(ca.SERPAPI_KEYWORDS) == 10
     assert "gold price" in ca.SERPAPI_KEYWORDS
 
 

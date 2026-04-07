@@ -87,13 +87,17 @@ async def test_placeholder_job_is_async():
 @pytest.mark.asyncio
 async def test_all_five_jobs_registered():
     """
-    build_scheduler() must register exactly 5 jobs with the correct IDs.
-    Covers: INFRA-05 (D-14 job schedule skeleton)
+    build_scheduler() must register exactly 7 jobs with the correct IDs.
+    Covers: INFRA-05 (D-14 job schedule skeleton); updated in 07-10 for midday + gold history jobs.
     """
     mock_engine = MagicMock()
     scheduler = await build_scheduler(mock_engine)
     job_ids = {job.id for job in scheduler.get_jobs()}
-    expected_ids = {"content_agent", "twitter_agent", "instagram_agent", "expiry_sweep", "morning_digest"}
+    expected_ids = {
+        "content_agent", "twitter_agent", "instagram_agent",
+        "expiry_sweep", "morning_digest",
+        "content_agent_midday", "gold_history_agent",
+    }
     assert job_ids == expected_ids, f"Got job IDs: {job_ids}"
     # Scheduler is not started (just built), so only shutdown if running
     if scheduler.running:
