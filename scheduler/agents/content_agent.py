@@ -1,10 +1,11 @@
 """
 Content Agent — ingest, deduplicate, score, and select daily gold sector stories.
 
-Monitors RSS feeds (Kitco, Mining.com, JMN, WGC) and SerpAPI news search every
-~6 hours for qualifying stories. Applies scoring (relevance, recency, credibility),
-deduplication (URL + headline similarity), and selects the single highest-scoring
-story above the 7.0/10 quality threshold.
+Monitors RSS feeds (Kitco, Mining.com, JMN, WGC, Reuters, Bloomberg, GoldSeek,
+Investing.com) and SerpAPI news search every ~6 hours for qualifying stories.
+Applies scoring (relevance, recency, credibility), deduplication (URL + headline
+similarity), cross-run deduplication, and selects ALL stories above the 7.0/10
+quality threshold for multi-story output.
 
 Requirements: CONT-01 through CONT-17
 """
@@ -14,14 +15,14 @@ import asyncio
 import difflib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import feedparser
 import httpx
 import serpapi
 from anthropic import AsyncAnthropic
 from bs4 import BeautifulSoup
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
@@ -41,6 +42,10 @@ RSS_FEEDS = [
     ("https://www.mining.com/feed/", "mining.com"),
     ("https://www.juniorminingnetwork.com/feed", "juniorminingnetwork.com"),
     ("https://www.gold.org/goldhub/news/feed", "gold.org"),
+    ("https://feeds.reuters.com/reuters/businessNews", "reuters.com"),
+    ("https://feeds.bloomberg.com/markets/news.rss", "bloomberg.com"),
+    ("https://goldseek.com/feed/", "goldseek.com"),
+    ("https://www.investing.com/rss/news_25.rss", "investing.com"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -54,6 +59,10 @@ SERPAPI_KEYWORDS = [
     "gold ETF",
     "junior miners",
     "gold reserves",
+    "gold inflation hedge",
+    "Fed gold",
+    "dollar gold",
+    "recession gold",
 ]
 
 # ---------------------------------------------------------------------------
@@ -68,6 +77,8 @@ CREDIBILITY_TIERS: dict[str, float] = {
     "kitco.com": 0.8,
     "mining.com": 0.8,
     "juniorminingnetwork.com": 0.7,
+    "goldseek.com": 0.6,
+    "investing.com": 0.6,
 }
 DEFAULT_CREDIBILITY = 0.4
 
@@ -196,6 +207,9 @@ def deduplicate_stories(stories: list[dict]) -> list[dict]:
 def select_top_story(stories: list[dict], threshold: float) -> dict | None:
     """CONT-06/07: Return single highest-scoring story above threshold, or None.
 
+    Kept for backward compatibility — prefer select_qualifying_stories() for
+    multi-story output.
+
     Args:
         stories: List of story dicts, each with a 'score' key (float).
         threshold: Minimum score to qualify (exclusive: must be > threshold to pass,
@@ -209,6 +223,24 @@ def select_top_story(stories: list[dict], threshold: float) -> dict | None:
     if not qualifying:
         return None
     return max(qualifying, key=lambda s: s.get("score", 0))
+
+
+def select_qualifying_stories(stories: list[dict], threshold: float) -> list[dict]:
+    """Return ALL stories scoring above threshold, sorted descending by score.
+
+    Replaces select_top_story() for multi-story output. The pipeline now surfaces
+    every story that clears the quality bar in a single run.
+
+    Args:
+        stories: List of story dicts, each with a 'score' key (float).
+        threshold: Minimum score to qualify (strictly > threshold).
+
+    Returns:
+        All qualifying stories sorted by score descending. Empty list if none qualify.
+    """
+    qualifying = [s for s in stories if s.get("score", 0) > threshold]
+    qualifying.sort(key=lambda s: s.get("score", 0), reverse=True)
+    return qualifying
 
 
 # ---------------------------------------------------------------------------
@@ -555,6 +587,43 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
         row = result.scalar_one_or_none()
         return row.value if row else default
 
+    async def _is_already_covered_today(
+        self, session: AsyncSession, story_url: str, story_headline: str
+    ) -> bool:
+        """Check whether this story was already processed in an earlier run today.
+
+        Queries today's ContentBundle records (no_story_flag=False) and checks for:
+        - Exact URL match, or
+        - Headline similarity >= 0.85 (case-insensitive)
+
+        Returns True if the story is already covered today.
+        """
+        from models.content_bundle import ContentBundle  # noqa: PLC0415
+
+        today_utc = date.today()
+        result = await session.execute(
+            select(ContentBundle).where(
+                func.date(ContentBundle.created_at) == today_utc,
+                ContentBundle.no_story_flag.is_(False),
+            )
+        )
+        existing_bundles = result.scalars().all()
+
+        headline_lower = story_headline.lower()
+        for bundle in existing_bundles:
+            # URL exact match
+            if bundle.story_url and bundle.story_url == story_url:
+                return True
+            # Headline similarity
+            if bundle.story_headline:
+                ratio = difflib.SequenceMatcher(
+                    None, headline_lower, bundle.story_headline.lower()
+                ).ratio()
+                if ratio >= 0.85:
+                    return True
+
+        return False
+
     async def _fetch_all_rss(self) -> list[dict]:
         """CONT-02: Fetch all RSS feeds concurrently using asyncio.gather + run_in_executor."""
         loop = asyncio.get_event_loop()
@@ -632,7 +701,12 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
             return 0.5  # Neutral default on failure
 
     async def _run_pipeline(self, session: AsyncSession, agent_run: AgentRun) -> None:
-        """CONT-01: Orchestrate the full ingest-dedup-score-research-draft-comply-persist flow."""
+        """CONT-01: Orchestrate the full ingest-dedup-score-research-draft-comply-persist flow.
+
+        Multi-story: processes ALL stories above threshold per run.
+        Cross-run dedup: skips stories already covered in today's earlier runs.
+        Per-story error isolation: one story failure does not abort remaining stories.
+        """
         # 1. Read config
         threshold = float(await self._get_config(session, "content_quality_threshold", "7.0"))
         rel_weight = float(await self._get_config(session, "content_relevance_weight", "0.40"))
@@ -651,7 +725,7 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
             len(all_stories), len(rss_stories), len(serpapi_stories),
         )
 
-        # 3. Deduplicate
+        # 3. Deduplicate (within-run)
         unique_stories = deduplicate_stories(all_stories)
         agent_run.items_filtered = len(all_stories) - len(unique_stories)
         logger.info(
@@ -674,10 +748,10 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
             story["score"] = (relevance * rel_weight + rec * rec_weight + cred * cred_weight) * 10
             scored.append(story)
 
-        # 5. Select top story
-        top = select_top_story(scored, threshold=threshold)
+        # 5. Select all qualifying stories (multi-story)
+        qualifying = select_qualifying_stories(scored, threshold=threshold)
 
-        if top is None:
+        if not qualifying:
             best = max(scored, key=lambda s: s["score"])
             bundle = build_no_story_bundle(best_score=best["score"])
             session.add(bundle)
@@ -691,83 +765,134 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
             )
             return
 
-        # 6. Deep research
-        article_text, fetch_ok = await fetch_article(top["link"], fallback_text=top.get("summary", ""))
-        corroborating = await self._search_corroborating(top["title"])
-        deep_research = {
-            "article_text": article_text[:5000],  # Cap at 5000 chars
-            "article_fetch_succeeded": fetch_ok,
-            "corroborating_sources": corroborating,
-            "key_data_points": [],  # Filled by Sonnet prompt
-        }
+        # 6. Process each qualifying story with cross-run dedup + per-story error isolation
+        items_queued = 0
+        all_already_covered = True
+        story_notes = []
 
-        # 7. Format decision + drafting (combined Sonnet call)
-        draft_result = await self._research_and_draft(top, deep_research)
-        if draft_result is None:
-            logger.error("Drafting failed for '%s'", top["title"][:60])
+        for story in qualifying:
+            try:
+                # Cross-run dedup: skip if already covered in an earlier run today
+                already_covered = await self._is_already_covered_today(
+                    session, story["link"], story["title"]
+                )
+                if already_covered:
+                    logger.info(
+                        "Skipping (already covered today): '%s'", story["title"][:60]
+                    )
+                    continue
+
+                all_already_covered = False
+
+                # Deep research
+                article_text, fetch_ok = await fetch_article(
+                    story["link"], fallback_text=story.get("summary", "")
+                )
+                corroborating = await self._search_corroborating(story["title"])
+                deep_research = {
+                    "article_text": article_text[:5000],  # Cap at 5000 chars
+                    "article_fetch_succeeded": fetch_ok,
+                    "corroborating_sources": corroborating,
+                    "key_data_points": [],  # Filled by Sonnet prompt
+                }
+
+                # Format decision + drafting (combined Sonnet call)
+                draft_result = await self._research_and_draft(story, deep_research)
+                if draft_result is None:
+                    logger.error("Drafting failed for '%s'", story["title"][:60])
+                    from models.content_bundle import ContentBundle  # noqa: PLC0415
+                    bundle = ContentBundle(
+                        story_headline=story["title"],
+                        story_url=story["link"],
+                        source_name=story.get("source_name"),
+                        score=story["score"],
+                        deep_research=deep_research,
+                        compliance_passed=False,
+                    )
+                    session.add(bundle)
+                    continue
+                draft_content, deep_research, rationale = draft_result
+
+                # Compliance check
+                check_text = _extract_check_text(draft_content)
+                compliance_ok = await check_compliance(check_text, self.anthropic)
+
+                # Persist ContentBundle
+                from models.content_bundle import ContentBundle  # noqa: PLC0415
+                bundle = ContentBundle(
+                    story_headline=story["title"],
+                    story_url=story["link"],
+                    source_name=story.get("source_name"),
+                    content_type=draft_content.get("format"),
+                    score=story["score"],
+                    deep_research=deep_research,
+                    draft_content=draft_content,
+                    compliance_passed=compliance_ok,
+                )
+                session.add(bundle)
+                await session.flush()  # Get bundle.id
+
+                if not compliance_ok:
+                    logger.warning(
+                        "Compliance check failed for '%s'", story["title"][:60]
+                    )
+                    story_notes.append({
+                        "story": story["title"][:200],
+                        "score": float(story["score"]),
+                        "blocked": True,
+                    })
+                    continue
+
+                # Create DraftItem + call Senior Agent
+                item = build_draft_item(bundle, rationale)
+                session.add(item)
+                await session.flush()  # Get item.id
+
+                # Lazy import to avoid circular deps
+                from agents.senior_agent import process_new_items  # noqa: PLC0415
+                await process_new_items([item.id])
+
+                items_queued += 1
+                story_notes.append({
+                    "story": story["title"][:200],
+                    "score": float(story["score"]),
+                    "format": draft_content.get("format"),
+                    "content_bundle_id": str(bundle.id),
+                })
+                logger.info(
+                    "Content Agent queued: '%s' (score=%.1f, format=%s)",
+                    story["title"][:60], story["score"], draft_content.get("format"),
+                )
+
+            except Exception as exc:
+                logger.error(
+                    "Error processing story '%s': %s",
+                    story.get("title", "")[:60], exc,
+                    exc_info=True,
+                )
+                # Per-story error isolation — continue with remaining stories
+
+        # Handle the case where ALL qualifying stories were already covered
+        if all_already_covered:
+            logger.info(
+                "All %d qualifying stories already covered in earlier run today",
+                len(qualifying),
+            )
             from models.content_bundle import ContentBundle  # noqa: PLC0415
             bundle = ContentBundle(
-                story_headline=top["title"],
-                story_url=top["link"],
-                source_name=top.get("source_name"),
-                score=top["score"],
-                deep_research=deep_research,
-                compliance_passed=False,
+                story_headline="All qualifying stories already covered in earlier run",
+                no_story_flag=True,
+                score=qualifying[0]["score"] if qualifying else 0.0,
             )
             session.add(bundle)
-            agent_run.errors = "Drafting failed — Claude returned unparseable response"
-            return
-        draft_content, deep_research, rationale = draft_result
-
-        # 8. Compliance check
-        check_text = _extract_check_text(draft_content)
-        compliance_ok = await check_compliance(check_text, self.anthropic)
-
-        # 9. Persist ContentBundle
-        from models.content_bundle import ContentBundle  # noqa: PLC0415
-        bundle = ContentBundle(
-            story_headline=top["title"],
-            story_url=top["link"],
-            source_name=top.get("source_name"),
-            content_type=draft_content.get("format"),
-            score=top["score"],
-            deep_research=deep_research,
-            draft_content=draft_content,
-            compliance_passed=compliance_ok,
-        )
-        session.add(bundle)
-        await session.flush()  # Get bundle.id
-
-        if not compliance_ok:
-            logger.warning("Compliance check failed for '%s'", top["title"][:60])
-            agent_run.errors = "Compliance check failed — draft blocked"
             agent_run.notes = json.dumps({
-                "story": top["title"][:200],
-                "score": float(top["score"]),
-                "blocked": True,
+                "reason": "All qualifying stories already covered in earlier run",
+                "qualifying_count": len(qualifying),
             })
             return
 
-        # 10. Create DraftItem + call Senior Agent
-        item = build_draft_item(bundle, rationale)
-        session.add(item)
-        await session.flush()  # Get item.id
-
-        # Lazy import to avoid circular deps
-        from agents.senior_agent import process_new_items  # noqa: PLC0415
-        await process_new_items([item.id])
-
-        agent_run.items_queued = 1
-        agent_run.notes = json.dumps({
-            "story": top["title"][:200],
-            "score": float(top["score"]),
-            "format": draft_content.get("format"),
-            "content_bundle_id": str(bundle.id),
-        })
-        logger.info(
-            "Content Agent queued: '%s' (score=%.1f, format=%s)",
-            top["title"][:60], top["score"], draft_content.get("format"),
-        )
+        agent_run.items_queued = items_queued
+        agent_run.notes = json.dumps({"stories": story_notes})
 
     async def run(self) -> None:
         """Entry point called by APScheduler. Runs the full pipeline."""
