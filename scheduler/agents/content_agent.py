@@ -404,7 +404,16 @@ def build_draft_item(content_bundle, rationale: str):
     elif fmt == "long_form":
         summary = f"Long-form post ({len(draft.get('post', ''))} chars)"
     elif fmt == "infographic":
-        summary = f"Infographic brief: {draft.get('headline', 'N/A')}"
+        mode = draft.get("mode", "current_data")
+        summary = f"Infographic ({mode}): {draft.get('headline', 'N/A')}"
+        if draft.get("instagram_brief"):
+            summary += " + Instagram brief"
+    elif fmt == "gold_history":
+        summary = (
+            f"Gold History: {draft.get('story_title', 'N/A')} "
+            f"({len(draft.get('tweets', []))} tweets, "
+            f"{len(draft.get('instagram_carousel', []))} slides)"
+        )
     elif fmt == "video_clip":
         summary = f"Video clip from @{draft.get('source_account', 'unknown')}"
     elif fmt == "quote":
@@ -471,9 +480,29 @@ def _extract_check_text(draft_content: dict) -> str:
         parts.append(draft_content.get("post", ""))
     elif fmt == "infographic":
         parts.append(draft_content.get("headline", ""))
-        parts.append(draft_content.get("caption_text", ""))
+        parts.append(draft_content.get("twitter_caption", ""))
+        parts.append(draft_content.get("caption_text", ""))  # backward compat
         for stat in draft_content.get("key_stats", []):
-            parts.append(stat.get("stat", ""))
+            parts.append(stat.get("stat", "") if isinstance(stat, dict) else str(stat))
+        ig = draft_content.get("instagram_brief")
+        if ig and isinstance(ig, dict):
+            parts.append(ig.get("headline", ""))
+            parts.append(ig.get("caption", ""))
+        hc = draft_content.get("historical_context")
+        if hc and isinstance(hc, dict):
+            parts.extend([
+                hc.get("pattern", ""),
+                hc.get("then", ""),
+                hc.get("now", ""),
+                hc.get("implication", ""),
+            ])
+    elif fmt == "gold_history":
+        parts.extend(draft_content.get("tweets", []))
+        for slide in draft_content.get("instagram_carousel", []):
+            if isinstance(slide, dict):
+                parts.append(slide.get("headline", ""))
+                parts.append(slide.get("body", ""))
+        parts.append(draft_content.get("instagram_caption", ""))
     elif fmt == "video_clip":
         parts.append(draft_content.get("twitter_caption", ""))
         parts.append(draft_content.get("instagram_caption", ""))
