@@ -11,11 +11,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { ScoreBadge } from '@/components/shared/ScoreBadge'
 import { InfographicPreview } from '@/components/content/InfographicPreview'
 
-// Helper: determine clipboard text per format_type
+// Helper: determine clipboard text per content_type
 function getClipboardText(bundle: ContentBundleResponse): string {
   const draft = bundle.draft_content as Record<string, unknown> | null
   if (!draft) return ''
-  switch (bundle.format_type) {
+  switch (bundle.content_type) {
     case 'infographic':
       return (draft.caption_text as string) ?? ''
     case 'long_form':
@@ -72,7 +72,7 @@ function DraftContent({ bundle }: { bundle: ContentBundleResponse }) {
 
   if (!draft) return null
 
-  if (bundle.format_type === 'thread') {
+  if (bundle.content_type === 'thread') {
     const tweets = (draft.tweets as string[]) ?? []
     return (
       <div className="space-y-2">
@@ -86,12 +86,12 @@ function DraftContent({ bundle }: { bundle: ContentBundleResponse }) {
     )
   }
 
-  if (bundle.format_type === 'long_form') {
+  if (bundle.content_type === 'long_form') {
     const post = (draft.post as string) ?? ''
     return <Textarea readOnly value={post} rows={8} className="resize-none" />
   }
 
-  if (bundle.format_type === 'infographic') {
+  if (bundle.content_type === 'infographic') {
     return <InfographicPreview draft={draft as unknown as InfographicDraft} />
   }
 
@@ -217,8 +217,8 @@ export function ContentPage() {
         <div className="space-y-6">
           <div>
             <p className="text-base font-semibold mb-2">{bundle.story_headline}</p>
-            {bundle.format_type && (
-              <Badge variant="outline" className="mb-3">{bundle.format_type}</Badge>
+            {bundle.content_type && (
+              <Badge variant="outline" className="mb-3">{bundle.content_type}</Badge>
             )}
             <DraftContent bundle={bundle} />
           </div>

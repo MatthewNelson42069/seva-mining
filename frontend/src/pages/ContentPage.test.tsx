@@ -51,7 +51,7 @@ const mockDraftItem: DraftItemResponse = {
 const threadBundle: ContentBundleResponse = {
   id: 'bundle-thread',
   story_headline: 'Central banks bought record gold',
-  format_type: 'thread',
+  content_type: 'thread',
   no_story_flag: false,
   draft_content: { tweets: ['Tweet 1 about gold', 'Tweet 2 about reserves'] },
   deep_research: {
@@ -67,7 +67,7 @@ const threadBundle: ContentBundleResponse = {
 const longFormBundle: ContentBundleResponse = {
   id: 'bundle-longform',
   story_headline: 'Long form article about gold',
-  format_type: 'long_form',
+  content_type: 'long_form',
   no_story_flag: false,
   draft_content: { post: 'Full article text about gold markets and central banks...' },
   deep_research: { corroborating_sources: [], rationale: 'Good article.' },
@@ -78,7 +78,7 @@ const longFormBundle: ContentBundleResponse = {
 const infographicBundle: ContentBundleResponse = {
   id: 'bundle-infographic',
   story_headline: 'Gold infographic story',
-  format_type: 'infographic',
+  content_type: 'infographic',
   no_story_flag: false,
   draft_content: {
     format: 'infographic',

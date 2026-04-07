@@ -196,7 +196,7 @@ export const handlers = [
     return HttpResponse.json({
       id: 'bundle-1',
       story_headline: 'Central Bank Gold Accumulation',
-      format_type: 'thread',
+      content_type: 'thread',
       no_story_flag: false,
       draft_content: { tweets: ['Tweet 1', 'Tweet 2', 'Tweet 3'] },
       deep_research: {

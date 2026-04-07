@@ -729,7 +729,7 @@ For "infographic" format, draft_content must have: {{"format": "infographic", "h
             story_headline=top["title"],
             story_url=top["link"],
             source_name=top.get("source_name"),
-            format_type=draft_content.get("format"),
+            content_type=draft_content.get("format"),
             score=top["score"],
             deep_research=deep_research,
             draft_content=draft_content,
