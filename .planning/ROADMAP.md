@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Twitter Agent** - X API v2 monitoring, engagement scoring with recency decay, dual-format drafting with compliance checker, monthly quota counter with hard-stop logic (completed 2026-04-02)
 - [ ] **Phase 5: Senior Agent Core** - Story fingerprint deduplication, 15-item queue cap, auto-expiry sweep, WhatsApp morning digest and alert dispatch
 - [ ] **Phase 6: Instagram Agent** - Apify scraper integration, per-hashtag baseline tracking, retry/health logic, comment draft alternatives with compliance checker
-- [ ] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, format decision logic, quality threshold with no-story flag, compliance checker
+- [ ] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), dual-platform output (Twitter + Instagram), cross-run dedup, 12pm midday run, bi-weekly Gold History agent, compliance checker
 - [ ] **Phase 8: Dashboard Views and Digest** - Daily digest view, content review page, full Settings page wired to live DB config
 - [ ] **Phase 9: Agent Execution Polish** - All scoring weights DB-driven and configurable, agent schedule config from Settings, run logs, quota display, graceful failure handling
 
@@ -141,16 +141,18 @@ Plans:
 - [ ] 06-05-PLAN.md — Worker wiring, seed script (hashtags + watchlist + config), human verification checkpoint
 
 ### Phase 7: Content Agent
-**Goal**: The Content Agent runs daily at 6am, ingests RSS and SerpAPI news, picks the single best qualifying story, conducts multi-step deep research, drafts it in the correct format with compliance checking, and delivers to the Senior Agent — or sends an explicit "no story today" flag
+**Goal**: The Content Agent runs at 6am and 12pm daily, ingests RSS (8 feeds) and SerpAPI (10 keywords) news, sources video clips and quotes from Twitter, processes ALL qualifying stories above 7.0/10 across 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), produces dual-platform output (Twitter + Instagram) for applicable formats, and delivers to the Senior Agent. A separate Gold History Agent runs bi-weekly on Sunday producing drama-first storytelling threads with Instagram carousels.
 **Depends on**: Phase 5
 **Requirements**: CONT-01, CONT-02, CONT-03, CONT-04, CONT-05, CONT-06, CONT-07, CONT-08, CONT-09, CONT-10, CONT-11, CONT-12, CONT-13, CONT-14, CONT-15, CONT-16, CONT-17
 **Success Criteria** (what must be TRUE):
-  1. Agent runs at 6am, pulls new content from all 4 RSS feeds and SerpAPI, deduplicates by URL and 85% headline similarity, and selects only the single highest-scoring story above 7.0/10
-  2. When nothing clears 7.0/10, the agent explicitly sends a "no story today" flag to the Senior Agent — no subthreshold story is surfaced
-  3. The selected story undergoes a deep research pass: full article retrieved, 2-3 corroborating sources found via web search, key data points extracted before drafting
-  4. Format decision produces the correct output: thread format produces both a tweet thread (3-5 tweets under 280 chars each) and a single long-form X post; infographic brief includes headline, 5-8 key stats with sources, visual structure suggestion, and full caption text
-  5. A separate compliance checker Claude call validates no Seva Mining mention and no financial advice across the entire content package before it is sent to the Senior Agent
-**Plans**: 5 plans
+  1. Agent runs at 6am and 12pm, pulls content from 8 RSS feeds and 10 SerpAPI keywords, deduplicates by URL and 85% headline similarity, cross-run dedup against today's earlier ContentBundles, and processes all qualifying stories above 7.0/10
+  2. When nothing clears 7.0/10 and no video clips or quotes surface, the agent sends a "no story today" flag — no subthreshold story is surfaced
+  3. Each qualifying story undergoes deep research and is drafted in the best-fit format (thread, long_form, breaking_news, infographic, quote) with dual-platform output where applicable
+  4. Video clips from credible Twitter accounts produce video_clip ContentBundles with quote-tweet captions for both Twitter and Instagram
+  5. A separate compliance checker Claude call validates no Seva Mining mention and no financial advice across all content
+  6. Gold History Agent runs bi-weekly Sunday, picks an unused story, verifies facts via SerpAPI, produces a 5-7 tweet thread and 4-7 slide Instagram carousel
+  7. All content types are tagged with `content_type` field (renamed from `format_type` via Alembic migration)
+**Plans**: 10 plans
 
 Plans:
 - [x] 07-01-PLAN.md — Foundation: deps, ContentBundle model mirror, test stubs, config seed script
@@ -158,6 +160,11 @@ Plans:
 - [x] 07-03-PLAN.md — Deep research + drafting: article fetch, corroboration, Claude Sonnet format+draft prompt
 - [x] 07-04-PLAN.md — Compliance checker, no-story flag, DraftItem builder, Senior Agent integration
 - [x] 07-05-PLAN.md — Full pipeline wiring, worker.py integration, human verification checkpoint
+- [ ] 07-06-PLAN.md — DB migration: rename format_type to content_type across entire codebase
+- [ ] 07-07-PLAN.md — Breaking news format, expanded sourcing (8 RSS / 10 SerpAPI), cross-run dedup, multi-story pipeline
+- [ ] 07-08-PLAN.md — Video clip + quote formats: Twitter API search, Claude drafting, dual-platform output
+- [ ] 07-09-PLAN.md — Infographic Instagram dual-platform output, expanded Sonnet prompt with all 7 formats, historical mode
+- [ ] 07-10-PLAN.md — Gold History Agent, 12pm midday run, APScheduler job registration, config seed
 
 ### Phase 8: Dashboard Views and Digest
 **Goal**: Operator has a dedicated daily digest view showing morning digest output, a content review page for today's Content Agent bundle, and the full Settings page wired to live database configuration
@@ -207,6 +214,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/6 | Planned    |  |
 | 6. Instagram Agent | 0/5 | Planned    |  |
-| 7. Content Agent | 1/5 | In Progress|  |
-| 8. Dashboard Views and Digest | 0/6 | Planned    |  |
-| 9. Agent Execution Polish | 0/2 | Planned    |  |
+| 7. Content Agent | 5/10 | In Progress|  |
+| 8. Dashboard Views and Digest | 6/6 | Complete   |  |
+| 9. Agent Execution Polish | 2/2 | Complete   |  |
