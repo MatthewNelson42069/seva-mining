@@ -21,7 +21,7 @@ from models.config import Config
 from models.daily_digest import DailyDigest
 from models.draft_item import DraftItem
 from models.watchlist import Watchlist
-from services.whatsapp import send_whatsapp_template
+from services.whatsapp import send_whatsapp_message
 
 logger = logging.getLogger(__name__)
 
@@ -305,15 +305,13 @@ class SeniorAgent:
         )
 
         try:
-            await send_whatsapp_template(
-                "breaking_news",
-                {
-                    "1": headline,
-                    "2": item.source_account or "unknown",
-                    "3": str(round(float(item.score), 1)),
-                    "4": dashboard_url,
-                },
+            breaking_msg = (
+                f"Breaking: {headline}\n"
+                f"Account: {item.source_account or 'unknown'} | "
+                f"Score: {round(float(item.score), 1)}\n"
+                f"Review: {dashboard_url}"
             )
+            await send_whatsapp_message(breaking_msg)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "_check_breaking_news_alert: WhatsApp send failed for item %s: %s",
@@ -375,15 +373,12 @@ class SeniorAgent:
             )
 
             try:
-                await send_whatsapp_template(
-                    "expiry_alert",
-                    {
-                        "1": item.platform or "unknown",
-                        "2": headline,
-                        "3": str(minutes_remaining),
-                        "4": dashboard_url,
-                    },
+                expiry_msg = (
+                    f"Expiring soon ({minutes_remaining} min): {headline}\n"
+                    f"Platform: {item.platform or 'unknown'}\n"
+                    f"Review: {dashboard_url}"
                 )
+                await send_whatsapp_message(expiry_msg)
                 item.alerted_expiry_at = datetime.now(timezone.utc)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
@@ -427,15 +422,13 @@ class SeniorAgent:
             excerpt = source_text
 
         try:
-            await send_whatsapp_template(
-                "breaking_news",
-                {
-                    "1": excerpt,
-                    "2": item.source_account or "unknown",
-                    "3": str(round(engagement_score, 1)),
-                    "4": dashboard_url,
-                },
+            engagement_msg = (
+                f"High engagement: {excerpt}\n"
+                f"Account: {item.source_account or 'unknown'} | "
+                f"Score: {round(engagement_score, 1)}\n"
+                f"Review: {dashboard_url}"
             )
+            await send_whatsapp_message(engagement_msg)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "_send_engagement_alert: WhatsApp send failed for item %s: %s",
@@ -782,20 +775,19 @@ class SeniorAgent:
                     session, "dashboard_url", "https://app.sevamining.com"
                 )
 
-                await send_whatsapp_template(
-                    "morning_digest",
-                    {
-                        "1": var_1,
-                        "2": var_2,
-                        "3": var_3,
-                        "4": var_4,
-                        "5": var_5,
-                        "6": var_6,
-                        "7": var_7,
-                    },
-                )
-
-                record.whatsapp_sent_at = datetime.now(timezone.utc)
+                try:
+                    # Build free-form digest message (Twilio sandbox — no template approval needed)
+                    digest_message = (
+                        f"📊 Morning Digest — {var_1}\n"
+                        f"Queue: {var_3} pending items\n"
+                        f"Yesterday: {var_4} approved, {var_5} rejected, {var_6} expired\n"
+                        f"Top stories: {var_2}\n"
+                        f"Review: {var_7}"
+                    )
+                    await send_whatsapp_message(digest_message)
+                    record.whatsapp_sent_at = datetime.now(timezone.utc)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Morning digest WhatsApp send failed (non-fatal): %s", exc)
 
                 run.status = "completed"
                 run.ended_at = datetime.now(timezone.utc)
