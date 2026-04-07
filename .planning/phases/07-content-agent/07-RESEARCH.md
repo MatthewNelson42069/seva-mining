@@ -766,3 +766,505 @@ All tests use mocked httpx, mocked serpapi client, mocked feedparser, mocked ant
 
 **Research date:** 2026-04-02
 **Valid until:** 2026-05-02 (stable libraries; SerpAPI quota concern is time-sensitive if plan not confirmed)
+
+---
+
+## Expansion Research (2026-04-07)
+
+**Scope:** NEW features only — Twitter/X video+quote search, bi-weekly APScheduler cron, cross-run dedup, dual-platform JSONB briefs, Gold History topic tracking, and `content_type` column strategy. The original Phase 7 (3 formats, single daily run) is already built and verified.
+
+---
+
+### EXP-1: Twitter/X API v2 — Video and Text Quote Search
+
+**What already exists in the codebase:**
+`scheduler/agents/twitter_agent.py` uses `tweepy.asynchronous.AsyncClient` with `search_recent_tweets()` and `get_users_tweets()`. The `ContentAgent.__init__` only instantiates `AsyncAnthropic` and `serpapi.Client` — it has no Tweepy client yet. Adding one follows the exact TwitterAgent pattern.
+
+**Bearer token auth:**
+`X_API_BEARER_TOKEN` is already in `Settings` and used by `TwitterAgent`. `ContentAgent` needs to instantiate its own `tweepy.asynchronous.AsyncClient(bearer_token=settings.x_api_bearer_token)`.
+
+**Searching for video posts — `has:videos` operator:**
+The X API v2 `search_recent_tweets` query string supports `has:videos` as a standard operator. To find video posts from a named account:
+
+```python
+# Query for video tweets from a specific account
+query = "from:Kitco has:videos -is:retweet"
+# Query for video tweets from multiple target accounts (combined with OR)
+query = "(from:Kitco OR from:CNBC OR from:Bloomberg) has:videos -is:retweet"
+```
+
+To retrieve media type information, add `expansions="attachments.media_keys"` and `media_fields=["type", "duration_ms", "preview_image_url"]`. The media objects land in `response.includes["media"]`; each has `type` which equals `"video"` or `"animated_gif"` or `"photo"`.
+
+**Searching for text quote posts:**
+Text posts (no media) from credible figures use:
+
+```python
+query = "(from:PeterSchiff OR from:jimrickards OR from:JimRickards) gold -has:media -is:retweet"
+```
+
+The `-has:media` operator excludes images, videos, and GIFs — returning only text posts.
+
+**Tweepy AsyncClient call pattern:**
+
+```python
+# Source: scheduler/agents/twitter_agent.py — established pattern
+response = await self.tweepy_client.search_recent_tweets(
+    query=query,
+    max_results=10,
+    tweet_fields=["created_at", "public_metrics", "author_id", "text", "attachments"],
+    expansions=["author_id", "attachments.media_keys"],
+    user_fields=["username", "public_metrics"],
+    media_fields=["type", "duration_ms", "preview_image_url"],
+)
+# Media info accessible via:
+media_map = {}
+if response.includes and response.includes.get("media"):
+    for m in response.includes["media"]:
+        media_map[m.media_key] = m
+# For each tweet:
+for tweet in response.data:
+    attachments = getattr(tweet, "attachments", None) or {}
+    media_keys = attachments.get("media_keys", []) if isinstance(attachments, dict) else []
+    has_video = any(
+        media_map.get(k) and media_map[k].type == "video"
+        for k in media_keys
+    )
+```
+
+**Rate limits — Basic tier ($100/mo):**
+- Monthly tweet read cap: **10,000 tweets/month** across all searches in the project (same cap already tracked by `twitter_monthly_tweet_count` in Config).
+- Per-request rate limit: 15 requests per 15 minutes for `search_recent_tweets` (Basic tier).
+- The existing `_check_quota()` / `_increment_quota()` pattern in `TwitterAgent` must be reused or mirrored in `ContentAgent`. The monthly cap is project-level — both agents draw from the same 10,000/month pool.
+
+**Quota impact of expansion:**
+The content agent runs 2x/day. If it makes 3-5 Twitter searches per run (video + quote pools), that is 6-10 searches × ~10 results each = 60-100 tweets/day read. Over 30 days: 1,800-3,000 tweet reads for content agent alone. Combined with the existing TwitterAgent (≤500 reads/run × 12 runs/day = 6,000/month), total approaches 9,000-10,000/month. **The quota is tight.** Content agent Twitter searches should be kept to 2-3 targeted account searches per run, not broad keyword searches.
+
+**Account list for video/quote search:**
+The CONTEXT.md specifies: Kitco, CNBC, Bloomberg, Peter Schiff, Jim Rickards, WGC, Barrick CEO, mining executives, macro investors, billionaires discussing gold, politicians discussing gold. These should be stored as a Config key (e.g., `content_video_accounts`) rather than hardcoded so they can be tuned without deployment.
+
+**Confidence:** HIGH — Tweepy v2 async pattern verified directly from `twitter_agent.py`. `has:videos` operator verified from X API v2 docs (official developer docs confirm operator availability for Basic tier standard operators). Media field expansion pattern from official X API v2 docs.
+
+---
+
+### EXP-2: Bi-Weekly APScheduler CronTrigger
+
+**What the CONTEXT.md specifies:**
+`gold_history_agent` job, lock ID 1009, runs bi-weekly on Sunday at 9am. Config key `gold_history_cron` stores the expression.
+
+**APScheduler 3.x CronTrigger fields:**
+Confirmed from official docs: supports `year`, `month`, `day`, `week`, `day_of_week`, `hour`, `minute`, `second` fields. Field expressions include `*/n` for "every n steps from minimum."
+
+**Bi-weekly pattern — `week='*/2'`:**
+
+```python
+from apscheduler.triggers.cron import CronTrigger
+
+# Bi-weekly Sunday at 9am — fires every 2 ISO weeks on Sunday
+trigger = CronTrigger(
+    day_of_week="sun",
+    week="*/2",
+    hour=9,
+    minute=0,
+    timezone="UTC",
+)
+```
+
+**Critical gotcha: `day_of_week` numbering in APScheduler 3.x is Monday=0, not Sunday=0.** APScheduler uses ISO weekday numbering where Monday=0 and Sunday=6. Using the string `"sun"` is the safe approach — confirmed from APScheduler source (abbreviated names `mon`-`sun` are explicitly supported).
+
+**The `*/2` week drift problem:**
+Standard Unix cron `*/2` for weeks counts from ISO week 1 of the year. This means in some years the "every other week" pattern resets at the year boundary, potentially running on consecutive Sundays across a year-end. For a Gold History feature this is acceptable — a miss or double-fire once a year at New Year is low-stakes. The alternative (CalendarIntervalTrigger) is APScheduler 4 only (alpha — CLAUDE.md explicitly bans v4).
+
+**Recommended implementation:**
+
+```python
+# scheduler/worker.py — new job registration in build_scheduler()
+gold_history_hour = int(cfg.get("gold_history_hour", "9"))
+
+scheduler.add_job(
+    _make_job("gold_history_agent", engine),
+    trigger="cron",
+    day_of_week="sun",
+    week="*/2",
+    hour=gold_history_hour,
+    minute=0,
+    id="gold_history_agent",
+    name="Gold History Agent — bi-weekly Sunday",
+    timezone="UTC",
+)
+```
+
+**New `JOB_LOCK_IDS` entry:** Add `"gold_history_agent": 1009` (lock ID from CONTEXT.md). Also add `"content_agent_midday": 1008`.
+
+**Midday job (lock ID 1008):** The 12pm run is the same pipeline as 6am — same `ContentAgent().run()` call, different cron hour:
+
+```python
+scheduler.add_job(
+    _make_job("content_agent_midday", engine),
+    trigger="cron",
+    hour=12,
+    minute=0,
+    id="content_agent_midday",
+    name="Content Agent (midday) — daily at 12pm",
+)
+```
+
+**New config keys to seed:**
+- `content_agent_midday_hour` = `"12"`
+- `gold_history_hour` = `"9"`
+
+**Confidence:** HIGH for `day_of_week="sun"` and `week="*/2"` syntax — confirmed from APScheduler 3.x official docs RST source on GitHub. MEDIUM for year-boundary behavior (documented as known limitation in APScheduler community, but acceptable for this use case).
+
+---
+
+### EXP-3: Cross-Run Deduplication (Today's Earlier Run)
+
+**What exists:** `deduplicate_stories()` in `content_agent.py` deduplicates within a single run's fetched stories by URL and headline similarity. It does NOT check against already-persisted `ContentBundle` records.
+
+**What's needed:** Before surfacing a qualifying story, check if a `ContentBundle` with the same story URL OR similar headline already exists from today (same calendar date in UTC).
+
+**Query pattern — using existing `ContentBundle` model:**
+
+```python
+# Verify: ContentBundle model field is story_url (not source_url)
+# Source: backend/app/models/content_bundle.py — confirmed fields: story_url, story_headline, created_at
+
+from sqlalchemy import select, cast, Date, func
+from datetime import date, timezone, datetime
+
+async def _is_already_covered_today(
+    self,
+    session: AsyncSession,
+    story_url: str,
+    story_headline: str,
+) -> bool:
+    """Check if story was already processed in today's earlier run."""
+    today_utc = datetime.now(timezone.utc).date()
+
+    result = await session.execute(
+        select(ContentBundle).where(
+            func.date(ContentBundle.created_at) == today_utc,
+            ContentBundle.no_story_flag.is_(False),
+        )
+    )
+    today_bundles = result.scalars().all()
+
+    for bundle in today_bundles:
+        # URL exact match
+        if bundle.story_url and bundle.story_url == story_url:
+            return True
+        # Headline similarity
+        if bundle.story_headline:
+            ratio = difflib.SequenceMatcher(
+                None,
+                story_headline.lower(),
+                bundle.story_headline.lower(),
+            ).ratio()
+            if ratio >= 0.85:
+                return True
+    return False
+```
+
+**Where to insert it:** In `_run_pipeline`, after scoring and selecting qualifying stories but before deep research. If all qualifying stories are already covered, fall through to no-story flag with a note.
+
+**ContentBundle model import in scheduler:** The scheduler-side mirror at `scheduler/models/content_bundle.py` needs to match `backend/app/models/content_bundle.py` exactly. Confirmed the backend model has `story_url`, `story_headline`, `created_at`, and `no_story_flag` columns.
+
+**The `func.date()` approach:** SQLAlchemy `func.date(ContentBundle.created_at)` works with PostgreSQL's `created_at timestamptz` column. It extracts the date portion in the DB server's timezone. Since Neon is UTC, this is reliable.
+
+**Confidence:** HIGH — query pattern is standard SQLAlchemy 2.0 async. Model fields verified from `backend/app/models/content_bundle.py` source read.
+
+---
+
+### EXP-4: Dual-Platform JSONB Briefs Without DB Migration
+
+**What exists:** `ContentBundle.draft_content` is a JSONB column (no schema constraints). The current agent stores format-specific dicts like `{"format": "thread", "tweets": [...], "long_form_post": "..."}`. Compliance extractor `_extract_check_text()` only handles `thread`, `long_form`, `infographic`.
+
+**What's needed:** 4 of the 7 formats produce both Twitter and Instagram content. The `instagram_brief` sub-object needs to be embedded in `draft_content` without a DB migration.
+
+**Confirmed approach — extend existing JSONB keys:**
+JSONB is schema-free. Adding new keys to the stored dict requires no Alembic migration. The CONTEXT.md draft_content structures already include `instagram_brief` as a nested sub-object for `infographic`, and `instagram_caption` / `instagram_post` for `video_clip` and `quote`. These are simple additions to the Sonnet prompt's response format instructions.
+
+**Format structures (from CONTEXT.md — locked):**
+
+| Format | Twitter key | Instagram key |
+|--------|-------------|---------------|
+| `infographic` | `twitter_caption`, `key_stats`, etc. | `instagram_brief: {headline, key_stats, visual_structure, caption}` |
+| `video_clip` | `twitter_caption` | `instagram_caption` |
+| `quote` | `twitter_post` | `instagram_post` |
+| `gold_history` | `tweets` (thread) | `instagram_carousel: [{slide, headline, body, visual_note}]` + `instagram_caption` |
+
+**What needs to change in `content_agent.py`:**
+1. `_extract_check_text()` must be extended to extract text from `video_clip`, `quote`, and `gold_history` formats for compliance checking.
+2. `build_draft_item()` summary logic (the `alternatives` field) must handle all 7 formats.
+3. The `_research_and_draft()` Sonnet prompt must be rewritten to present all 7 format options with dual-platform output instructions.
+
+**No migration needed.** JSONB fields accept any valid JSON — the expanded keys are stored automatically when the dict is wider than before. Existing `no_story_flag=True` bundles with null `draft_content` are unaffected.
+
+**Confidence:** HIGH — JSONB flexibility is a PostgreSQL guarantee, not an assumption. Verified against `backend/app/models/content_bundle.py` schema which has no JSON Schema constraint on `draft_content`.
+
+---
+
+### EXP-5: `content_type` Column — Naming and Migration Strategy
+
+**Critical finding — naming conflict:**
+CONTEXT.md specifies a `content_type` field on `ContentBundle`. However, the **existing** `backend/app/models/content_bundle.py` model (and the `0001_initial_schema.py` Alembic migration) use `format_type` for the same purpose. The existing `content_agent.py` code already writes to `bundle.format_type = draft_content.get("format")`.
+
+**Options:**
+
+| Option | Effort | Risk |
+|--------|--------|------|
+| A: Add `content_type` as a new column via Alembic migration, write both `format_type` and `content_type` | Low migration cost | Two columns with the same data; technical debt |
+| B: Rename `format_type` → `content_type` via Alembic (`op.alter_column`), update model + all code | Medium — single migration, one rename | Must update model, seed scripts, any backend API reading `format_type` |
+| C: Store `content_type` inside `draft_content` JSONB (already present as `draft_content["format"]`) | Zero migration cost | Slightly less queryable; requires JSON extraction in SQL queries |
+
+**Recommendation: Option B — rename via Alembic.** The field is not yet read by any frontend code (Phase 8 builds the dashboard). The only writer is `content_agent.py` (line: `format_type=draft_content.get("format")`). Renaming now is lower cost than living with two columns.
+
+**Migration template:**
+
+```python
+# backend/alembic/versions/0005_rename_format_type_to_content_type.py
+revision = "0005"
+down_revision = "0004"
+
+def upgrade() -> None:
+    op.alter_column("content_bundles", "format_type", new_column_name="content_type")
+
+def downgrade() -> None:
+    op.alter_column("content_bundles", "content_type", new_column_name="format_type")
+```
+
+**Files to update after migration:**
+- `backend/app/models/content_bundle.py` — `format_type` → `content_type`
+- `scheduler/models/content_bundle.py` — same rename in mirror
+- `scheduler/agents/content_agent.py` — `format_type=...` → `content_type=...` (line ~732)
+- Any backend API routes that filter or return `format_type` (check `backend/app/` routers)
+
+**Confidence:** HIGH — migration pattern confirmed from existing `0004_add_engagement_alert_columns.py`. `op.alter_column` with `new_column_name` is the standard Alembic approach.
+
+---
+
+### EXP-6: Gold History Topic Tracking via Config Table
+
+**What the CONTEXT.md specifies:** Store used story slugs in the Config table under key `gold_history_used_topics` as a JSONB list. Use the existing `_get_config()` pattern.
+
+**Config table schema (confirmed):**
+The `Config` model has `key` (String) and `value` (Text). It stores all values as text strings. For the existing config keys (`content_quality_threshold = "7.0"`), simple string values are sufficient. Storing a JSONB list requires serializing to/from JSON string in the value field.
+
+**Confirmed approach — JSON serialized in Config.value:**
+
+```python
+import json
+
+async def _get_used_topics(self, session: AsyncSession) -> list[str]:
+    """Read used Gold History story slugs from config."""
+    result = await session.execute(
+        select(Config).where(Config.key == "gold_history_used_topics")
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return []
+    try:
+        return json.loads(row.value)  # Config.value stores JSON-encoded list
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+async def _add_used_topic(self, session: AsyncSession, slug: str) -> None:
+    """Append a story slug to the used topics list in config."""
+    topics = await self._get_used_topics(session)
+    if slug not in topics:
+        topics.append(slug)
+    result = await session.execute(
+        select(Config).where(Config.key == "gold_history_used_topics")
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        session.add(Config(
+            key="gold_history_used_topics",
+            value=json.dumps(topics),
+        ))
+    else:
+        row.value = json.dumps(topics)
+    # caller commits
+```
+
+**Config.value is Text (not JSONB).** The `Config` model stores everything as text. There is no JSONB column on Config. The CONTEXT.md phrase "JSONB list" means "a JSON-encoded list stored in the text value column." This is exactly how to implement it.
+
+**Seed entry:** Add `gold_history_used_topics` = `"[]"` to `seed_content_data.py` so the key exists from day one and `_get_used_topics` never returns an error on first run.
+
+**Confidence:** HIGH — Config model structure verified directly from source. `_get_config()` pattern verified from `content_agent.py` lines 552-556. JSON-in-text-column pattern is standard for simple list storage in this codebase.
+
+---
+
+### EXP-7: Pipeline Changes for Multi-Story Output (No Per-Run Cap)
+
+**What changed from original spec:**
+Original Phase 7: select single highest-scoring story above 7.0, produce one `ContentBundle`.
+Expanded Phase 7: surface ALL qualifying stories, produce multiple `ContentBundle` records per run. Target: 4-6 Twitter pieces/day, 1-2 Instagram pieces/day.
+
+**Impact on existing `_run_pipeline()`:**
+The current `select_top_story()` function returns at most 1 story. The expansion requires replacing it with a "select all above threshold" pattern:
+
+```python
+# Replace single-story selection with multi-story:
+qualifying = [s for s in scored if s["score"] >= threshold]
+qualifying.sort(key=lambda s: s["score"], reverse=True)
+# No cap — process all qualifying stories
+```
+
+For each qualifying story, run the full deep research + draft + compliance + persist cycle. The loop must continue on individual failures (error isolation per story, not per run). `agent_run.items_queued` becomes a count of successfully persisted bundles.
+
+**Priority enforcement:**
+CONTEXT.md specifies: `breaking_news > thread/infographic/long_form > video_clip/quote > gold_history`. Since Claude decides format per story independently, priority is post-hoc — it affects dashboard ordering (Phase 8), not which stories are processed. The content agent processes all qualifying stories; the dashboard sorts by priority. No change to the processing loop needed for priority.
+
+**Confidence:** HIGH — the existing `select_top_story()` and `_run_pipeline()` code is directly inspected. The multi-story change is a straightforward refactor of the selection and loop logic.
+
+---
+
+### EXP-8: Updated `_extract_check_text` and `build_draft_item` for 7 Formats
+
+**What needs to extend in existing code (verified from source):**
+
+Current `_extract_check_text()` (lines ~394-408) handles only `thread`, `long_form`, `infographic`. The expansion adds `breaking_news`, `video_clip`, `quote`, `gold_history`.
+
+**Extension:**
+```python
+elif fmt == "breaking_news":
+    parts.append(draft_content.get("tweet", ""))
+    if draft_content.get("infographic_brief"):
+        parts.append(draft_content["infographic_brief"].get("caption", ""))
+elif fmt == "video_clip":
+    parts.append(draft_content.get("twitter_caption", ""))
+    parts.append(draft_content.get("instagram_caption", ""))
+elif fmt == "quote":
+    parts.append(draft_content.get("twitter_post", ""))
+    parts.append(draft_content.get("instagram_post", ""))
+    parts.append(draft_content.get("quote_text", ""))
+elif fmt == "gold_history":
+    parts.extend(draft_content.get("tweets", []))
+    parts.append(draft_content.get("instagram_caption", ""))
+    for slide in draft_content.get("instagram_carousel", []):
+        parts.append(slide.get("headline", ""))
+        parts.append(slide.get("body", ""))
+```
+
+Current `build_draft_item()` (lines ~341-348) summary logic handles only `thread`, `long_form`, `infographic`. Must add cases for `breaking_news`, `video_clip`, `quote`, `gold_history`.
+
+**Confidence:** HIGH — both functions read directly from source. Extension is mechanical.
+
+---
+
+### EXP-9: New Worker.py Job Registrations
+
+**Confirmed from worker.py inspection:**
+
+Current `JOB_LOCK_IDS`:
+```python
+"content_agent": 1003,
+# 1008 and 1009 not yet registered
+```
+
+Current `_make_job()` has `elif job_name == "content_agent"` branch — wired to `ContentAgent().run()`.
+
+**New entries needed:**
+
+```python
+# JOB_LOCK_IDS additions
+"content_agent_midday": 1008,
+"gold_history_agent": 1009,
+```
+
+**`_make_job()` additions:**
+
+```python
+elif job_name == "content_agent_midday":
+    agent = ContentAgent()
+    await with_advisory_lock(conn, JOB_LOCK_IDS[job_name], job_name, agent.run)
+elif job_name == "gold_history_agent":
+    agent = GoldHistoryAgent()
+    await with_advisory_lock(conn, JOB_LOCK_IDS[job_name], job_name, agent.run)
+```
+
+`ContentAgent` can be reused for the midday run — same class, same `run()` method, different schedule. `GoldHistoryAgent` is a new class (or a method on `ContentAgent`). Per CONTEXT.md, it is a separate job with separate lock ID, so a separate class is cleaner.
+
+**`_read_schedule_config()` additions:**
+```python
+defaults = {
+    # ... existing keys ...
+    "content_agent_midday_hour": "12",
+    "gold_history_hour": "9",
+}
+```
+
+**`build_scheduler()` additions:**
+```python
+midday_hour = int(cfg["content_agent_midday_hour"])
+gold_history_hour = int(cfg["gold_history_hour"])
+
+scheduler.add_job(
+    _make_job("content_agent_midday", engine),
+    trigger="cron",
+    hour=midday_hour,
+    minute=0,
+    id="content_agent_midday",
+    name=f"Content Agent (midday) — daily at {midday_hour}pm",
+)
+scheduler.add_job(
+    _make_job("gold_history_agent", engine),
+    trigger="cron",
+    day_of_week="sun",
+    week="*/2",
+    hour=gold_history_hour,
+    minute=0,
+    id="gold_history_agent",
+    name=f"Gold History Agent — bi-weekly Sunday at {gold_history_hour}am",
+    timezone="UTC",
+)
+```
+
+**Confidence:** HIGH — worker.py structure read directly. Lock IDs from CONTEXT.md.
+
+---
+
+### EXP: Common Pitfalls (Expansion-Specific)
+
+**Pitfall A: Twitter quota exhaustion from content agent video search**
+The content agent now runs 2×/day and searches Twitter for video + quote posts. At 2 runs × 3 searches × ~10 results = 60 reads/day, that is 1,800/month from content agent alone, added to the existing TwitterAgent's ~6,000/month. Total: ~7,800-8,000/month of the 10,000 cap. **Do not add broad keyword searches to the content agent** — restrict to targeted `from:AccountName` queries only. Monitor `twitter_monthly_tweet_count` in Config.
+
+**Pitfall B: `week='*/2'` fires on both an even and odd ISO week at year rollover**
+When ISO week 52/53 rolls to week 1, the `*/2` step may produce two consecutive Sunday firings. For Gold History this is low-stakes (worst case: an extra history post in early January). Document the behavior in a comment in `worker.py`.
+
+**Pitfall C: Config.value is Text, not JSONB**
+`_get_config()` returns the raw `Config` row. `row.value` is always a string. For `gold_history_used_topics`, callers must `json.loads(row.value)` to get the list. Forgetting this produces a string comparison instead of a list membership check — the topic is never found as "used," and the same story gets selected repeatedly.
+
+**Pitfall D: `format_type` vs `content_type` naming mismatch**
+CONTEXT.md uses `content_type` throughout. The existing model and Alembic schema use `format_type`. Until Migration 0005 is applied and the model/agent are updated, using `content_type` in new code will silently succeed (SQLAlchemy won't error — it stores to the wrong column or not at all). All writers must use the same column name. Apply the rename migration as the first task of the expansion wave.
+
+**Pitfall E: `has:videos` operator may return animated GIFs**
+The `has:videos` operator includes both native videos and animated GIFs. When checking media type in the API response, filter on `media.type == "video"` (not just presence of media). GIFs are low-value for the video_clip format — the speaker's face and voice are what makes a clip credible.
+
+**Pitfall F: Tweepy includes dict access**
+`response.includes` in Tweepy's `AsyncClient` returns a plain dict, not an object with attribute access. Use `response.includes.get("media", [])` and `response.includes.get("users", [])` — not `response.includes.media`.
+
+---
+
+### EXP: Sources
+
+#### Primary (HIGH confidence)
+- `scheduler/agents/content_agent.py` — confirmed `format_type` column usage, `_get_config` pattern, `_run_pipeline` single-story flow
+- `backend/app/models/content_bundle.py` — confirmed column names: `format_type` (not `content_type`), `story_url`, `story_headline`, `created_at`, `no_story_flag`
+- `backend/alembic/versions/0001_initial_schema.py` — confirmed `format_type` String(50) in DB schema
+- `backend/alembic/versions/0004_add_engagement_alert_columns.py` — confirmed `op.alter_column` / `op.add_column` migration pattern (down_revision = "0004" is correct chain point)
+- `scheduler/agents/twitter_agent.py` — confirmed Tweepy `search_recent_tweets` call signature, `response.includes` dict access pattern, bearer token auth, quota tracking
+- `scheduler/worker.py` — confirmed `JOB_LOCK_IDS`, `_make_job` dispatch pattern, `_read_schedule_config` defaults dict
+- X API v2 docs (via WebSearch, multiple verified sources) — `has:videos` operator, `attachments.media_keys` expansion, `media_fields=["type"]`, Basic tier 10,000 tweets/month cap
+
+#### Secondary (MEDIUM confidence)
+- APScheduler 3.x CronTrigger docs (RST source on GitHub) — `week='*/2'` and `day_of_week='sun'` field syntax confirmed; year-boundary behavior documented as known limitation
+- X API v2 search operators (docs.x.com via search) — `-has:media` for text-only posts, `from:` operator
+
+#### Tertiary (LOW confidence)
+- Year-boundary firing behavior of `week='*/2'` — community-reported; not tested; acceptable risk documented
+
+---
+
+**Expansion research date:** 2026-04-07
+**Valid until:** 2026-05-07 (Twitter quota numbers may shift if X API pricing changes)

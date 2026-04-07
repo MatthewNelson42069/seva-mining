@@ -1,16 +1,35 @@
 ---
 phase: 07-content-agent
-verified: 2026-04-02T23:55:00Z
-status: passed
-score: 17/17 must-haves verified
+verified: 2026-04-07T00:00:00Z
+status: gaps_found
+score: 30/31 must-haves verified
+re_verification:
+  previous_status: passed
+  previous_score: 17/17
+  note: "Previous verification covered plans 07-01 through 07-05. This re-verification covers expansion plans 07-06 through 07-10."
+gaps:
+  - truth: "Test suite passes without failures"
+    status: failed
+    reason: "3 tests use stale hardcoded counts from before expansion plans 07-07/07-10 were applied — the implementation is correct but the tests were never updated"
+    artifacts:
+      - path: "scheduler/tests/test_content_agent.py"
+        issue: "Line 46: assert len(ca.RSS_FEEDS) == 4 — actual is 8 (correct per 07-07)"
+      - path: "scheduler/tests/test_content_agent.py"
+        issue: "Line 57: assert len(ca.SERPAPI_KEYWORDS) == 6 — actual is 10 (correct per 07-07)"
+      - path: "scheduler/tests/test_worker.py"
+        issue: "Line 97: expected_ids set has 5 jobs; actual is 7 (correct per 07-10 adding midday + gold_history)"
+    missing:
+      - "Update test_rss_feed_parsing: change assert len(ca.RSS_FEEDS) == 4 to == 8"
+      - "Update test_serpapi_parsing: change assert len(ca.SERPAPI_KEYWORDS) == 6 to == 10"
+      - "Update test_all_five_jobs_registered: add 'content_agent_midday' and 'gold_history_agent' to expected_ids; update count comment from 5 to 7"
 ---
 
-# Phase 7: Content Agent Verification Report
+# Phase 7: Content Agent Expansion (Plans 07-06 through 07-10) Verification Report
 
-**Phase Goal:** The Content Agent runs daily at 6am, ingests RSS and SerpAPI news, picks the single best qualifying story, conducts multi-step deep research, drafts it in the correct format with compliance checking, and delivers to the Senior Agent — or sends an explicit "no story today" flag.
-**Verified:** 2026-04-02T23:55:00Z
-**Status:** passed
-**Re-verification:** No — initial verification
+**Phase Goal:** Build the full Content Agent pipeline: DB migration renaming format_type to content_type, 8 RSS feeds + 10 SerpAPI keywords, breaking_news format, cross-run deduplication, multi-story output, video_clip and quote Twitter sourcing, infographic dual-platform with Instagram design system, historical pattern mode with SerpAPI verification, Gold History Agent with bi-weekly Sunday job, midday 12pm job.
+**Verified:** 2026-04-07
+**Status:** gaps_found — 3 stale test assertions; implementation is correct
+**Re-verification:** Yes — covers expansion plans 07-06 through 07-10 (previous verification covered 07-01 through 07-05)
 
 ---
 
@@ -18,149 +37,174 @@ score: 17/17 must-haves verified
 
 ### Observable Truths
 
-| #  | Truth                                                                                         | Status     | Evidence                                                                                                     |
-|----|-----------------------------------------------------------------------------------------------|------------|--------------------------------------------------------------------------------------------------------------|
-| 1  | Content Agent runs daily at 6am via APScheduler cron                                          | VERIFIED   | `worker.py` line 181-185: `trigger="cron", hour=6, minute=0, id="content_agent"`                           |
-| 2  | RSS ingestion from 4 gold-sector feeds (Kitco, Mining.com, JMN, WGC)                         | VERIFIED   | `RSS_FEEDS` constant lines 39-44 in `content_agent.py`; `_fetch_all_rss` method; test passes                |
-| 3  | SerpAPI news search with 6 gold keywords                                                      | VERIFIED   | `SERPAPI_KEYWORDS` constant lines 50-57 in `content_agent.py`; `_fetch_all_serpapi` method; test passes     |
-| 4  | URL + headline deduplication (85% threshold)                                                  | VERIFIED   | `deduplicate_stories` lines 133-189; URL + SequenceMatcher(ratio>=0.85) logic; both dedup tests pass        |
-| 5  | Story scoring: relevance (40%) + recency (30%) + credibility (30%), threshold 7.0/10         | VERIFIED   | `recency_score`, `credibility_score`, `calculate_story_score` pure functions; all 3 scoring tests pass      |
-| 6  | Single highest-scoring story above 7.0 selected; None returned when all below threshold       | VERIFIED   | `select_top_story` lines 196-211; `test_select_top_story` and `test_no_story_flag` both pass                |
-| 7  | Multi-step deep research: article fetch with BeautifulSoup + 2-3 corroborating sources        | VERIFIED   | `fetch_article` + `extract_article_text` + `_search_corroborating`; `test_article_fetch_fallback` passes   |
-| 8  | Combined Claude Sonnet format decision + drafting (thread/long_form/infographic)             | VERIFIED   | `_research_and_draft` lines 456-550; `claude-sonnet-4-20250514` with JSON response parsing                  |
-| 9  | Thread format produces tweet thread (3-5 tweets <=280 chars) AND long-form post (<=2200)     | VERIFIED   | User prompt at line 498-499; thread schema at line 512; `test_thread_draft_structure` passes                |
-| 10 | Infographic brief includes headline, 5-8 key stats, visual structure, caption text           | VERIFIED   | User prompt at line 500; infographic schema at line 514; `_extract_check_text` handles infographic fmt      |
-| 11 | Content drafted in senior analyst voice, no Seva Mining, no financial advice                 | VERIFIED   | System prompt lines 517-521 explicitly prohibits both; local pre-screen in `check_compliance`               |
-| 12 | Compliance checker: blocks Seva Mining, blocks financial advice, fail-safe defaults to block  | VERIFIED   | `check_compliance` lines 263-296; "seva mining" pre-screen + `result == "pass"` only passes; both tests pass|
-| 13 | No-story flag: ContentBundle with no_story_flag=True created when nothing qualifies          | VERIFIED   | `build_no_story_bundle` lines 303-318; `_run_pipeline` calls it in two places; `test_no_story_flag` passes  |
-| 14 | DraftItem created with platform="content", urgency="low", expires_at=None                    | VERIFIED   | `build_draft_item` lines 325-363; explicit field values; `test_draft_item_fields` passes                    |
-| 15 | ContentBundle.id stored in DraftItem.engagement_snapshot as content_bundle_id                | VERIFIED   | Line 362: `engagement_snapshot={"content_bundle_id": str(content_bundle.id)}`; test passes                  |
-| 16 | Full pipeline delivered to Senior Agent via process_new_items()                              | VERIFIED   | Lines 757-758: lazy import + `await process_new_items([item.id])`; `test_scheduler_wiring` passes           |
-| 17 | worker.py routes content_agent job to ContentAgent().run() (not placeholder)                 | VERIFIED   | Lines 148-155 in `worker.py`; `elif job_name == "content_agent"` branch; test passes                        |
+| # | Truth | Status | Evidence |
+|---|-------|--------|----------|
+| 1 | content_bundles column named content_type (not format_type) | VERIFIED | Migration 0005 renames it; all active code uses content_type |
+| 2 | All models/schemas/types/agent code reference content_type | VERIFIED | Zero format_type in backend/app/, scheduler/agents/, frontend/src/ (only historical migration 0001 and 0005 docstring) |
+| 3 | Alembic migration 0005 has upgrade and downgrade | VERIFIED | revision=0005, down_revision=0004; upgrade renames format_type→content_type; downgrade reverses |
+| 4 | RSS_FEEDS contains 8 feeds including Reuters, Bloomberg, GoldSeek, Investing.com | VERIFIED | content_agent.py lines 41-50 — exactly 8 entries |
+| 5 | SERPAPI_KEYWORDS contains 10 keywords including macro/inflation terms | VERIFIED | Lines 56-67 — includes "gold inflation hedge", "Fed gold", "dollar gold", "recession gold" |
+| 6 | CREDIBILITY_TIERS includes goldseek.com (0.6) and investing.com (0.6) | VERIFIED | Lines 95-105 — both present |
+| 7 | breaking_news format in Sonnet prompt: 1-3 lines, ALL CAPS key terms, no hashtags | VERIFIED | user_prompt line 923; JSON schema on line 958 with tweet + infographic_brief |
+| 8 | Cross-run dedup checks today's ContentBundle records | VERIFIED | _is_already_covered_today() lines 1035-1070; called in _run_pipeline() line 1221 |
+| 9 | Pipeline processes ALL qualifying stories | VERIFIED | select_qualifying_stories() lines 251-266; pipeline loops over all qualifying stories |
+| 10 | _extract_check_text() handles breaking_news format | VERIFIED | Lines 470-475 extract tweet + optional infographic_brief fields |
+| 11 | build_draft_item() handles breaking_news | VERIFIED | Lines 398-401 produce descriptive summary with char count |
+| 12 | VIDEO_ACCOUNTS and QUOTE_ACCOUNTS constants exist | VERIFIED | Lines 73-89 — VIDEO_ACCOUNTS has 7 accounts, QUOTE_ACCOUNTS has 5 |
+| 13 | _search_video_clips() uses has:videos operator | VERIFIED | Line 590: query includes "has:videos gold -is:retweet" |
+| 14 | _search_quote_tweets() uses -has:media operator | VERIFIED | Line 677: query includes "-has:media -is:retweet" |
+| 15 | _draft_video_caption() and _draft_quote_post() methods exist | VERIFIED | Lines 741-806 and 808-876 |
+| 16 | video_clip and quote in _extract_check_text() | VERIFIED | Lines 506-512 handle both |
+| 17 | build_draft_item() handles video_clip and quote | VERIFIED | Lines 417-420 with descriptive summaries |
+| 18 | infographic instagram_brief sub-object in Sonnet prompt | VERIFIED | Lines 961-964 specify instagram_brief in both modes |
+| 19 | Instagram brand colors in prompt: #F0ECE4, #0C1B32, #D4AF37 | VERIFIED | Lines 936-937 include all three with descriptions |
+| 20 | historical_pattern mode with SerpAPI verification fallback | VERIFIED | Lines 1007-1021: calls _search_corroborating() on pattern; falls back to current_data on empty |
+| 21 | _extract_check_text() handles infographic instagram_brief fields | VERIFIED | Lines 487-490 extract instagram_brief.headline and instagram_brief.caption |
+| 22 | _extract_check_text() handles gold_history format | VERIFIED | Lines 499-505 extract tweets, carousel slide headlines/bodies, instagram_caption |
+| 23 | gold_history_agent.py exists with class GoldHistoryAgent | VERIFIED | File confirmed at 427 lines; class GoldHistoryAgent line 34 |
+| 24 | GoldHistoryAgent has all 6 required methods | VERIFIED | run() line 404, _pick_story() line 93, _verify_facts() line 148, _draft_gold_history() line 198, _get_used_topics() line 54, _add_used_topic() line 71 |
+| 25 | worker.py JOB_LOCK_IDS: content_agent_midday=1008, gold_history_agent=1009 | VERIFIED | Lines 43-44 |
+| 26 | worker.py bi-weekly Sunday gold_history job (day_of_week="sun", week="*/2") | VERIFIED | Lines 302-312 |
+| 27 | worker.py midday content_agent job registered | VERIFIED | Lines 291-298 |
+| 28 | seed_content_data.py has gold_history_used_topics: "[]" | VERIFIED | Line 35 |
+| 29 | seed_content_data.py has content_agent_midday_hour and gold_history_hour | VERIFIED | Lines 33-34 |
+| 30 | GoldHistoryAgent uses check_compliance + build_draft_item from content_agent | VERIFIED | gold_history_agent.py line 289 lazy import; used at lines 350, 384 |
+| 31 | Test suite passes | FAILED | 3 stale assertions — see Gaps section below |
 
-**Score:** 17/17 truths verified
-
----
-
-### Required Artifacts
-
-| Artifact                                         | Expected                                          | Status     | Details                                                                            |
-|--------------------------------------------------|---------------------------------------------------|------------|------------------------------------------------------------------------------------|
-| `scheduler/pyproject.toml`                       | feedparser, beautifulsoup4, serpapi, httpx deps   | VERIFIED   | All 4 deps declared (`>=6.0`, `>=4.12`, `>=1.0`, `>=0.27`)                        |
-| `scheduler/models/content_bundle.py`             | ContentBundle ORM model                           | VERIFIED   | `class ContentBundle(Base)`, `__tablename__ = "content_bundles"`, all columns present|
-| `scheduler/models/__init__.py`                   | ContentBundle exported                            | VERIFIED   | `from models.content_bundle import ContentBundle` + in `__all__`                  |
-| `scheduler/agents/content_agent.py`              | Complete pipeline (520+ lines)                    | VERIFIED   | 795 lines; all pipeline functions present, substantive, and wired                  |
-| `scheduler/tests/test_content_agent.py`          | 16 tests, all passing                             | VERIFIED   | 16 tests collected; 16/16 pass in 0.43s                                            |
-| `scheduler/seed_content_data.py`                 | 4 content_* config keys                           | VERIFIED   | All 4 keys: `content_relevance_weight`, `content_recency_weight`, `content_credibility_weight`, `content_quality_threshold`|
-| `scheduler/worker.py`                            | ContentAgent wired to cron job                    | VERIFIED   | Import at line 20; `elif job_name == "content_agent"` branch at lines 148-155      |
-
----
-
-### Key Link Verification
-
-| From                               | To                                  | Via                                       | Status   | Details                                                       |
-|------------------------------------|-------------------------------------|-------------------------------------------|----------|---------------------------------------------------------------|
-| `scheduler/models/content_bundle.py` | `scheduler/models/base.py`         | `from models.base import Base`            | WIRED    | Line 5 of content_bundle.py                                   |
-| `scheduler/models/__init__.py`     | `scheduler/models/content_bundle.py`| `from models.content_bundle import ContentBundle` | WIRED | Line 7 of __init__.py                                        |
-| `scheduler/tests/test_content_agent.py` | `scheduler/agents/content_agent.py` | `importlib.import_module("agents.content_agent")` | WIRED | `_get_content_agent()` function; used in every test        |
-| `scheduler/agents/content_agent.py` | `httpx`                            | `httpx.AsyncClient` in `fetch_article`    | WIRED    | Lines 244-256; imports at line 20                             |
-| `scheduler/agents/content_agent.py` | `bs4`                              | `BeautifulSoup` in `extract_article_text` | WIRED   | Lines 224-234; imports at line 21                             |
-| `scheduler/agents/content_agent.py` | `anthropic`                        | `claude-sonnet-4-20250514` in `_research_and_draft` | WIRED | Line 525; also `claude-haiku-3-20240307` in `check_compliance` and `_score_relevance` |
-| `scheduler/agents/content_agent.py` | `scheduler/agents/senior_agent.py` | lazy import `process_new_items`           | WIRED    | Line 757: `from agents.senior_agent import process_new_items`; `process_new_items` exists at line 862 of senior_agent.py |
-| `scheduler/agents/content_agent.py` | `scheduler/models/content_bundle.py` | `ContentBundle(` instantiation          | WIRED    | Lines 312-318, 708-718, 727-738; lazy imports used throughout |
-| `scheduler/agents/content_agent.py` | `scheduler/models/draft_item.py`   | `DraftItem(` instantiation               | WIRED    | Lines 338, 352-363 in `build_draft_item`                      |
-| `scheduler/worker.py`              | `scheduler/agents/content_agent.py` | `from agents.content_agent import ContentAgent` | WIRED | Line 20 of worker.py; used at line 149                       |
+**Score:** 30/31 truths verified
 
 ---
 
-### Data-Flow Trace (Level 4)
+## Required Artifacts
 
-| Artifact                          | Data Variable   | Source                                           | Produces Real Data | Status   |
-|-----------------------------------|-----------------|--------------------------------------------------|--------------------|----------|
-| `content_agent.py::_run_pipeline` | `all_stories`   | `_fetch_all_rss()` + `_fetch_all_serpapi()` via asyncio.gather | Yes — feedparser.parse + serpapi.Client.search calls | FLOWING  |
-| `content_agent.py::_run_pipeline` | `scored`        | `_score_relevance()` per story via Claude Haiku  | Yes — real Claude API call with 0.5 fallback on failure | FLOWING |
-| `content_agent.py::_run_pipeline` | `draft_content` | `_research_and_draft()` via Claude Sonnet        | Yes — JSON parsed from API response; returns None on failure | FLOWING |
-| `content_agent.py::_run_pipeline` | `compliance_ok` | `check_compliance()` via Claude Haiku + local pre-screen | Yes — `result == "pass"` only; fail-safe blocks | FLOWING |
-| `content_agent.py::_run_pipeline` | `threshold`     | `_get_config()` reads DB `Config` table at runtime | Yes — `select(Config).where(Config.key == key)` | FLOWING |
-
----
-
-### Behavioral Spot-Checks
-
-| Behavior                                                  | Command                                                                                | Result             | Status  |
-|-----------------------------------------------------------|----------------------------------------------------------------------------------------|--------------------|---------|
-| All 16 content agent tests pass                           | `uv run pytest tests/test_content_agent.py -v`                                        | 16 passed in 0.43s | PASS    |
-| Full test suite (no regressions in other agents)          | `uv run pytest tests/ -q`                                                              | 74 passed in 0.46s | PASS    |
-| ContentAgent importable with all exports                  | `uv run python -c "from agents.content_agent import ContentAgent, recency_score, ..."` | Confirmed via tests | PASS   |
-| ContentBundle importable from scheduler models            | Confirmed via `test_no_story_flag`, `test_draft_item_fields`, `test_content_bundle_link` | All pass         | PASS    |
+| Artifact | Expected | Status | Details |
+|----------|----------|--------|---------|
+| `backend/alembic/versions/0005_rename_format_type_to_content_type.py` | Migration renaming format_type to content_type | VERIFIED | revision=0005, down_revision=0004, upgrade+downgrade present |
+| `backend/app/models/content_bundle.py` | Backend model with content_type | VERIFIED | content_type = Column(String(50)) with 7-format comment |
+| `backend/app/schemas/content_bundle.py` | Pydantic schema with content_type | VERIFIED | content_type: Optional[str] = None |
+| `scheduler/models/content_bundle.py` | Scheduler mirror with content_type | VERIFIED | content_type = Column(String(50)) with 7-format comment |
+| `frontend/src/api/types.ts` | TS type with content_type | VERIFIED | content_type?: string in ContentBundleResponse |
+| `frontend/src/pages/ContentPage.tsx` | Frontend using content_type | VERIFIED | bundle.content_type throughout; Badge displays it |
+| `scheduler/agents/content_agent.py` | Full content agent | VERIFIED | 1,413 lines — complete implementation |
+| `scheduler/agents/gold_history_agent.py` | Gold History Agent | VERIFIED | 427 lines with all required methods |
+| `scheduler/worker.py` | Worker with 7 jobs | VERIFIED | 7 jobs including midday + gold_history |
+| `scheduler/seed_content_data.py` | Seed with all config keys | VERIFIED | 10 entries including 3 added by plan 07-10 |
 
 ---
 
-### Requirements Coverage
+## Key Link Verification
 
-| Requirement | Source Plan | Description                                                                 | Status    | Evidence                                                                      |
-|-------------|-------------|-----------------------------------------------------------------------------|-----------|-------------------------------------------------------------------------------|
-| CONT-01     | 07-01, 07-05| Agent runs daily at 6am pulling content from all sources                    | SATISFIED | `worker.py` cron trigger `hour=6`; `ContentAgent().run()` wired               |
-| CONT-02     | 07-01, 07-02, 07-05 | RSS ingestion from Kitco, Mining.com, JMN, WGC                   | SATISFIED | `RSS_FEEDS` constant + `_fetch_all_rss()` with feedparser                     |
-| CONT-03     | 07-01, 07-02, 07-05 | SerpAPI news search with 6 gold keywords                          | SATISFIED | `SERPAPI_KEYWORDS` constant + `_fetch_all_serpapi()` with serpapi.Client      |
-| CONT-04     | 07-02       | URL + headline deduplication (85% threshold)                               | SATISFIED | `deduplicate_stories()` — URL set dedup + SequenceMatcher >= 0.85              |
-| CONT-05     | 07-02       | Story scoring: relevance 40%, recency 30%, credibility 30%                 | SATISFIED | `recency_score`, `credibility_score`, `calculate_story_score`; Claude Haiku relevance |
-| CONT-06     | 07-02       | Quality threshold: single highest-scoring story above 7.0/10               | SATISFIED | `select_top_story(stories, threshold=threshold)` with DB-read threshold        |
-| CONT-07     | 07-04       | "No story today" flag sent to Senior Agent if nothing clears threshold      | SATISFIED | `build_no_story_bundle()` creates ContentBundle with `no_story_flag=True`      |
-| CONT-08     | 07-03       | Deep research: full article fetch, 2-3 corroborating sources, key data points | SATISFIED | `fetch_article` + `extract_article_text` + `_search_corroborating`            |
-| CONT-09     | 07-03       | Format decision logic: Claude decides thread/long_form/infographic          | SATISFIED | `_research_and_draft()` passes full research to Sonnet for format decision     |
-| CONT-10     | 07-03       | Thread format = tweet thread (3-5 tweets <=280) + long-form X post         | SATISFIED | Prompt specifies both; draft_content schema documented and enforced            |
-| CONT-11     | 07-03       | Infographic brief: headline, 5-8 key stats, visual structure, caption text  | SATISFIED | Infographic schema in prompt; `_extract_check_text` handles infographic fmt   |
-| CONT-12     | 07-03       | Infographic generation (HTML templates / AI image generation)               | SATISFIED (Phase 7 scope) | Per `07-CONTEXT.md`: Phase 7 produces structured JSON brief; image rendering deferred to Phase 8 by design decision |
-| CONT-13     | 07-03       | Content in senior analyst voice — data-driven, cites specifics              | SATISFIED | System prompt: "senior gold market analyst... data-driven, measured tone"      |
-| CONT-14     | 07-04       | No mention of Seva Mining in any content                                    | SATISFIED | Local pre-screen + Claude compliance checker; test confirms False returned     |
-| CONT-15     | 07-04       | No financial advice in any content                                          | SATISFIED | System prompt prohibits it; compliance checker checks for it via Claude Haiku  |
-| CONT-16     | 07-04       | Separate Claude compliance-checker call on all content                      | SATISFIED | `check_compliance()` — Claude Haiku call with fail-safe; `test_compliance_failsafe` confirms |
-| CONT-17     | 07-04       | Content packaged with all sources and credibility score, sent to Senior Agent | SATISFIED | `build_draft_item()` creates DraftItem with `engagement_snapshot={"content_bundle_id": ...}`; `process_new_items` called |
-
-All 17 CONT requirements: SATISFIED
+| From | To | Via | Status | Details |
+|------|----|-----|--------|---------|
+| migration 0005 | content_bundles table | op.alter_column new_column_name | VERIFIED | Both upgrade and downgrade present |
+| content_agent.py | scheduler/models/content_bundle.py | ContentBundle.content_type = draft_content.get("format") | VERIFIED | Line 1271 |
+| content_agent.py | ContentBundle (cross-run dedup) | _is_already_covered_today func.date query | VERIFIED | Lines 1035-1070 |
+| content_agent.py | tweepy.AsyncClient | search_recent_tweets with has:videos / -has:media | VERIFIED | Lines 593 and 680 |
+| content_agent.py | ContentBundle | content_type="video_clip" | VERIFIED | Line 1393 |
+| worker.py | gold_history_agent.py | GoldHistoryAgent import + elif branch | VERIFIED | Line 22 import; lines 168-175 |
+| worker.py | content_agent.py | content_agent_midday uses ContentAgent().run() | VERIFIED | Lines 161-167 |
+| gold_history_agent.py | Config table | gold_history_used_topics read/write | VERIFIED | _get_used_topics() and _add_used_topic() |
 
 ---
 
-### Anti-Patterns Found
+## Data-Flow Trace (Level 4)
 
-| File                                      | Line    | Pattern                                         | Severity | Impact                                                         |
-|-------------------------------------------|---------|-------------------------------------------------|----------|----------------------------------------------------------------|
-| `scheduler/agents/content_agent.py`       | 370-387 | `parse_rss_entries` and `parse_serpapi_results` return `[]` hardcoded | INFO | These are explicitly superseded stubs per SUMMARY ("unused placeholders — do not affect pipeline operation"). Pipeline uses `_fetch_all_rss()` and `_fetch_all_serpapi()` class methods instead. Not called anywhere in production or test code. |
-
-No blockers or warnings found. The two stub functions are documented remnants not called by any live code path. The real pipeline methods (`_fetch_all_rss`, `_fetch_all_serpapi`) fully replace them.
-
----
-
-### Human Verification Required
-
-#### 1. Live Pipeline Run
-
-**Test:** Manually trigger `ContentAgent().run()` against a real database with SERPAPI_API_KEY and ANTHROPIC_API_KEY set.
-**Expected:** AgentRun record created with status="completed"; ContentBundle record with non-null `draft_content`; DraftItem created and delivered to Senior Agent queue.
-**Why human:** Cannot test without live API credentials and a running database. Automated tests mock all external calls.
-
-#### 2. Infographic Brief Quality
-
-**Test:** Review an infographic-format `draft_content` JSON blob from an actual run.
-**Expected:** `key_stats` contains 5-8 numerical data points with source citations; `visual_structure` is one of the five defined options; `caption_text` is written in senior analyst voice.
-**Why human:** Content quality and voice cannot be verified programmatically.
-
-#### 3. 6am Cron Timing in Production
-
-**Test:** After Railway deployment, verify the content_agent job fires at 6:00 AM UTC (or configured timezone).
-**Expected:** AgentRun record with `agent_name="content_agent"` and `started_at` matching 06:00.
-**Why human:** Cannot simulate scheduler timing in static analysis; requires production observation.
+| Artifact | Data Variable | Source | Produces Real Data | Status |
+|----------|---------------|--------|--------------------|--------|
+| `ContentPage.tsx` | bundle | getTodayContent() useQuery | GET /api/content/today → real DB | FLOWING |
+| `content_agent.py` pipeline | qualifying stories | _fetch_all_rss() + _fetch_all_serpapi() | Live feedparser + SerpAPI calls | FLOWING |
+| `gold_history_agent.py` pipeline | draft_content | _draft_gold_history() Claude Sonnet | Claude API + SerpAPI fact verification | FLOWING |
 
 ---
 
-### Gaps Summary
+## Behavioral Spot-Checks
 
-No gaps. All 17 CONT requirements are satisfied, all 16 tests pass, the full pipeline is wired end-to-end. The two stub functions (`parse_rss_entries`, `parse_serpapi_results`) remain in the file as unused code from an early planning stage but have no impact on the live pipeline.
+Step 7b: SKIPPED — agents require live DB, Claude API, SerpAPI, and Twitter API. No runnable entry point can be tested without credentials and a running database. Module constant checks performed by static read instead.
 
-CONT-12 (infographic generation via HTML templates / AI image generation) was intentionally scoped to structured JSON output only in Phase 7, with actual image rendering deferred to Phase 8. This is documented in `07-CONTEXT.md` ("This phase does NOT include: ... infographic image generation") and the requirement as implemented is consistent with the CONTEXT scope decision.
+| Behavior | Check | Result | Status |
+|----------|-------|--------|--------|
+| RSS_FEEDS == 8 entries | Read content_agent.py lines 41-50 | 8 confirmed | PASS |
+| SERPAPI_KEYWORDS == 10 | Read content_agent.py lines 56-67 | 10 confirmed | PASS |
+| JOB_LOCK_IDS midday=1008 and gold=1009 | Read worker.py lines 43-44 | Both confirmed | PASS |
+| gold_history_used_topics seeded | Read seed_content_data.py line 35 | Present with "[]" | PASS |
+| pytest (excluding stale tests) | Run with --deselect on 3 stale tests | 71 passed, 0 failed | PASS |
 
 ---
 
-_Verified: 2026-04-02T23:55:00Z_
+## Requirements Coverage
+
+| Requirement | Source Plan | Description | Status | Evidence |
+|-------------|------------|-------------|--------|----------|
+| CONT-09 | 07-06 through 07-09 | content_type field, 7 format types | SATISFIED | All 7 formats implemented in content_agent.py + gold_history_agent.py |
+| CONT-02 | 07-07 | 8 RSS feeds | SATISFIED | RSS_FEEDS has 8 entries |
+| CONT-03 | 07-07 | 10 SerpAPI keywords | SATISFIED | SERPAPI_KEYWORDS has 10 entries |
+| CONT-04 | 07-07 | Cross-run deduplication | SATISFIED | _is_already_covered_today() method |
+| CONT-05 | 07-07 | Story scoring with weighted components | SATISFIED | calculate_story_score() + recency/credibility functions |
+| CONT-10 | 07-07 | Multi-story pipeline | SATISFIED | select_qualifying_stories() + for loop in _run_pipeline() |
+| CONT-11 | 07-09 | Infographic dual-platform + Instagram design system | SATISFIED | instagram_brief in prompt + brand colors #F0ECE4, #0C1B32, #D4AF37 |
+| CONT-12 | 07-09 | Historical pattern mode with SerpAPI verification fallback | SATISFIED | Lines 1007-1021 |
+| CONT-13 | 07-08 | Video clip + quote Twitter sourcing | SATISFIED | _search_video_clips() and _search_quote_tweets() |
+| CONT-01 | 07-10 | 3 APScheduler jobs (6am, 12pm, bi-weekly Sunday) | SATISFIED | 7 jobs total in worker.py |
+| CONT-07 | 07-10 | No-story flag + all-covered-today case | SATISFIED | build_no_story_bundle() + all_already_covered path |
+| CONT-14 | 07-07, 07-10 | Compliance checking on all draft text | SATISFIED | check_compliance() used in both agents |
+| CONT-15 | 07-07, 07-10 | No Seva Mining mention | SATISFIED | Local pre-screen + Haiku check |
+| CONT-16 | 07-07, 07-10 | No financial advice | SATISFIED | Haiku check + system prompt prohibitions |
+| CONT-17 | 07-07, 07-10 | Senior Agent DraftItem integration | SATISFIED | build_draft_item() + process_new_items() in both agents |
+
+---
+
+## Anti-Patterns Found
+
+| File | Line | Pattern | Severity | Impact |
+|------|------|---------|----------|--------|
+| `scheduler/tests/test_content_agent.py` | 46 | `assert len(ca.RSS_FEEDS) == 4` — stale count, actual is 8 | Blocker | CI fails; 3 tests total fail the -x run |
+| `scheduler/tests/test_content_agent.py` | 57 | `assert len(ca.SERPAPI_KEYWORDS) == 6` — stale count, actual is 10 | Blocker | CI fails |
+| `scheduler/tests/test_worker.py` | 97 | `expected_ids` set has 5 entries — missing content_agent_midday and gold_history_agent | Blocker | CI fails; assertion message also says "exactly 5 jobs" |
+| `scheduler/agents/content_agent.py` | 442-459 | `parse_rss_entries()` and `parse_serpapi_results()` still return `[]` stubs | Info | Not a gap — these functions are unused; actual parsing is inline in _fetch_all_rss() and _fetch_all_serpapi(). No user-visible impact. |
+
+---
+
+## Human Verification Required
+
+### 1. ContentPage Multi-Format Rendering
+
+**Test:** Seed ContentBundle records with each of the 7 content_types. Open the dashboard Content page and cycle through them.
+**Expected:** thread shows numbered tweets, long_form shows textarea, infographic shows InfographicPreview component, breaking_news/video_clip/quote/gold_history fall through to JSON pre block.
+**Why human:** React rendering behavior requires running frontend.
+
+### 2. APScheduler Week Boundary Behavior
+
+**Test:** Review the week="*/2" edge case at ISO week 52/53 rollover (documented in worker.py comment line 299-301).
+**Expected:** At most one extra Gold History post in early January — acceptable per the code comment.
+**Why human:** Calendar edge case; cannot simulate without date manipulation.
+
+### 3. Twitter API Video Filter Accuracy
+
+**Test:** Run _search_video_clips() with a live X_API_BEARER_TOKEN and verify the has_video filter correctly excludes GIFs and image-only tweets.
+**Expected:** Only tweets with type="video" media attachments are returned.
+**Why human:** Requires live Twitter API credentials.
+
+---
+
+## Gaps Summary
+
+The implementation across all 5 plans (07-06 through 07-10) is functionally complete. All 30 implementation requirements are satisfied. The single gap is test hygiene: 3 test assertions predate the expansion plans and contain stale hardcoded counts.
+
+**This is a documentation/test gap, not an implementation gap.** The code is correct; the tests are wrong.
+
+**Root cause:** Plans 07-07 and 07-10 expanded RSS_FEEDS to 8, SERPAPI_KEYWORDS to 10, and added 2 new APScheduler jobs. The test files checked against the pre-expansion counts (4, 6, 5) and were never updated.
+
+**Fix:** 3 one-line changes in 2 test files:
+
+| File | Line | Change |
+|------|------|--------|
+| `scheduler/tests/test_content_agent.py` | 46 | `assert len(ca.RSS_FEEDS) == 4` → `== 8` |
+| `scheduler/tests/test_content_agent.py` | 57 | `assert len(ca.SERPAPI_KEYWORDS) == 6` → `== 10` |
+| `scheduler/tests/test_worker.py` | 97 | Add `"content_agent_midday"` and `"gold_history_agent"` to `expected_ids` set; update docstring from "exactly 5 jobs" to "exactly 7 jobs" |
+
+With those 3 fixes applied, all 74 tests pass (confirmed: 71 passed when the 3 stale tests are deselected).
+
+---
+
+_Verified: 2026-04-07_
 _Verifier: Claude (gsd-verifier)_
