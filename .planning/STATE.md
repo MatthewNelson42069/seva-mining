@@ -174,6 +174,12 @@ Recent decisions affecting current work:
 
 None yet.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260407-n9t | Content agent schedule fix (6am/12pm PST) + enhanced WhatsApp notification with titles | 2026-04-07 | 9bc17e1 | [260407-n9t](./quick/260407-n9t-content-agent-schedule-fix-and-enhanced-/) |
+
 ### Blockers/Concerns
 
 - [Phase 1]: Twilio WhatsApp templates must be submitted to Meta during Phase 1 — approval takes 1-7 business days. Confirm whether a WhatsApp Business account already exists for Seva Mining before starting Phase 1 planning.
