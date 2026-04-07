@@ -249,7 +249,7 @@ class TwitterAgent:
 
         Returns:
             (can_proceed: bool, current_count: int)
-            can_proceed is False when count >= (10000 - safety_margin).
+            can_proceed is False when count >= (20000 - safety_margin).
         """
         now = datetime.now(timezone.utc)
         current_month = now.strftime("%Y-%m")
@@ -273,8 +273,8 @@ class TwitterAgent:
             stored_month = reset_row.value
 
         if margin_row is None:
-            await self._set_config(session, "twitter_quota_safety_margin", "1500")
-            safety_margin = 1500
+            await self._set_config(session, "twitter_quota_safety_margin", "2000")
+            safety_margin = 2000
         else:
             safety_margin = int(margin_row.value)
 
@@ -295,14 +295,15 @@ class TwitterAgent:
             current_count = 0
 
         # Hard-stop: remaining capacity < safety margin
-        hard_stop_threshold = 10000 - safety_margin
+        # Monthly cap set to 20,000 reads (~$100/mo at $0.005/read pay-per-use pricing)
+        hard_stop_threshold = 20000 - safety_margin
         can_proceed = current_count < hard_stop_threshold
 
         if not can_proceed:
             logger.warning(
                 "Quota hard-stop: %d tweets read this month (limit: %d, margin: %d).",
                 current_count,
-                10000,
+                20000,
                 safety_margin,
             )
 
@@ -438,7 +439,7 @@ class TwitterAgent:
             try:
                 response = await self.tweepy_client.get_users_tweets(
                     id=account.platform_user_id,
-                    max_results=10,
+                    max_results=3,
                     tweet_fields=TWEET_FIELDS,
                     expansions=["author_id"],
                     user_fields=USER_FIELDS,
@@ -505,7 +506,7 @@ class TwitterAgent:
             try:
                 response = await self.tweepy_client.search_recent_tweets(
                     query=query,
-                    max_results=100,
+                    max_results=30,
                     tweet_fields=TWEET_FIELDS,
                     expansions=["author_id"],
                     user_fields=USER_FIELDS,
@@ -1234,7 +1235,7 @@ async def reset_quota_if_new_month(session: AsyncSession) -> bool:
 async def is_quota_exceeded(session: AsyncSession, safety_margin: int = 500) -> bool:
     """Return True if the monthly tweet quota has reached the hard-stop threshold.
 
-    Hard-stop threshold = 10000 - safety_margin.
+    Hard-stop threshold = 20000 - safety_margin.
 
     Args:
         session: Active async database session.
@@ -1242,10 +1243,10 @@ async def is_quota_exceeded(session: AsyncSession, safety_margin: int = 500) -> 
                        Note: DB-stored margin is only used by TwitterAgent._check_quota.
 
     Returns:
-        True if current quota >= (10000 - safety_margin), False otherwise.
+        True if current quota >= (20000 - safety_margin), False otherwise.
     """
     current = await get_quota(session)
-    return current >= (10000 - safety_margin)
+    return current >= (20000 - safety_margin)
 
 
 async def draft_for_post(post: dict, client: AsyncAnthropic) -> dict:

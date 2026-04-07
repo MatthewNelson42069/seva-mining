@@ -449,15 +449,15 @@ async def test_quota_month_reset():
 @pytest.mark.asyncio
 async def test_quota_hard_stop():
     """
-    Agent returns early when quota >= (10000 - safety_margin).
+    Agent returns early when quota >= (20000 - safety_margin).
     Covers: TWIT-12
     """
     ta = _get_twitter_agent()
     mock_session = AsyncMock()
 
-    # Quota at 9500 → should trigger hard stop (threshold = 10000 - 500)
+    # Quota at 19500 → should trigger hard stop (threshold = 20000 - 500)
     mock_config = MagicMock()
-    mock_config.value = "9500"
+    mock_config.value = "19500"
     mock_result = MagicMock()
     mock_result.scalar_one_or_none = MagicMock(return_value=mock_config)
     mock_session.execute = AsyncMock(return_value=mock_result)
