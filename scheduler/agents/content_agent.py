@@ -873,7 +873,7 @@ Respond in valid JSON:
 
         article_block = article_text if article_text else "Article text unavailable — use corroborating sources and headline."
 
-        user_prompt = f"""Based on the following research, produce original content for publication on X (Twitter).
+        user_prompt = f"""Based on the following research, produce original content for publication on X (Twitter) and Instagram.
 
 ## Story
 Headline: {story.get('title', '')}
@@ -887,41 +887,66 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
 
 ## Instructions
 1. Extract 5-8 key data points from the research (numbers, percentages, dates, production figures).
-2. Decide the best format for this content:
-   - "breaking_news" — for urgent/speed stories ("this just happened"). 1-3 punchy lines, ALL CAPS for key terms, no hashtags. Optional infographic_brief if story has strong visual data.
-   - "thread" — for multi-faceted stories that benefit from sequential presentation (produces BOTH a tweet thread of 3-5 tweets each <=280 chars AND a single long-form X post <=2200 chars)
-   - "long_form" — for focused stories that work as a single extended post (<=2200 chars)
-   - "infographic" — for data-heavy stories with strong visual potential (produces headline, 5-8 key stats with sources, visual structure suggestion from ["bar chart", "timeline", "comparison table", "stat callouts", "map"], and full caption text)
-   - "quote" — when a strong text quote from a credible figure is found in article content. Produces a pull-quote post with attribution and 1-2 lines of analyst context.
-   - "video_clip" — NOT chosen here; produced by direct Twitter search of credible gold sector video accounts.
-   - "gold_history" — NOT chosen here; produced by a separate bi-weekly Gold History job.
+2. Decide the best format for this content. Choose from these options:
+
+   - "thread" — for stories with 3+ separable angles each worth a tweet. Produces BOTH a tweet thread (3-5 tweets, each <=280 chars) AND a long-form X post (<=2200 chars). Default for ambiguous stories.
+   - "long_form" — for a single coherent narrative — one powerful argument or insight. Single X post <=2200 chars.
+   - "breaking_news" — for urgency/speed stories ("this just happened, pay attention"): major price moves, major announcements, stories where speed is the value. 1-3 punchy lines, ALL CAPS for key terms, no hashtags. Optional infographic pairing if story also has strong visual data.
+   - "infographic" — for stories with clear comparison, trend, or historical parallel with >=4 stats — better visualized than narrated. Two modes:
+       * "current_data" — key stats from today's story (prices, tonnage, percentages, production figures).
+       * "historical_pattern" — today's story triggers a historical analysis: how current conditions echo a past pattern and what that predicted. Use only when the story naturally supports a compelling historical parallel. Produces full dual-platform output (Twitter caption + Instagram brief).
+   - "quote" — when a strong text quote from a credible named figure is found in the article content. Pull-quote format: quote in quotation marks, attribution, 1-2 lines of analyst context. Produces dual-platform output.
+   - "video_clip" — NOT chosen here; produced by direct Twitter search of credible gold sector video accounts. Skip this option.
+   - "gold_history" — NOT chosen here; produced by a separate bi-weekly Gold History job. Skip this option.
+
+   Default (ambiguous story): "thread"
+
 3. Draft the content in your chosen format.
-4. Provide a brief rationale for your format choice (1-2 sentences).
+4. For formats that produce Instagram content (infographic, quote), follow this design system:
+   - Aesthetic: Minimalist, data-forward, a16z-inspired clean editorial style
+   - Brand colors: Background #F0ECE4 (warm cream), Primary text #0C1B32 (deep navy), Gold accent #D4AF37 (metallic gold, used sparingly for key numbers/highlights)
+   - Large bold headline or stat as the visual anchor
+   - Body text max 15 words per slide/post
+   - Gold accent on 1-2 elements max per visual
+   - Instagram brief fields: headline (large-text anchor), key_stats (same data as main), visual_structure (layout intent), caption (Instagram post caption)
+5. Provide a brief rationale for your format choice (1-2 sentences).
 
 Respond in valid JSON with this structure:
 {{
-  "format": "breaking_news" | "thread" | "long_form" | "infographic" | "quote",
+  "format": "thread" | "long_form" | "breaking_news" | "infographic" | "quote",
   "rationale": "...",
   "key_data_points": ["...", "..."],
   "draft_content": {{ ... }}
 }}
 
-For "breaking_news" format, draft_content must have: {{"format": "breaking_news", "tweet": "1-3 line breaking news tweet with ALL CAPS key terms", "infographic_brief": null}}
-For "thread" format, draft_content must have: {{"format": "thread", "tweets": ["t1", ...], "long_form_post": "..."}}
-For "long_form" format, draft_content must have: {{"format": "long_form", "post": "..."}}
-For "infographic" format, draft_content must have: {{"format": "infographic", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "visual_structure": "bar chart", "caption_text": "..."}}
-For "quote" format, draft_content must have: {{"format": "quote", "speaker": "...", "speaker_title": "...", "quote_text": "...", "source_url": "...", "twitter_post": "full formatted quote post for X", "instagram_post": "same formatted for Instagram"}}"""
+For "thread" format, draft_content must have:
+{{"format": "thread", "tweets": ["tweet1 (<=280 chars)", "tweet2", "...up to 5"], "long_form_post": "single X post <=2200 chars"}}
+
+For "long_form" format, draft_content must have:
+{{"format": "long_form", "post": "single X post <=2200 chars"}}
+
+For "breaking_news" format, draft_content must have:
+{{"format": "breaking_news", "tweet": "1-3 line breaking news tweet with ALL CAPS key terms, no hashtags", "infographic_brief": null}}
+
+For "infographic" format with mode "current_data", draft_content must have:
+{{"format": "infographic", "mode": "current_data", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "historical_context": null, "visual_structure": "bar chart | timeline | comparison table | stat callouts | map | trend line", "twitter_caption": "1-3 sentences for X in senior analyst voice", "instagram_brief": {{"headline": "large-text anchor stat or headline", "key_stats": [{{"stat": "...", "source": "..."}}], "visual_structure": "layout intent note", "caption": "Instagram post caption"}}}}
+
+For "infographic" format with mode "historical_pattern", draft_content must have:
+{{"format": "infographic", "mode": "historical_pattern", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "historical_context": {{"pattern": "description of the historical parallel", "then": "what happened in the past period", "now": "what is happening now", "implication": "what the pattern suggests"}}, "visual_structure": "historical comparison | timeline | trend line", "twitter_caption": "1-3 sentences for X in senior analyst voice", "instagram_brief": {{"headline": "large-text anchor stat or headline", "key_stats": [{{"stat": "...", "source": "..."}}], "visual_structure": "layout intent note", "caption": "Instagram post caption"}}}}
+
+For "quote" format, draft_content must have:
+{{"format": "quote", "speaker": "Full Name", "speaker_title": "title/credentials", "quote_text": "\\"the exact quote in quotation marks\\"", "source_url": "...", "twitter_post": "quote + attribution + 1-2 lines analyst context for X", "instagram_post": "same formatted for Instagram (can expand slightly)"}}"""
 
         system_prompt = (
-            "You are a senior gold market analyst with an authoritative, inside-the-room perspective. "
-            "You produce original content about the gold and mining sector based on research provided. "
-            "You write in a data-driven, measured tone — precise and punchy. Every sentence earns its place. "
-            "First line is always the most impactful data point. Lead with the number. "
-            "Surface ONE non-obvious insight not in the original article — a pattern, implication, or comparison. "
-            "You cite specific numbers, dates, and sources. "
+            "You are a senior gold market analyst. Authoritative, inside-the-room perspective. "
+            "Tone: Precise + punchy. Data-forward. Every sentence earns its place. "
+            "Opening rule: First line is always the most impactful data point or fact. Lead with the number. "
+            "Differentiation: Every draft must surface ONE non-obvious insight not in the original article — "
+            "a pattern, implication, or comparison no one else made. "
             "You never mention Seva Mining. You never give financial advice. You never use "
             'phrases like "buy", "sell", "invest in", "I recommend", or "you should". '
-            "When a story has clear urgency (major price moves, major announcements), prefer breaking_news format."
+            "When a story has clear urgency (major price moves, major announcements, breaking developments), "
+            "prefer breaking_news format."
         )
 
         try:
@@ -946,6 +971,25 @@ For "quote" format, draft_content must have: {{"format": "quote", "speaker": "..
         draft_content = parsed.get("draft_content", {})
         rationale = parsed.get("rationale", "")
         key_data_points = parsed.get("key_data_points", [])
+
+        # Historical pattern verification: if infographic mode is historical_pattern,
+        # verify the historical claim via SerpAPI. Fall back to current_data if zero
+        # corroborating sources are returned.
+        if (
+            draft_content.get("format") == "infographic"
+            and draft_content.get("mode") == "historical_pattern"
+        ):
+            historical_context = draft_content.get("historical_context") or {}
+            pattern_query = historical_context.get("pattern", "")
+            if pattern_query:
+                corroborating_historical = await self._search_corroborating(pattern_query)
+                if not corroborating_historical:
+                    logger.warning(
+                        "Historical pattern verification failed for '%s', falling back to current_data mode",
+                        pattern_query[:80],
+                    )
+                    draft_content["mode"] = "current_data"
+                    draft_content["historical_context"] = None
 
         # Update deep_research with extracted key data points
         updated_research = dict(deep_research)
