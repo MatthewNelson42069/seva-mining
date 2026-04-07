@@ -39,7 +39,6 @@ JOB_LOCK_IDS: dict[str, int] = {
     "instagram_agent": 1002,
     "content_agent": 1003,
     "morning_digest": 1005,
-    "content_agent_midday": 1008,
     "gold_history_agent": 1009,
 }
 
@@ -150,14 +149,6 @@ def _make_job(job_name: str, engine):
                     job_name,
                     agent.run,
                 )
-            elif job_name == "content_agent_midday":
-                agent = ContentAgent()
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    agent.run,
-                )
             elif job_name == "gold_history_agent":
                 agent = GoldHistoryAgent()
                 await with_advisory_lock(
@@ -185,9 +176,8 @@ async def _read_schedule_config(engine) -> dict[str, str]:
     defaults = {
         "twitter_interval_hours": "2",
         "instagram_interval_hours": "4",
-        "content_agent_schedule_hour": "14",
+        "content_agent_interval_hours": "2",
         "morning_digest_schedule_hour": "8",
-        "content_agent_midday_hour": "20",
         "gold_history_hour": "9",
     }
     try:
@@ -220,34 +210,32 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     Config keys:
     - twitter_interval_hours (default: 2)
     - instagram_interval_hours (default: 4)
-    - content_agent_schedule_hour (default: 6)
+    - content_agent_interval_hours (default: 2)
     - morning_digest_schedule_hour (default: 8)
     """
     cfg = await _read_schedule_config(engine)
 
     twitter_hours = int(cfg["twitter_interval_hours"])
     instagram_hours = int(cfg["instagram_interval_hours"])
-    content_hour = int(cfg["content_agent_schedule_hour"])
+    content_hours = int(cfg["content_agent_interval_hours"])
     digest_hour = int(cfg["morning_digest_schedule_hour"])
-    midday_hour = int(cfg["content_agent_midday_hour"])
     gold_history_hour = int(cfg["gold_history_hour"])
 
     logger.info(
-        "Schedule config: twitter=%dh, instagram=%dh, content=cron(%d:00), "
-        "digest=cron(%d:00 UTC), midday=cron(%d:00), gold_history=cron(%d:00 bi-weekly Sun)",
-        twitter_hours, instagram_hours, content_hour,
-        digest_hour, midday_hour, gold_history_hour,
+        "Schedule config: twitter=%dh, instagram=%dh, content=%dh, "
+        "digest=cron(%d:00 UTC), gold_history=cron(%d:00 bi-weekly Sun)",
+        twitter_hours, instagram_hours, content_hours,
+        digest_hour, gold_history_hour,
     )
 
     scheduler = AsyncIOScheduler()
 
     scheduler.add_job(
         _make_job("content_agent", engine),
-        trigger="cron",
-        hour=content_hour,
-        minute=0,
+        trigger="interval",
+        hours=content_hours,
         id="content_agent",
-        name=f"Content Agent — daily at {content_hour}am",
+        name=f"Content Agent — every {content_hours} hours",
     )
     scheduler.add_job(
         _make_job("twitter_agent", engine),
@@ -270,14 +258,6 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         minute=0,
         id="morning_digest",
         name=f"Morning Digest — daily at {digest_hour}am",
-    )
-    scheduler.add_job(
-        _make_job("content_agent_midday", engine),
-        trigger="cron",
-        hour=midday_hour,
-        minute=0,
-        id="content_agent_midday",
-        name=f"Content Agent (midday) — daily at {midday_hour}pm",
     )
     # NOTE: week="*/2" fires on alternating ISO weeks. At ISO week 52/53 → week 1 rollover,
     # two consecutive Sunday firings may occur (one extra Gold History post in early January).
