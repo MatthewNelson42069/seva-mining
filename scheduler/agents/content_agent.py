@@ -1484,6 +1484,7 @@ For "quote" format, draft_content must have:
 
     async def run(self) -> None:
         """Entry point called by APScheduler. Runs the full pipeline."""
+        self._queued_titles: list[str] = []  # reset each run
         async with AsyncSessionLocal() as session:
             agent_run = AgentRun(
                 agent_name="content_agent",
