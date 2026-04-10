@@ -156,7 +156,7 @@ def passes_engagement_gate(
 
     Watchlist: min_likes_watchlist+ likes AND min_views_watchlist+ views (both required).
     Non-watchlist: min_likes_general+ likes AND min_views_general+ views (both required).
-    None views treated as 0 — conservative, fails gate.
+    None views skips the views check — Basic tier API does not return impression_count.
 
     Args:
         likes: like_count from public_metrics.
@@ -172,11 +172,12 @@ def passes_engagement_gate(
         True if tweet passes the gate, False otherwise.
     """
     effective_views = impression_count if impression_count is not None else views
-    safe_views = effective_views if effective_views is not None else 0
+    views_ok = (effective_views >= (min_views_watchlist if is_watchlist else min_views_general)) \
+        if effective_views is not None else True
     if is_watchlist:
-        return likes >= min_likes_watchlist and safe_views >= min_views_watchlist
+        return likes >= min_likes_watchlist and views_ok
     else:
-        return likes >= min_likes_general and safe_views >= min_views_general
+        return likes >= min_likes_general and views_ok
 
 
 def select_top_posts(

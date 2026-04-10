@@ -158,13 +158,19 @@ def test_engagement_gate_non_watchlist():
 
 def test_engagement_gate_none_views():
     """
-    impression_count=None defaults to 0, causing the view gate to fail.
+    impression_count=None (Basic tier API doesn't return impressions) skips the
+    views check — only likes are evaluated.
     Covers: TWIT-04
     """
     ta = _get_twitter_agent()
 
-    assert ta.passes_engagement_gate(likes=50, impression_count=None, is_watchlist=True) is False
-    assert ta.passes_engagement_gate(likes=500, impression_count=None, is_watchlist=False) is False
+    # None views + sufficient likes → pass (views check skipped)
+    assert ta.passes_engagement_gate(likes=50, impression_count=None, is_watchlist=True) is True
+    assert ta.passes_engagement_gate(likes=500, impression_count=None, is_watchlist=False) is True
+
+    # None views + insufficient likes → fail (likes check still enforced)
+    assert ta.passes_engagement_gate(likes=49, impression_count=None, is_watchlist=True) is False
+    assert ta.passes_engagement_gate(likes=499, impression_count=None, is_watchlist=False) is False
 
 
 # ---------------------------------------------------------------------------
