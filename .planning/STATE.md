@@ -180,6 +180,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260407-n9t | Content agent schedule fix (6am/12pm PST) + enhanced WhatsApp notification with titles | 2026-04-07 | 9bc17e1 | [260407-n9t](./quick/260407-n9t-content-agent-schedule-fix-and-enhanced-/) |
 | 260407-neq | Switch content agent from two cron jobs to single interval trigger every 2 hours | 2026-04-07 | 8b1e22e | [260407-neq](./quick/260407-neq-switch-content-agent-to-interval-every-2/) |
+| 260409-qe8 | Fix Twitter engagement gate (None impression_count skips views check) + content agent non-ISO date fallback | 2026-04-09 | aecc81b | [260409-qe8](./quick/260409-qe8-fix-twitter-engagement-gate-and-content-/) |
 
 ### Blockers/Concerns
 
