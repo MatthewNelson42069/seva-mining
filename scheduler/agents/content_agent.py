@@ -1124,10 +1124,18 @@ For "quote" format, draft_content must have:
                 continue
             for item in result.get("news_results", [])[:5]:
                 iso_date = item.get("date")
-                published = (
-                    datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
-                    if iso_date else datetime.now(timezone.utc)
-                )
+                if iso_date:
+                    try:
+                        published = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
+                    except ValueError:
+                        try:
+                            published = datetime.strptime(iso_date, "%m/%d/%Y, %I:%M %p, +0000 UTC").replace(
+                                tzinfo=timezone.utc
+                            )
+                        except ValueError:
+                            published = datetime.now(timezone.utc)
+                else:
+                    published = datetime.now(timezone.utc)
                 source_name = (item.get("source") or {}).get("name", "unknown")
                 stories.append({
                     "title": item.get("title", ""),

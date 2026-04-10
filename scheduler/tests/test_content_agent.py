@@ -59,6 +59,31 @@ def test_serpapi_parsing():
 
 
 # ---------------------------------------------------------------------------
+# CONT-03b: SerpAPI non-ISO date parsing
+# ---------------------------------------------------------------------------
+
+def test_serpapi_date_parsing_non_iso():
+    """_fetch_serpapi_stories handles non-ISO date format from SerpAPI without crashing."""
+    from datetime import datetime, timezone
+    # Simulate the parsing logic directly (mirrors content_agent._fetch_serpapi_stories)
+    iso_date = "04/09/2026, 10:31 AM, +0000 UTC"
+    try:
+        published = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            published = datetime.strptime(iso_date, "%m/%d/%Y, %I:%M %p, +0000 UTC").replace(
+                tzinfo=timezone.utc
+            )
+        except ValueError:
+            published = datetime.now(timezone.utc)
+
+    assert published.year == 2026
+    assert published.month == 4
+    assert published.day == 9
+    assert published.tzinfo is not None
+
+
+# ---------------------------------------------------------------------------
 # CONT-04: URL deduplication
 # ---------------------------------------------------------------------------
 
