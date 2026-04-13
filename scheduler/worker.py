@@ -277,9 +277,39 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     return scheduler
 
 
+async def upsert_agent_config() -> None:
+    """Upsert engagement thresholds and agent config on every startup.
+
+    Unlike seed_senior_config (insert-only), this OVERWRITES existing values so
+    code-level config changes take effect without manual DB edits.
+    """
+    overrides = {
+        # Twitter engagement gate
+        "twitter_min_likes_general": "300",
+        "twitter_min_views_general": "0",      # Basic tier never returns impression_count
+        "twitter_min_likes_watchlist": "50",
+        "twitter_min_views_watchlist": "0",    # Basic tier never returns impression_count
+        # Instagram engagement gate
+        "instagram_min_likes": "100",
+    }
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        for key, value in overrides.items():
+            result = await session.execute(select(Config).where(Config.key == key))
+            row = result.scalar_one_or_none()
+            if row:
+                row.value = value
+            else:
+                session.add(Config(key=key, value=value))
+        await session.commit()
+    logger.info("upsert_agent_config: engagement thresholds applied.")
+
+
 async def main() -> None:
     # Seed Senior Agent config defaults (idempotent — safe to run on every startup)
     await seed_senior_config()
+    # Upsert engagement thresholds (overwrites existing values — code is source of truth)
+    await upsert_agent_config()
 
     scheduler = await build_scheduler(engine)
     scheduler.start()
