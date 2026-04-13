@@ -659,21 +659,22 @@ async def check_compliance(draft: str, client: AsyncAnthropic) -> bool:
     if "seva mining" in draft.lower():
         return False
 
-    # Claude Haiku compliance check
+    # Claude Haiku compliance check — narrow scope: only block promotions and spam
     message = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=200,
         system=(
-            "You are a compliance checker for social media comments. "
-            "Check if this comment: 1) mentions 'Seva Mining' or any company promotion, "
-            "2) contains financial advice, 3) contains hashtags. "
-            "Reply with exactly PASS or FAIL with reason."
+            "You are a compliance checker for Instagram comments about gold markets. "
+            "FAIL only if the comment: (1) promotes a specific company or product by name, "
+            "(2) contains hashtags (#), or (3) contains spam/scam language. "
+            "Gold market analysis, price data, and market commentary are ALWAYS allowed — do NOT fail them. "
+            "Reply with exactly PASS or FAIL followed by a brief reason."
         ),
-        messages=[{"role": "user", "content": f"Check this draft: {draft}"}],
+        messages=[{"role": "user", "content": f"Check this comment: {draft}"}],
     )
     result_text = message.content[0].text.strip().lower()
-    # Fail-safe: only explicit "pass" returns True (CONTEXT.md)
-    if "pass" in result_text:
+    # Fail-safe: only explicit "pass" returns True
+    if result_text.startswith("pass"):
         return True
     return False
 

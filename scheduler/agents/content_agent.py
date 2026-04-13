@@ -428,7 +428,7 @@ def build_draft_item(content_bundle, rationale: str):
         source_account=content_bundle.source_name,
         alternatives=json.dumps([summary]),
         rationale=rationale,
-        score=float(content_bundle.score) if content_bundle.score else 0.0,
+        score=float(content_bundle.score or content_bundle.quality_score or 0.0),
         expires_at=None,
         urgency="low",
         engagement_snapshot={"content_bundle_id": str(content_bundle.id)},

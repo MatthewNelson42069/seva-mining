@@ -208,13 +208,22 @@ class SeniorAgent:
         """
         cap = int(await self._get_config(session, "senior_queue_cap", "15"))
 
-        # Count pending items that are NOT the new item
+        # Content items are managed via ContentBundle — exempt from queue cap
+        new_item = await session.get(DraftItem, new_item_id)
+        if new_item is None:
+            logger.warning("_enforce_queue_cap: DraftItem %s not found", new_item_id)
+            return
+        if new_item.platform == "content":
+            return
+
+        # Count pending items that are NOT the new item and NOT content platform
         count_result = await session.execute(
             select(func.count())
             .select_from(DraftItem)
             .where(
                 DraftItem.status == "pending",
                 DraftItem.id != new_item_id,
+                DraftItem.platform != "content",
             )
         )
         existing_count = count_result.scalar_one()
@@ -223,17 +232,12 @@ class SeniorAgent:
             # Queue has room — accept new item without displacement
             return
 
-        # Queue is at or over cap — compare new item against the lowest-scoring existing item
-        new_item = await session.get(DraftItem, new_item_id)
-        if new_item is None:
-            logger.warning("_enforce_queue_cap: DraftItem %s not found", new_item_id)
-            return
-
         lowest_result = await session.execute(
             select(DraftItem)
             .where(
                 DraftItem.status == "pending",
                 DraftItem.id != new_item_id,
+                DraftItem.platform != "content",
             )
             .order_by(DraftItem.score.asc(), DraftItem.expires_at.asc())
             .limit(1)
