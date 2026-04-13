@@ -311,25 +311,46 @@ class InstagramAgent:
         return all_items
 
     async def _fetch_account_posts(self, watchlist: list[dict], max_per_account: int) -> list[dict]:
-        """Fetch posts for each watchlist account via Apify instagram-scraper."""
+        """Fetch posts for each watchlist account via Apify instagram-scraper.
+
+        Runs all account fetches concurrently (capped at 5 at a time) to avoid
+        sequential blocking across 15 accounts.
+        """
         lookback_date = datetime.now(timezone.utc) - timedelta(hours=24)
+
+        semaphore = asyncio.Semaphore(5)  # max 5 concurrent Apify calls
+
+        async def fetch_one(account: dict) -> list[dict]:
+            async with semaphore:
+                handle = account["handle"]
+                run_input = {
+                    "directUrls": [f"https://www.instagram.com/{handle}/"],
+                    "resultsType": "posts",
+                    "resultsLimit": max_per_account,
+                    "onlyPostsNewerThan": lookback_date.strftime("%Y-%m-%d"),
+                }
+                return await self._call_apify_actor_with_retry(run_input)
+
+        results = await asyncio.gather(*[fetch_one(a) for a in watchlist], return_exceptions=True)
         all_items: list[dict] = []
-        for account in watchlist:
-            handle = account["handle"]
-            run_input = {
-                "directUrls": [f"https://www.instagram.com/{handle}/"],
-                "resultsType": "posts",
-                "resultsLimit": max_per_account,
-                "onlyPostsNewerThan": lookback_date.strftime("%Y-%m-%d"),
-            }
-            items = await self._call_apify_actor_with_retry(run_input)
-            all_items.extend(items)
+        for r in results:
+            if isinstance(r, list):
+                all_items.extend(r)
+            elif isinstance(r, Exception):
+                logger.warning("Account fetch failed (skipped): %s", r)
         return all_items
 
     async def _call_apify_actor_once(self, run_input: dict) -> list[dict]:
-        """Call apify/instagram-scraper and return dataset items (no retry)."""
+        """Call apify/instagram-scraper and return dataset items (no retry).
+
+        Hard timeout of 90 seconds per call prevents the agent from hanging
+        indefinitely when an Apify run stalls.
+        """
         actor_client = self.apify_client.actor("apify/instagram-scraper")
-        run_result = await actor_client.call(run_input=run_input)
+        run_result = await asyncio.wait_for(
+            actor_client.call(run_input=run_input),
+            timeout=90.0,
+        )
         if run_result is None:
             return []
         dataset_id = run_result.get("defaultDatasetId")
