@@ -19,7 +19,7 @@ from typing import Optional
 
 import tweepy.asynchronous
 from anthropic import AsyncAnthropic
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings
@@ -1011,6 +1011,15 @@ class TwitterAgent:
         agent_run: AgentRun,
     ) -> None:
         """Inner pipeline — separated from run() for clean error isolation."""
+
+        # Step 1a: Expire pending Twitter drafts from previous runs
+        await session.execute(
+            update(DraftItem)
+            .where(DraftItem.platform == "twitter", DraftItem.status == "pending")
+            .values(status="expired")
+        )
+        await session.commit()
+        logger.info("TwitterAgent: expired pending drafts from previous runs.")
 
         # Step 2: Quota check
         can_proceed, current_count = await self._check_quota(session)
