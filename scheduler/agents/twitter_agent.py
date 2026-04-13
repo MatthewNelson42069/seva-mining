@@ -1072,15 +1072,21 @@ class TwitterAgent:
             items_found,
         )
 
-        # Step 6: Topic filter (watchlist tweets only — keyword tweets already matched)
+        # Step 6: Topic filter
+        # Keyword tweets already matched by Twitter search — skip filter, always include.
+        # Watchlist tweets are from followed accounts who may post off-topic — filter those.
         topic_filtered: list[dict] = []
         for tweet in all_tweets:
-            relevant = await self._apply_topic_filter(
-                tweet["text"],
-                is_watchlist=tweet["is_watchlist"],
-            )
-            if relevant:
+            if not tweet["is_watchlist"]:
+                # Keyword search already guarantees relevance
                 topic_filtered.append(tweet)
+            else:
+                relevant = await self._apply_topic_filter(
+                    tweet["text"],
+                    is_watchlist=True,
+                )
+                if relevant:
+                    topic_filtered.append(tweet)
 
         items_filtered_by_topic = items_found - len(topic_filtered)
         logger.info(
