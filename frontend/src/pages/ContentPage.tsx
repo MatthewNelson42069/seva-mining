@@ -278,7 +278,7 @@ export function ContentPage() {
 
         {/* Right column: action panel */}
         <div className="space-y-4">
-          {bundle.quality_score !== undefined && (
+          {bundle.quality_score != null && (
             <div>
               <p className="text-xs text-muted-foreground mb-1">Quality Score</p>
               <ScoreBadge score={bundle.quality_score} />
