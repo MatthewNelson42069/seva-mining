@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Component, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { TrendingDown } from 'lucide-react'
 import { toast } from 'sonner'
@@ -10,6 +10,25 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { ScoreBadge } from '@/components/shared/ScoreBadge'
 import { InfographicPreview } from '@/components/content/InfographicPreview'
+
+// Error boundary to prevent a single bad draft from crashing the page
+class DraftErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false }
+  }
+  static getDerivedStateFromError() { return { hasError: true } }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="border rounded-md p-4 text-sm text-muted-foreground">
+          Unable to render draft preview — the draft data may be incomplete.
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // Helper: determine clipboard text per content_type
 function getClipboardText(bundle: ContentBundleResponse): string {
@@ -220,7 +239,9 @@ export function ContentPage() {
             {bundle.content_type && (
               <Badge variant="outline" className="mb-3">{bundle.content_type}</Badge>
             )}
-            <DraftContent bundle={bundle} />
+            <DraftErrorBoundary>
+              <DraftContent bundle={bundle} />
+            </DraftErrorBoundary>
           </div>
 
           {sources.length > 0 && (
