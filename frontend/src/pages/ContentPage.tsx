@@ -44,6 +44,8 @@ function getClipboardText(bundle: ContentBundleResponse): string {
       return tweets.join('\n\n')
     }
     default:
+      // breaking_news and other single-tweet formats
+      if (draft.tweet) return (draft.tweet as string) ?? ''
       return JSON.stringify(draft)
   }
 }
@@ -114,6 +116,13 @@ function DraftContent({ bundle }: { bundle: ContentBundleResponse }) {
     return <InfographicPreview draft={draft as unknown as InfographicDraft} />
   }
 
+  // breaking_news and any other single-tweet formats
+  if (draft.tweet) {
+    const tweet = draft.tweet as string
+    return <Textarea readOnly value={tweet} rows={6} className="resize-none" />
+  }
+
+  // Fallback: show raw JSON so nothing is invisible
   return (
     <pre className="text-xs font-mono whitespace-pre-wrap border rounded-md p-3">
       {JSON.stringify(draft, null, 2)}
