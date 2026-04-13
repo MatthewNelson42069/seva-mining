@@ -440,7 +440,7 @@ class TwitterAgent:
             try:
                 response = await self.tweepy_client.get_users_tweets(
                     id=account.platform_user_id,
-                    max_results=3,
+                    max_results=5,
                     tweet_fields=TWEET_FIELDS,
                     expansions=["author_id"],
                     user_fields=USER_FIELDS,

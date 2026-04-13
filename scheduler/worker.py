@@ -285,7 +285,7 @@ async def upsert_agent_config() -> None:
     """
     overrides = {
         # Twitter engagement gate
-        "twitter_min_likes_general": "300",
+        "twitter_min_likes_general": "50",
         "twitter_min_views_general": "0",      # Basic tier never returns impression_count
         "twitter_min_likes_watchlist": "50",
         "twitter_min_views_watchlist": "0",    # Basic tier never returns impression_count
