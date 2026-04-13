@@ -593,7 +593,7 @@ async def draft_for_post(post: dict, client: AsyncAnthropic) -> list[dict]:
         '{"comment_alternatives": [{"text": "...", "rationale": "..."}, ...]}'
     )
     message = await client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=2000,
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
@@ -640,7 +640,7 @@ async def check_compliance(draft: str, client: AsyncAnthropic) -> bool:
 
     # Claude Haiku compliance check
     message = await client.messages.create(
-        model="claude-haiku-3-20240307",
+        model="claude-haiku-4-5-20251001",
         max_tokens=200,
         system=(
             "You are a compliance checker for social media comments. "

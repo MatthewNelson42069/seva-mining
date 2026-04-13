@@ -629,7 +629,7 @@ class TwitterAgent:
         if is_watchlist:
             try:
                 message = await self.anthropic.messages.create(
-                    model="claude-3-haiku-20240307",
+                    model="claude-haiku-4-5-20251001",
                     max_tokens=10,
                     messages=[
                         {
@@ -718,7 +718,7 @@ class TwitterAgent:
     async def _draft_for_post(self, tweet: dict) -> dict:
         """Generate reply and retweet-with-comment alternatives for a tweet via Claude.
 
-        Calls claude-sonnet-4-20250514 to produce 3 reply alternatives, 3 RT alternatives,
+        Calls claude-sonnet-4-6 to produce 3 reply alternatives, 3 RT alternatives,
         and a rationale string. Returns empty dict on JSON parse failure.
 
         Args:
@@ -763,7 +763,7 @@ class TwitterAgent:
 
         try:
             message = await self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=1024,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -790,7 +790,7 @@ class TwitterAgent:
         """Check a single draft text for compliance violations via Claude Haiku.
 
         Validates that the text does NOT mention Seva Mining and does NOT contain
-        financial advice. Uses claude-3-haiku-20240307 for speed and cost efficiency.
+        financial advice. Uses claude-haiku-4-5-20251001 for speed and cost efficiency.
 
         Args:
             draft_text: The draft text to validate.
@@ -808,7 +808,7 @@ class TwitterAgent:
 
         try:
             message = await self.anthropic.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=10,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -1286,7 +1286,7 @@ async def draft_for_post(post: dict, client: AsyncAnthropic) -> dict:
     views = post.get("views") or 0
 
     message = await client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-6",
         max_tokens=1024,
         system=(
             "You are a senior gold market analyst who provides data-driven, measured commentary "
@@ -1353,7 +1353,7 @@ async def filter_compliant_alternatives(
     passing = []
     for alt in alternatives:
         message = await client.messages.create(
-            model="claude-3-haiku-20240307",
+            model="claude-haiku-4-5-20251001",
             max_tokens=10,
             messages=[{
                 "role": "user",

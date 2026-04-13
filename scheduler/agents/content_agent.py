@@ -338,7 +338,7 @@ async def check_compliance(text: str, anthropic_client=None) -> bool:
 
     try:
         response = await anthropic_client.messages.create(
-            model="claude-haiku-3-20240307",
+            model="claude-haiku-4-5-20251001",
             max_tokens=50,
             system="You are a compliance checker. Evaluate the following content. Reply with exactly 'pass' if the content does NOT mention Seva Mining and does NOT contain financial advice (recommendations to buy, sell, invest, or any action-oriented investment guidance). Reply with 'fail: [reason]' otherwise.",
             messages=[{"role": "user", "content": text}],
@@ -786,7 +786,7 @@ Respond in valid JSON:
 
         try:
             response = await self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=512,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -854,7 +854,7 @@ Respond in valid JSON:
 
         try:
             response = await self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=512,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -985,7 +985,7 @@ For "quote" format, draft_content must have:
 
         try:
             response = await self.anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=4096,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -1150,7 +1150,7 @@ For "quote" format, draft_content must have:
         """CONT-05: Claude Haiku call to classify gold-sector relevance on 0-1 scale."""
         try:
             response = await self.anthropic.messages.create(
-                model="claude-haiku-3-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=10,
                 system="Rate the relevance of this news story to the gold mining and precious metals sector on a scale of 0.0 to 1.0. Reply with only a decimal number.",
                 messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
