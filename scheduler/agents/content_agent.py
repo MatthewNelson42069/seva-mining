@@ -392,41 +392,94 @@ def build_draft_item(content_bundle, rationale: str):
     import json  # noqa: PLC0415
     from models.draft_item import DraftItem  # noqa: PLC0415
 
-    # Build a brief summary from draft_content for the alternatives field
+    # Extract actual copyable draft text for the alternatives field.
+    # The frontend reads alternatives[0].text and copies it to clipboard on Approve —
+    # so this must be real post/tweet content, NOT a description string.
+
     draft = content_bundle.draft_content or {}
     fmt = draft.get("format", "unknown")
+
     if fmt == "breaking_news":
-        tweet = draft.get("tweet", "")
-        has_infographic = draft.get("infographic_brief") is not None
-        summary = f"Breaking news ({len(tweet)} chars)" + (" + infographic brief" if has_infographic else "")
+        # Primary copyable text: the tweet. Append infographic brief as a note if present.
+        tweet_text = draft.get("tweet", "")
+        infographic_brief = draft.get("infographic_brief")
+        if infographic_brief and isinstance(infographic_brief, dict):
+            brief_note = (
+                f"\n\n---\nInfographic: {infographic_brief.get('headline', '')}\n"
+                + "\n".join(f"• {p}" for p in infographic_brief.get("data_points", []))
+            )
+            draft_text = tweet_text + brief_note if tweet_text else brief_note
+        else:
+            draft_text = tweet_text
+
     elif fmt == "thread":
-        summary = f"Thread ({len(draft.get('tweets', []))} tweets) + long-form post"
+        # Join individual tweets with blank lines so the reviewer can copy the full thread.
+        tweets = draft.get("tweets", [])
+        if isinstance(tweets, list):
+            draft_text = "\n\n".join(str(t) for t in tweets if t)
+        else:
+            draft_text = str(tweets)
+
     elif fmt == "long_form":
-        summary = f"Long-form post ({len(draft.get('post', ''))} chars)"
+        draft_text = draft.get("post", "")
+
     elif fmt == "infographic":
-        mode = draft.get("mode", "current_data")
-        summary = f"Infographic ({mode}): {draft.get('headline', 'N/A')}"
-        if draft.get("instagram_brief"):
-            summary += " + Instagram brief"
+        # Infographic has no direct tweet — use caption or headline + data points as copyable brief.
+        caption = draft.get("caption_text", "") or draft.get("instagram_caption", "")
+        if not caption:
+            headline = draft.get("headline", "")
+            data_points = draft.get("data_points", [])
+            if isinstance(data_points, list):
+                caption = headline + ("\n" + "\n".join(f"• {p}" for p in data_points) if data_points else "")
+            else:
+                caption = headline
+        draft_text = caption
+
     elif fmt == "gold_history":
-        summary = (
-            f"Gold History: {draft.get('story_title', 'N/A')} "
-            f"({len(draft.get('tweets', []))} tweets, "
-            f"{len(draft.get('instagram_carousel', []))} slides)"
-        )
+        # Combine thread tweets and/or Instagram carousel as multi-part draft.
+        tweets = draft.get("tweets", [])
+        carousel = draft.get("instagram_carousel", [])
+        parts = []
+        if tweets:
+            parts.append("=== Thread ===\n" + "\n\n".join(str(t) for t in tweets if t))
+        if carousel:
+            parts.append("=== Instagram Carousel ===\n" + "\n\n".join(
+                f"Slide {i+1}: {slide}" if isinstance(slide, str) else f"Slide {i+1}: {slide.get('text', '')}"
+                for i, slide in enumerate(carousel)
+            ))
+        draft_text = "\n\n".join(parts) if parts else f"Gold History: {draft.get('story_title', '')}"
+
     elif fmt == "video_clip":
-        summary = f"Video clip from @{draft.get('source_account', 'unknown')}"
+        # Draft stores twitter_caption and instagram_caption — use twitter version as primary.
+        draft_text = (
+            draft.get("twitter_caption", "")
+            or draft.get("instagram_caption", "")
+            or f"Video clip from @{draft.get('source_account', 'unknown')}"
+        )
+
     elif fmt == "quote":
-        summary = f"Quote from {draft.get('speaker', 'unknown')}: {draft.get('quote_text', '')[:80]}"
+        # Draft stores twitter_post and instagram_post — use the formatted twitter post.
+        draft_text = (
+            draft.get("twitter_post", "")
+            or draft.get("instagram_post", "")
+            or f'"{draft.get("quote_text", "")}" — {draft.get("speaker", "")}'
+        )
+
     else:
-        summary = f"Content draft ({fmt})"
+        # Unknown format — store whatever text fields exist, or a minimal fallback.
+        draft_text = (
+            draft.get("text", "")
+            or draft.get("tweet", "")
+            or draft.get("post", "")
+            or f"Content draft ({fmt})"
+        )
 
     return DraftItem(
         platform="content",
         source_text=content_bundle.story_headline,
         source_url=content_bundle.story_url,
         source_account=content_bundle.source_name,
-        alternatives=json.dumps([summary]),
+        alternatives=[{"type": fmt, "text": draft_text}],
         rationale=rationale,
         score=float(content_bundle.score or content_bundle.quality_score or 0.0),
         expires_at=None,

@@ -305,7 +305,37 @@ async def upsert_agent_config() -> None:
     logger.info("upsert_agent_config: engagement thresholds applied.")
 
 
+async def _validate_env() -> None:
+    """Log critical env var status at startup so Railway logs show any missing keys.
+
+    Does NOT raise — missing optional keys (e.g. SERPAPI) are fine.
+    Logs ERROR for keys that will cause agent failures if absent.
+    """
+    from config import get_settings  # noqa: PLC0415
+    settings = get_settings()
+
+    critical = {
+        "ANTHROPIC_API_KEY": bool(settings.anthropic_api_key),
+        "X_API_BEARER_TOKEN": bool(settings.x_api_bearer_token),
+        "DATABASE_URL": bool(settings.database_url),
+    }
+    optional = {
+        "APIFY_API_TOKEN": bool(settings.apify_api_token),
+        "SERPAPI_API_KEY": bool(settings.serpapi_api_key),
+        "TWILIO_ACCOUNT_SID": bool(settings.twilio_account_sid),
+    }
+    for key, present in critical.items():
+        if present:
+            logger.info("ENV %s: SET ✓", key)
+        else:
+            logger.error("ENV %s: MISSING — agents will fail without this key", key)
+    for key, present in optional.items():
+        logger.info("ENV %s: %s", key, "SET ✓" if present else "not set (optional)")
+
+
 async def main() -> None:
+    # Log env var status to catch missing keys early (especially ANTHROPIC_API_KEY)
+    await _validate_env()
     # Seed Senior Agent config defaults (idempotent — safe to run on every startup)
     await seed_senior_config()
     # Upsert engagement thresholds (overwrites existing values — code is source of truth)

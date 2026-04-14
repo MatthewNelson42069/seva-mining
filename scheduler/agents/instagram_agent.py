@@ -567,7 +567,7 @@ class InstagramAgent:
             source_url=post.get("url", ""),
             source_text=(post.get("caption") or "")[:500],
             source_account=post.get("ownerUsername", "unknown"),
-            alternatives=[d["text"] for d in compliant_drafts],
+            alternatives=[{"type": "comment", "text": d["text"]} for d in compliant_drafts],
             rationale=compliant_drafts[0]["rationale"] if compliant_drafts else "",
             score=post.get("score", 0.0),
             engagement_snapshot={
