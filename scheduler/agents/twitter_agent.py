@@ -629,7 +629,7 @@ class TwitterAgent:
         if is_watchlist:
             try:
                 message = await self.anthropic.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model="claude-sonnet-4-6",
                     max_tokens=10,
                     messages=[
                         {
@@ -790,7 +790,7 @@ class TwitterAgent:
         """Check a single draft text for compliance violations via Claude Haiku.
 
         Validates that the text does NOT mention Seva Mining and does NOT contain
-        financial advice. Uses claude-haiku-4-5-20251001 for speed and cost efficiency.
+        financial advice. Uses claude-sonnet-4-6 for speed and cost efficiency.
 
         Args:
             draft_text: The draft text to validate.
@@ -808,7 +808,7 @@ class TwitterAgent:
 
         try:
             message = await self.anthropic.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-sonnet-4-6",
                 max_tokens=10,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -1368,7 +1368,7 @@ async def filter_compliant_alternatives(
     passing = []
     for alt in alternatives:
         message = await client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-6",
             max_tokens=10,
             messages=[{
                 "role": "user",

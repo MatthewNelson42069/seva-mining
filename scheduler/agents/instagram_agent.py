@@ -294,7 +294,9 @@ class InstagramAgent:
 
     async def _fetch_hashtag_posts(self, hashtags: list[str], max_per_hashtag: int) -> list[dict]:
         """Fetch posts for each hashtag via Apify instagram-scraper."""
-        lookback_date = datetime.now(timezone.utc) - timedelta(hours=24)
+        # 72h lookback matches instagram_max_post_age_hours=72 in DB config.
+        # 24h was too short — hashtag top posts are often 1-3 days old.
+        lookback_date = datetime.now(timezone.utc) - timedelta(hours=72)
         all_items: list[dict] = []
         for tag in hashtags:
             clean_tag = tag.lstrip("#")
@@ -316,7 +318,8 @@ class InstagramAgent:
         Runs all account fetches concurrently (capped at 5 at a time) to avoid
         sequential blocking across 15 accounts.
         """
-        lookback_date = datetime.now(timezone.utc) - timedelta(hours=24)
+        # 72h lookback matches instagram_max_post_age_hours=72 in DB config.
+        lookback_date = datetime.now(timezone.utc) - timedelta(hours=72)
 
         semaphore = asyncio.Semaphore(5)  # max 5 concurrent Apify calls
 
@@ -661,7 +664,7 @@ async def check_compliance(draft: str, client: AsyncAnthropic) -> bool:
 
     # Claude Haiku compliance check — narrow scope: only block promotions and spam
     message = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-4-6",
         max_tokens=200,
         system=(
             "You are a compliance checker for Instagram comments about gold markets. "

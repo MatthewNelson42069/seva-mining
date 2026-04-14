@@ -285,12 +285,20 @@ async def upsert_agent_config() -> None:
     """
     overrides = {
         # Twitter engagement gate
-        "twitter_min_likes_general": "50",
-        "twitter_min_views_general": "0",      # Basic tier never returns impression_count
-        "twitter_min_likes_watchlist": "50",
-        "twitter_min_views_watchlist": "0",    # Basic tier never returns impression_count
+        # Fresh tweets (fetched within 2h window) accumulate few likes — keep threshold very low.
+        # Quality is enforced by composite score ranking, not absolute like counts.
+        "twitter_min_likes_general": "5",       # was 50 — fresh tweets rarely reach 50 likes in 2h
+        "twitter_min_views_general": "0",       # Basic tier never returns impression_count
+        "twitter_min_likes_watchlist": "0",     # Let all watchlist tweets through; score sorts quality
+        "twitter_min_views_watchlist": "0",     # Basic tier never returns impression_count
         # Instagram engagement gate
-        "instagram_min_likes": "100",
+        # Relaxed: 3-day lookback window + 72h age filter lets posts accumulate engagement
+        "instagram_min_likes": "50",            # was 100/200 — 50 is adequate for gold sector posts
+        "instagram_max_post_age_hours": "72",   # was 8 — hashtag top posts are often 1-3 days old
+        # Content quality threshold
+        # Anthropic relevance scoring fallback is 0.5 — lower threshold so more stories pass.
+        # With 0.5 relevance: (0.5*0.4 + recency*0.3 + cred*0.3)*10 = min 4.0 for old/unknown sources
+        "content_quality_threshold": "5.5",    # was 7.0 — allows more stories through relevance fallback
     }
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:

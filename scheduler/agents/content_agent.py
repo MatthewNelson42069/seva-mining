@@ -338,7 +338,7 @@ async def check_compliance(text: str, anthropic_client=None) -> bool:
 
     try:
         response = await anthropic_client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-sonnet-4-6",
             max_tokens=50,
             system="You are a compliance checker. Evaluate the following content. Reply with exactly 'pass' if the content does NOT mention Seva Mining and does NOT contain financial advice (recommendations to buy, sell, invest, or any action-oriented investment guidance). Reply with 'fail: [reason]' otherwise.",
             messages=[{"role": "user", "content": text}],
@@ -1199,11 +1199,42 @@ For "quote" format, draft_content must have:
                 })
         return stories
 
+    @staticmethod
+    def _keyword_relevance(title: str, summary: str) -> float:
+        """Fast keyword-based relevance score as fallback when Anthropic is unavailable.
+
+        Counts gold/mining keyword hits and returns a 0.0-1.0 score.
+        High-signal keywords (gold, silver, mining) → 0.7-0.9.
+        Zero hits → 0.3 (some relevance assumed since we only ingest gold RSS/news sources).
+        """
+        text = (title + " " + summary).lower()
+        HIGH_SIGNAL = ["gold price", "gold mining", "precious metal", "bullion", "gold reserve",
+                       "central bank gold", "gold standard", "gold etf", "gold miner"]
+        MED_SIGNAL = ["gold", "silver", "platinum", "copper", "mining", "miner", "ore", "drill",
+                      "royalty", "streaming", "ounce", "oz", "troy", "vein", "deposit",
+                      "exploration", "production", "refinery", "smelter"]
+        hits_high = sum(1 for kw in HIGH_SIGNAL if kw in text)
+        hits_med = sum(1 for kw in MED_SIGNAL if kw in text)
+        if hits_high >= 2:
+            return 0.9
+        if hits_high == 1:
+            return 0.8
+        if hits_med >= 3:
+            return 0.75
+        if hits_med >= 1:
+            return 0.65
+        return 0.3
+
     async def _score_relevance(self, title: str, summary: str) -> float:
-        """CONT-05: Claude Haiku call to classify gold-sector relevance on 0-1 scale."""
+        """CONT-05: Claude call to classify gold-sector relevance on 0-1 scale.
+
+        Falls back to keyword-based scoring if Anthropic API is unavailable.
+        Keyword fallback produces 0.3-0.9 scores (not flat 0.5) so stories can
+        be meaningfully ranked even when the API is down.
+        """
         try:
             response = await self.anthropic.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-sonnet-4-6",
                 max_tokens=10,
                 system="Rate the relevance of this news story to the gold mining and precious metals sector on a scale of 0.0 to 1.0. Reply with only a decimal number.",
                 messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
@@ -1211,8 +1242,11 @@ For "quote" format, draft_content must have:
             score = float(response.content[0].text.strip())
             return max(0.0, min(1.0, score))
         except Exception as exc:
-            logger.warning("Relevance scoring failed for '%s': %s", title[:50], exc)
-            return 0.5  # Neutral default on failure
+            logger.warning(
+                "Relevance scoring API failed for '%s' (%s) — using keyword fallback",
+                title[:50], type(exc).__name__,
+            )
+            return self._keyword_relevance(title, summary)
 
     async def _run_pipeline(self, session: AsyncSession, agent_run: AgentRun) -> None:
         """CONT-01: Orchestrate the full ingest-dedup-score-research-draft-comply-persist flow.
