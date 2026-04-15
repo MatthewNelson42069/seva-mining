@@ -716,18 +716,17 @@ class TwitterAgent:
     # -----------------------------------------------------------------------
 
     async def _draft_for_post(self, tweet: dict) -> dict:
-        """Generate reply and retweet-with-comment alternatives for a tweet via Claude.
+        """Generate 3 reply alternatives for a tweet via Claude.
 
-        Calls claude-sonnet-4-6 to produce 3 reply alternatives, 3 RT alternatives,
-        and a rationale string. Returns empty dict on JSON parse failure.
+        Calls claude-sonnet-4-6 to produce exactly 3 reply drafts and a rationale.
+        Returns empty dict on JSON parse failure.
 
         Args:
             tweet: Tweet dict with id, text, account_handle, likes, retweets, replies, views.
 
         Returns:
             Dict with keys:
-                "reply_alternatives": list of 2-3 reply draft strings
-                "rt_alternatives": list of 2-3 retweet-with-comment strings
+                "reply_alternatives": list of exactly 3 reply draft strings
                 "rationale": non-empty rationale string explaining the post's relevance
         """
         author_handle = tweet.get("account_handle") or "unknown"
@@ -746,8 +745,7 @@ class TwitterAgent:
             '- NEVER mention "Seva Mining" or any variant of the company name\n'
             "- NEVER give financial advice (no \"buy\", \"sell\", \"invest\", \"should consider investing\")\n"
             "- Always reference specific data from the original tweet\n"
-            "- Keep replies under 280 characters\n"
-            "- Keep retweet comments under 280 characters"
+            "- Keep every reply under 280 characters"
         )
 
         user_prompt = (
@@ -755,9 +753,9 @@ class TwitterAgent:
             f'"{tweet_text}"\n\n'
             f"Engagement: {likes} likes, {retweets} retweets, {replies} replies, {views} views.\n\n"
             "Generate the following as a JSON object:\n"
-            '1. "reply_alternatives": An array of 3 reply drafts responding to this tweet\n'
-            '2. "rt_alternatives": An array of 3 retweet-with-comment drafts\n'
-            '3. "rationale": A 1-2 sentence explanation of why this tweet matters and what angle the drafts take\n\n'
+            '1. "reply_alternatives": An array of exactly 3 reply drafts responding to this tweet. '
+            "Each should take a distinct angle (e.g. add a data point, ask a sharp question, give context).\n"
+            '2. "rationale": A 1-2 sentence explanation of why this tweet matters and what angle the drafts take\n\n'
             "Return ONLY valid JSON, no markdown."
         )
 
@@ -869,32 +867,21 @@ class TwitterAgent:
                 continue
 
             reply_alts = draft_result.get("reply_alternatives") or []
-            rt_alts = draft_result.get("rt_alternatives") or []
             rationale = draft_result.get("rationale") or ""
 
-            # Step 2: Compliance check each alternative individually
+            # Step 2: Compliance check each reply alternative individually
             passing_reply_alts: list[str] = []
             for alt_text in reply_alts:
                 passes = await self._check_compliance(alt_text)
                 if passes:
                     passing_reply_alts.append(alt_text)
                 else:
-                    error_msg = f"compliance failed (reply) for tweet {tweet_id}: {alt_text[:60]}"
+                    error_msg = f"compliance failed for tweet {tweet_id}: {alt_text[:60]}"
                     logger.warning(error_msg)
                     errors.append(error_msg)
 
-            passing_rt_alts: list[str] = []
-            for alt_text in rt_alts:
-                passes = await self._check_compliance(alt_text)
-                if passes:
-                    passing_rt_alts.append(alt_text)
-                else:
-                    error_msg = f"compliance failed (rt) for tweet {tweet_id}: {alt_text[:60]}"
-                    logger.warning(error_msg)
-                    errors.append(error_msg)
-
-            # Step 3: Skip post if ALL alternatives fail compliance
-            if not passing_reply_alts and not passing_rt_alts:
+            # Step 3: Skip post if all alternatives fail compliance
+            if not passing_reply_alts:
                 skip_msg = f"all alternatives failed compliance for tweet {tweet_id}"
                 logger.warning(skip_msg)
                 errors.append(skip_msg)
@@ -922,13 +909,9 @@ class TwitterAgent:
                 source_account=author_handle,
                 follower_count=author_followers,
                 score=composite_score,
-                alternatives=(
-                    [{"type": "reply", "text": alt_text} for alt_text in passing_reply_alts]
-                    + [
-                        {"type": "retweet_with_comment", "text": alt_text}
-                        for alt_text in passing_rt_alts
-                    ]
-                ),
+                alternatives=[
+                    {"type": "reply", "text": alt_text} for alt_text in passing_reply_alts
+                ],
                 rationale=rationale,
                 urgency="high" if composite_score > 0.7 else "medium",
                 expires_at=expires_at,
