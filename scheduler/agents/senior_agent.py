@@ -654,21 +654,26 @@ class SeniorAgent:
         )
         expired_count = expired_result.scalar_one()
 
-        # --- Top 5 stories from yesterday (by score DESC) ---
+        # --- Top 15 gold news stories from last 24 hours (content platform only) ---
+        lookback_24h = datetime.now(timezone.utc) - timedelta(hours=24)
         top_stories_result = await session.execute(
             select(DraftItem)
-            .where(DraftItem.created_at >= yesterday_start)
+            .where(
+                DraftItem.platform == "content",
+                DraftItem.created_at >= lookback_24h,
+            )
             .order_by(DraftItem.score.desc().nullslast())
-            .limit(5)
+            .limit(15)
         )
         top_items = top_stories_result.scalars().all()
         top_stories = [
             {
-                "headline": self._headline_from_rationale(item.rationale),
-                "source_account": item.source_account,
-                "platform": item.platform,
+                # source_text first line is the news headline (e.g. "Reuters: Gold hits...")
+                "headline": (item.source_text or "").split("\n")[0].strip() or self._headline_from_rationale(item.rationale),
+                "source": item.source_account or "",
+                "time": item.created_at.isoformat() if item.created_at else None,
+                "url": item.source_url,
                 "score": float(item.score or 0),
-                "source_url": item.source_url,
             }
             for item in top_items
         ]

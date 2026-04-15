@@ -122,7 +122,7 @@ export function ApprovalCard({ item, platform }: ApprovalCardProps) {
   return (
     <div
       className={[
-        'w-full rounded-xl border bg-background shadow-sm transition-opacity duration-300',
+        'w-full rounded-xl border bg-card shadow-sm transition-opacity duration-300',
         isFading ? 'opacity-0' : 'opacity-100',
       ].join(' ')}
     >

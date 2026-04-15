@@ -3,7 +3,7 @@ import { Sidebar } from './Sidebar'
 
 export function AppShell() {
   return (
-    <div className="min-h-screen bg-white flex min-w-[1280px]">
+    <div className="min-h-screen bg-background flex min-w-[1280px]">
       {/* Sidebar */}
       <Sidebar />
 

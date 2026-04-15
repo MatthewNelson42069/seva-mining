@@ -26,10 +26,13 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="w-[220px] min-h-screen flex flex-col border-r border-gray-100 bg-white py-6">
+    <aside className="w-[220px] min-h-screen flex flex-col border-r border-zinc-800 bg-zinc-900 py-6">
       {/* Brand */}
-      <div className="px-5 mb-8">
-        <span className="text-sm font-semibold text-gray-900">Seva Mining</span>
+      <div className="px-5 mb-8 flex items-center gap-3">
+        <div className="w-7 h-7 rounded-md bg-amber-500 flex items-center justify-center shrink-0">
+          <span className="text-xs font-bold text-zinc-900">S</span>
+        </div>
+        <span className="text-sm font-semibold text-white">Seva Mining</span>
       </div>
 
       {/* Navigation */}
@@ -43,8 +46,8 @@ export function Sidebar() {
               cn(
                 'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-amber-500/10 text-amber-400'
+                  : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100'
               )
             }
           >
@@ -58,7 +61,7 @@ export function Sidebar() {
       <div className="px-3 mt-4">
         <button
           onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-500 hover:bg-white/5 hover:text-zinc-300 transition-colors"
         >
           <LogOut className="size-4" />
           Log out
