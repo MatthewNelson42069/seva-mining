@@ -1,8 +1,8 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/pages/LoginPage'
-import { QueuePage } from '@/pages/QueuePage'
+import { PlatformQueuePage } from '@/pages/PlatformQueuePage'
 import { DigestPage } from '@/pages/DigestPage'
 import { ContentPage } from '@/pages/ContentPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -14,9 +14,17 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
-            <Route path="/" element={<QueuePage />} />
+            {/* Redirect root to Twitter queue */}
+            <Route path="/" element={<Navigate to="/twitter" replace />} />
+
+            {/* Platform queues */}
+            <Route path="/twitter" element={<PlatformQueuePage platform="twitter" />} />
+            <Route path="/instagram" element={<PlatformQueuePage platform="instagram" />} />
+            <Route path="/content" element={<PlatformQueuePage platform="content" />} />
+
+            {/* Other pages */}
             <Route path="/digest" element={<DigestPage />} />
-            <Route path="/content" element={<ContentPage />} />
+            <Route path="/content-review" element={<ContentPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Route>

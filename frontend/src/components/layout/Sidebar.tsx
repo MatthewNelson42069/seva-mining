@@ -1,29 +1,49 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutList, Newspaper, FileText, Settings, LogOut } from 'lucide-react'
+import { Bird, Camera, FileText, Newspaper, Settings, LogOut } from 'lucide-react'
 import { useAppStore } from '@/stores'
+import { useQueueCounts } from '@/hooks/useQueueCounts'
 import { cn } from '@/lib/utils'
-
-interface NavItem {
-  to: string
-  label: string
-  icon: React.ReactNode
-}
-
-const navItems: NavItem[] = [
-  { to: '/', label: 'Queue', icon: <LayoutList className="size-4" /> },
-  { to: '/digest', label: 'Digest', icon: <Newspaper className="size-4" /> },
-  { to: '/content', label: 'Content Review', icon: <FileText className="size-4" /> },
-  { to: '/settings', label: 'Settings', icon: <Settings className="size-4" /> },
-]
 
 export function Sidebar() {
   const navigate = useNavigate()
   const clearToken = useAppStore((s) => s.clearToken)
+  const counts = useQueueCounts()
 
   function handleLogout() {
     clearToken()
     navigate('/login')
   }
+
+  function countLabel(n: number, hasMore: boolean) {
+    if (n === 0) return null
+    return hasMore ? `${n}+` : String(n)
+  }
+
+  const agentItems = [
+    {
+      to: '/twitter',
+      label: 'Twitter',
+      icon: <Bird className="size-4" />,
+      badge: countLabel(counts.twitter, counts.twitterHasMore),
+    },
+    {
+      to: '/instagram',
+      label: 'Instagram',
+      icon: <Camera className="size-4" />,
+      badge: countLabel(counts.instagram, counts.instagramHasMore),
+    },
+    {
+      to: '/content',
+      label: 'Content',
+      icon: <FileText className="size-4" />,
+      badge: countLabel(counts.content, counts.contentHasMore),
+    },
+  ]
+
+  const bottomItems = [
+    { to: '/digest', label: 'Digest', icon: <Newspaper className="size-4" /> },
+    { to: '/settings', label: 'Settings', icon: <Settings className="size-4" /> },
+  ]
 
   return (
     <aside className="w-[220px] min-h-screen flex flex-col border-r border-zinc-800 bg-zinc-900 py-6">
@@ -35,13 +55,42 @@ export function Sidebar() {
         <span className="text-sm font-semibold text-white">Seva Mining</span>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 px-3 space-y-0.5">
-        {navItems.map(({ to, label, icon }) => (
+        {/* Section label */}
+        <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
+          Agents
+        </p>
+
+        {agentItems.map(({ to, label, icon, badge }) => (
           <NavLink
             key={to}
             to={to}
-            end={to === '/'}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-amber-500/10 text-amber-400'
+                  : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-100'
+              )
+            }
+          >
+            {icon}
+            <span className="flex-1">{label}</span>
+            {badge && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium px-1.5">
+                {badge}
+              </span>
+            )}
+          </NavLink>
+        ))}
+
+        {/* Divider */}
+        <div className="my-3 border-t border-zinc-800" />
+
+        {bottomItems.map(({ to, label, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
