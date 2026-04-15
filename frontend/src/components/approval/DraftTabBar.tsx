@@ -16,13 +16,13 @@ export function DraftTabBar({ alternatives, activeIndex, onTabChange }: DraftTab
       onValueChange={(val) => onTabChange(Number(val))}
     >
       <TabsList className="h-7 p-0.5">
-        {alternatives.map((alt, idx) => (
+        {alternatives.map((_alt, idx) => (
           <TabsTrigger
             key={idx}
             value={String(idx)}
             className="h-6 px-2 text-xs"
           >
-            {alt.label}
+            Reply {idx + 1}
           </TabsTrigger>
         ))}
       </TabsList>
