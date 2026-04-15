@@ -440,7 +440,7 @@ class TwitterAgent:
             try:
                 response = await self.tweepy_client.get_users_tweets(
                     id=account.platform_user_id,
-                    max_results=5,
+                    max_results=100,  # API max — only charges for tweets actually returned
                     tweet_fields=TWEET_FIELDS,
                     expansions=["author_id"],
                     user_fields=USER_FIELDS,
@@ -1063,12 +1063,22 @@ class TwitterAgent:
         # Step 5: Fetch tweets
         watchlist_tweets = await self._fetch_watchlist_tweets(session, watchlist, since)
         keyword_tweets = await self._fetch_keyword_tweets(session, keywords, since)
-        all_tweets = watchlist_tweets + keyword_tweets
+
+        # Deduplicate across both sources by tweet ID.
+        # Watchlist entry wins over keyword entry (preserves is_watchlist=True so the
+        # lower engagement gate and authority score are applied correctly).
+        seen_ids: set[str] = {t["id"] for t in watchlist_tweets}
+        deduped_keyword_tweets = [t for t in keyword_tweets if t["id"] not in seen_ids]
+        duplicates_removed = len(keyword_tweets) - len(deduped_keyword_tweets)
+        all_tweets = watchlist_tweets + deduped_keyword_tweets
+
         items_found = len(all_tweets)
         logger.info(
-            "TwitterAgent: fetched %d watchlist tweets, %d keyword tweets (%d total).",
+            "TwitterAgent: fetched %d watchlist tweets, %d keyword tweets "
+            "(%d cross-source duplicates removed, %d total).",
             len(watchlist_tweets),
             len(keyword_tweets),
+            duplicates_removed,
             items_found,
         )
 
