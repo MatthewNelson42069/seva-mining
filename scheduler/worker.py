@@ -31,6 +31,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Module-level scheduler reference — promoted so agents can enqueue one-off jobs (Phase 11).
+# Initialized to None; set to the running AsyncIOScheduler instance in main().
+_scheduler: AsyncIOScheduler | None = None
+
+
+def get_scheduler() -> AsyncIOScheduler:
+    """Return the running module-level scheduler. Raises RuntimeError if not started yet.
+
+    Used by agents (e.g. ContentAgent) to enqueue one-off DateTrigger jobs
+    after bundle commits (Phase 11 — Image render).
+    """
+    if _scheduler is None:
+        raise RuntimeError("Scheduler has not been started yet")
+    return _scheduler
+
+
 # Stable integer lock IDs per job.
 # NEVER reuse an ID across different jobs — advisory locks are process-global.
 # These IDs are stable for the lifetime of the project.
@@ -86,10 +102,25 @@ async def with_advisory_lock(
             exc_info=True,
         )
     finally:
-        await conn.execute(
-            text("SELECT pg_advisory_unlock(:lock_id)"),
-            {"lock_id": lock_id},
-        )
+        # Best-effort unlock. If Neon auto-suspended the connection mid-job
+        # (e.g. during a long LLM call), this statement would fail on a dead
+        # connection and crash APScheduler's job loop — killing all future
+        # scheduled runs until the worker is manually restarted.
+        # The advisory lock auto-releases when the connection is closed by
+        # Postgres, so swallowing this error is safe.
+        try:
+            await conn.execute(
+                text("SELECT pg_advisory_unlock(:lock_id)"),
+                {"lock_id": lock_id},
+            )
+        except Exception as exc:
+            logger.warning(
+                "Job %s: advisory unlock failed (%s: %s) — "
+                "lock will auto-release when connection closes",
+                job_name,
+                type(exc).__name__,
+                exc,
+            )
 
 
 async def placeholder_job(job_name: str) -> None:
@@ -349,16 +380,17 @@ async def main() -> None:
     # Upsert engagement thresholds (overwrites existing values — code is source of truth)
     await upsert_agent_config()
 
-    scheduler = await build_scheduler(engine)
-    scheduler.start()
-    logger.info("Scheduler worker started. %d jobs registered.", len(scheduler.get_jobs()))
+    global _scheduler
+    _scheduler = await build_scheduler(engine)
+    _scheduler.start()
+    logger.info("Scheduler worker started. %d jobs registered.", len(_scheduler.get_jobs()))
 
     try:
         # Block forever — scheduler runs in background event loop
         await asyncio.Event().wait()
     except (KeyboardInterrupt, SystemExit):
         logger.info("Scheduler worker shutting down.")
-        scheduler.shutdown()
+        _scheduler.shutdown()
     finally:
         await engine.dispose()
 
