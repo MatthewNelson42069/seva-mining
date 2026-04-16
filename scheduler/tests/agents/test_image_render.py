@@ -22,10 +22,20 @@ from unittest.mock import AsyncMock, MagicMock, patch, call
 # Ensure scheduler root is on sys.path for absolute imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-# Inject required env vars before any scheduler module imports
+# Inject required env vars before any scheduler module imports.
+# Must include ALL vars that other test files rely on via lru_cache(get_settings).
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://fake.neon.tech/db?ssl=require")
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-fake")
 os.environ.setdefault("X_API_BEARER_TOKEN", "test-bearer")
+os.environ.setdefault("X_API_KEY", "test-key")
+os.environ.setdefault("X_API_SECRET", "test-secret")
+os.environ.setdefault("APIFY_API_TOKEN", "test-apify-token")
+os.environ.setdefault("SERPAPI_API_KEY", "x")
+os.environ.setdefault("TWILIO_ACCOUNT_SID", "AC_test_sid")
+os.environ.setdefault("TWILIO_AUTH_TOKEN", "test_auth_token")
+os.environ.setdefault("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+os.environ.setdefault("DIGEST_WHATSAPP_TO", "whatsapp:+15550001234")
+os.environ.setdefault("FRONTEND_URL", "https://x.com")
 os.environ.setdefault("R2_ACCOUNT_ID", "test-account-id")
 os.environ.setdefault("R2_ACCESS_KEY_ID", "test-access-key")
 os.environ.setdefault("R2_SECRET_ACCESS_KEY", "test-secret-key")

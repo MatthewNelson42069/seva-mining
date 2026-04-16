@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: — Content Preview and Rendered Images
 status: Ready to execute
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-04-16T20:58:43.449Z"
+stopped_at: Completed 11-02-PLAN.md and 11-03-PLAN.md (Wave 1 parallel)
+last_updated: "2026-04-16T21:05:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 8
@@ -88,6 +88,7 @@ Plan: 3 of 7
 | Phase 10-senior-agent-whatsapp-notifications P01 | 2 | 2 tasks | 2 files |
 | Phase 10 P03 | 525589 | 2 tasks | 7 files |
 | Phase 11 P01 | 45 min | 5 tasks | 22 files |
+| Phase 11 P02 | 11 min | 2 tasks | 3 files |
 | Phase 11 P03 | 3 min | 2 tasks | 3 files |
 
 ## Accumulated Context
@@ -172,6 +173,9 @@ Recent decisions affecting current work:
 - [Phase 10-senior-agent-whatsapp-notifications]: Phase 10: Switched whatsapp.py from content_sid (Meta-approved template SIDs) to body (free-form text) — Twilio sandbox accepts free-form without template approval; TEMPLATE_SIDS and send_whatsapp_template() removed
 - [Phase 10]: Phase 10-03: expiry_sweep removed from scheduler; morning_digest at 15:00 UTC; WhatsApp failure non-fatal in run_morning_digest
 - [Phase 11]: Used _get_render_bundle_job() helper for patchable ImportError-safe lazy scheduler import — Allows monkeypatching in tests without needing to patch a local import; scheduler agents/__init__.py causes tweepy ImportError in backend process which is caught gracefully
+- [Phase 11-02]: genai_types.GenerateImagesConfig (plural) is the correct class name in google-genai 1.73.1 — RESEARCH.md had typo GenerateImageConfig (singular)
+- [Phase 11-02]: Per-role retry (not per-bundle): each role gets 3 independent attempts; partial renders (e.g. 3/4) written as partial list; empty list on all-roles-failed
+- [Phase 11-02]: Role names use twitter_visual/instagram_slide_1/2/3 convention to match RenderedImage schema; quote=2 roles not 1 per PLAN.md test behaviors
 
 ### Pending Todos
 
