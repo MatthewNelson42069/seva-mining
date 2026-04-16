@@ -269,4 +269,4 @@ Milestones:
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |
 | 10. Senior Agent WhatsApp Notifications | 2/3 | Complete    | 2026-04-07 |
-| 11. Content Preview and Rendered Images | 2/7 | In Progress|  |
+| 11. Content Preview and Rendered Images | 4/7 | In Progress|  |
