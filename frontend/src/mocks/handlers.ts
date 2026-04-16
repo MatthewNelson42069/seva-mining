@@ -317,4 +317,27 @@ export const handlers = [
       reset_date: '2026-05-01',
     })
   }),
+
+  // Phase 11 — content-bundle detail + rerender (Plan 11-05/06 test coverage)
+  http.get('/content-bundles/:id', ({ params }) => {
+    return HttpResponse.json({
+      id: params.id,
+      story_headline: 'Mock headline',
+      content_type: 'infographic',
+      no_story_flag: false,
+      draft_content: {},
+      rendered_images: [],
+      created_at: new Date().toISOString(),
+    })
+  }),
+  http.post('/content-bundles/:id/rerender', ({ params }) => {
+    return HttpResponse.json(
+      {
+        bundle_id: params.id,
+        render_job_id: `rerender_${params.id}_${Date.now()}`,
+        enqueued_at: new Date().toISOString(),
+      },
+      { status: 202 }
+    )
+  }),
 ]
