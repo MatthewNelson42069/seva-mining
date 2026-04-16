@@ -1,0 +1,122 @@
+"""
+content_bundles router — GET /content-bundles/{id} and POST /content-bundles/{id}/rerender.
+
+Requirements: CREV-02, CREV-06 (GET detail), CREV-09 (rerender 202).
+
+The rerender endpoint fires render_bundle_job via asyncio.create_task in the backend's
+own event loop per RESEARCH.md Pitfall 1 / Finding 3 (backend and scheduler are separate
+Railway services — cross-process scheduler access is not possible, so the render function
+must be importable and invokable from both contexts).
+
+sys.path shim: both services share the same repo in Railway. The scheduler/ directory is
+always a sibling of backend/. We insert it at import time so the backend can import
+scheduler/agents/image_render_agent.py.
+"""
+import asyncio
+import logging
+import os
+import sys
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.content_bundle import ContentBundle
+from app.schemas.content_bundle import ContentBundleDetailResponse, RerenderResponse
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# sys.path shim — allow backend to import scheduler package.
+# Both Railway services share the same repo at /app, so scheduler/ is always
+# a sibling of backend/. The shim is harmless if the path is already present.
+# ---------------------------------------------------------------------------
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_SCHEDULER_PATH = os.path.join(_REPO_ROOT, "scheduler")
+if _SCHEDULER_PATH not in sys.path:
+    sys.path.insert(0, _SCHEDULER_PATH)
+
+
+def _get_render_bundle_job():
+    """
+    Return the render_bundle_job coroutine function from the scheduler package.
+
+    Returns a no-op async stub if image_render_agent.py does not yet exist
+    (e.g. running before Plan 02 is merged). Plan 07 checkpoint verifies this
+    is wired correctly in the Railway deploy.
+    """
+    try:
+        from agents.image_render_agent import render_bundle_job  # type: ignore[import]
+        return render_bundle_job
+    except ImportError:
+        logger.warning(
+            "image_render_agent not found — rerender endpoint will fire a no-op stub. "
+            "Wire scheduler/agents/image_render_agent.py (Plan 11-02) to enable real rendering."
+        )
+
+        async def _noop_render_bundle_job(bundle_id: str) -> None:
+            logger.info("No-op render_bundle_job called for bundle %s (stub)", bundle_id)
+
+        return _noop_render_bundle_job
+
+
+# ---------------------------------------------------------------------------
+# Router
+# ---------------------------------------------------------------------------
+
+router = APIRouter(
+    prefix="/content-bundles",
+    tags=["content-bundles"],
+    dependencies=[Depends(get_current_user)],
+)
+
+
+@router.get("/{bundle_id}", response_model=ContentBundleDetailResponse)
+async def get_content_bundle(
+    bundle_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> ContentBundleDetailResponse:
+    """Return full ContentBundle detail for the dashboard modal (CREV-02 / CREV-06)."""
+    result = await db.execute(select(ContentBundle).where(ContentBundle.id == bundle_id))
+    bundle = result.scalar_one_or_none()
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="Content bundle not found")
+    return ContentBundleDetailResponse.model_validate(bundle)
+
+
+@router.post("/{bundle_id}/rerender", status_code=202, response_model=RerenderResponse)
+async def rerender_content_bundle(
+    bundle_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> RerenderResponse:
+    """Clear existing rendered_images and enqueue a fresh render (CREV-09).
+
+    Returns 202 immediately; the render runs async in the backend event loop via
+    asyncio.create_task. Frontend polls GET /content-bundles/{id} until new URLs appear.
+
+    Per D-15: always enqueues (idempotent). Per D-16: works on any bundle.
+    """
+    result = await db.execute(select(ContentBundle).where(ContentBundle.id == bundle_id))
+    bundle = result.scalar_one_or_none()
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="Content bundle not found")
+
+    # Clear so frontend polling state re-engages (D-15/D-16)
+    bundle.rendered_images = []
+    await db.commit()
+
+    # Fire-and-forget render. _get_render_bundle_job() is a module-level helper so
+    # tests can monkeypatch it without needing to patch a local import.
+    render_fn = _get_render_bundle_job()
+    asyncio.create_task(render_fn(str(bundle_id)))
+
+    job_id = f"rerender_{bundle_id}_{uuid4().hex[:8]}"
+    return RerenderResponse(
+        bundle_id=bundle_id,
+        render_job_id=job_id,
+        enqueued_at=datetime.now(timezone.utc).isoformat(),
+    )
