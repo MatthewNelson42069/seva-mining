@@ -22,6 +22,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 8: Dashboard Views and Digest** - Daily digest view, content review page, full Settings page wired to live DB config
 - [ ] **Phase 9: Agent Execution Polish** - All scoring weights DB-driven and configurable, agent schedule config from Settings, run logs, quota display, graceful failure handling
 
+<!-- Milestone v1.0.1 — Content preview & rendered images -->
+- [ ] **Phase 11: Content Preview and Rendered Images** - Full structured content brief rendering in dashboard modal (infographic, thread, long_form, breaking_news, quote, video_clip) via new `/content-bundles/{id}` endpoint, AI-generated rendered images (Nano Banana/Gemini) for infographic + quote formats stored in Cloudflare R2, background render job so agent cron stays fast, modal displays brief + rendered images inline
+
 ## Phase Details
 
 ### Phase 1: Infrastructure and Foundation
@@ -217,10 +220,42 @@ Plans:
 - [ ] 10-02-PLAN.md — New item notification: hook into Twitter, Instagram, Content agents post-run
 - [x] 10-03-PLAN.md — Morning digest at 15:00 UTC, remove expiry_sweep job, human verification checkpoint
 
+---
+
+## Milestone v1.0.1 — Content Preview and Rendered Images
+
+Phase 11 opens the v1.0.1 milestone. Scope: upgrade the Content queue detail modal so the operator sees the complete structured brief the Content Agent produced (not just a flattened caption) AND views AI-rendered image mockups alongside the brief for visual formats.
+
+### Phase 11: Content Preview and Rendered Images
+**Goal**: Operator clicks any Content queue card and sees the full structured brief for every content format plus AI-rendered image previews for infographic and quote formats; no more "just a headline" modals
+**Depends on**: Phase 10
+**Requirements**: CREV-02 (expansion), plus new requirements to be captured in REQUIREMENTS.md during the phase
+**Success Criteria** (what must be TRUE):
+  1. `GET /content-bundles/{id}` returns the full ContentBundle (draft_content JSONB, deep_research, story_headline, sources, rendered_images) for an authenticated operator
+  2. ContentDetailModal fetches the bundle via `engagement_snapshot.content_bundle_id` and renders a format-aware preview: infographic (InfographicPreview — Twitter + Instagram side-by-side, including carousel slides), thread (tweets list + long_form_post), long_form (single post), breaking_news (tweet + optional infographic_brief), quote (twitter_post + instagram_post), video_clip (twitter_caption + instagram_caption); falls back to plain text if bundle fetch fails
+  3. After the Content Agent commits a bundle whose format is infographic or quote, a background job generates AI-rendered images (3 Instagram carousel slides + 1 Twitter visual = up to 4 images per bundle) via the Nano Banana / Gemini image API and uploads them to Cloudflare R2 under a public URL
+  4. Rendered image URLs persist on ContentBundle (new column `rendered_images` JSONB — array of `{url, role}` objects where role ∈ `{instagram_slide_1, instagram_slide_2, instagram_slide_3, twitter_visual}`) via an Alembic migration, and the modal displays them inline alongside the brief
+  5. Background render job is independent from the Content Agent cron — agent commits the bundle and returns in <5s; render completes asynchronously within ~2 minutes and the modal auto-refreshes/polls to pick up rendered images
+  6. Render failures are logged per-image, do not crash the agent run, and the modal gracefully hides image slots when URLs are absent
+**Plans**: TBD during planning
+
+**Scope decisions locked (from discuss phase):**
+- Image generation: AI (Nano Banana / Gemini), not template-based
+- Storage: Cloudflare R2 (S3-compatible, free egress, public URLs, ~$0.015/GB-mo)
+- Formats rendered: infographic first (3 IG slides + 1 Twitter = 4 images), quote second (1 IG + 1 Twitter = 2 images). Thread, long_form, breaking_news, video_clip skip image rendering (text-only or externally sourced)
+- Rendering latency: background job separate from the 2-hour agent cron, so agent throughput stays fast
+
+Plans:
+- _(to be produced by `/gsd:plan-phase 11`)_
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11
+
+Milestones:
+- **v1.0** — Phases 1–10 (core four-agent platform + dashboard + WhatsApp)
+- **v1.0.1** — Phase 11 (content preview & rendered images)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -234,3 +269,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |
 | 10. Senior Agent WhatsApp Notifications | 2/3 | Complete    | 2026-04-07 |
+| 11. Content Preview and Rendered Images | 0/TBD | Planned |  |
