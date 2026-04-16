@@ -411,3 +411,151 @@ async def test_content_agent_whatsapp_failure_is_non_fatal():
 
     # commit was still called (session.commit called at least once in finally)
     assert mock_session.commit.call_count >= 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 11 — _enqueue_render_job_if_eligible tests (CREV-07, CREV-10)
+# ---------------------------------------------------------------------------
+
+def _make_bundle(content_type: str, compliance_passed: bool):
+    """Create a minimal mock bundle for enqueue tests."""
+    import uuid
+    bundle = MagicMock()
+    bundle.id = uuid.uuid4()
+    bundle.content_type = content_type
+    bundle.compliance_passed = compliance_passed
+    return bundle
+
+
+def test_commit_infographic_enqueues_render():
+    """_enqueue_render_job_if_eligible fires scheduler.add_job for infographic bundles."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("infographic", True)
+
+    mock_scheduler = MagicMock()
+    mock_scheduler.add_job = MagicMock()
+
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    mock_scheduler.add_job.assert_called_once()
+    call_kwargs = mock_scheduler.add_job.call_args
+    assert call_kwargs.kwargs.get("id") == f"render_{bundle.id}" or \
+           (call_kwargs.args and f"render_{bundle.id}" in str(call_kwargs))
+    # Check id kwarg
+    kwargs = mock_scheduler.add_job.call_args[1] if mock_scheduler.add_job.call_args[1] else {}
+    assert kwargs.get("id") == f"render_{bundle.id}"
+    assert kwargs.get("replace_existing") is True
+    assert kwargs.get("args") == [str(bundle.id)]
+
+
+def test_commit_quote_enqueues_render():
+    """_enqueue_render_job_if_eligible fires scheduler.add_job for quote bundles."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("quote", True)
+
+    mock_scheduler = MagicMock()
+    mock_scheduler.add_job = MagicMock()
+
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    mock_scheduler.add_job.assert_called_once()
+    kwargs = mock_scheduler.add_job.call_args[1] if mock_scheduler.add_job.call_args[1] else {}
+    assert kwargs.get("id") == f"render_{bundle.id}"
+    assert kwargs.get("replace_existing") is True
+
+
+def test_commit_thread_does_not_enqueue():
+    """_enqueue_render_job_if_eligible is a no-op for thread bundles (D-04)."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("thread", True)
+
+    mock_scheduler = MagicMock()
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    mock_scheduler.add_job.assert_not_called()
+
+
+def test_commit_long_form_does_not_enqueue():
+    """_enqueue_render_job_if_eligible is a no-op for long_form bundles (D-04)."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("long_form", True)
+
+    mock_scheduler = MagicMock()
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    mock_scheduler.add_job.assert_not_called()
+
+
+def test_commit_breaking_news_does_not_enqueue():
+    """_enqueue_render_job_if_eligible is a no-op for breaking_news bundles (D-04)."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("breaking_news", True)
+
+    mock_scheduler = MagicMock()
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    mock_scheduler.add_job.assert_not_called()
+
+
+def test_commit_video_clip_does_not_enqueue():
+    """_enqueue_render_job_if_eligible is a no-op for video_clip bundles (D-04 — text-only)."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("video_clip", True)
+
+    mock_scheduler = MagicMock()
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    mock_scheduler.add_job.assert_not_called()
+
+
+def test_commit_without_compliance_does_not_enqueue():
+    """_enqueue_render_job_if_eligible is a no-op when compliance_passed=False (D-11)."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("infographic", False)
+
+    mock_scheduler = MagicMock()
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    mock_scheduler.add_job.assert_not_called()
+
+
+def test_enqueue_failure_does_not_crash_agent():
+    """When get_scheduler() raises RuntimeError, _enqueue_render_job_if_eligible returns without raising (D-19)."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("infographic", True)
+
+    with patch("worker.get_scheduler", side_effect=RuntimeError("Scheduler not started")):
+        # Must NOT raise — silent-fail per D-18/D-19
+        result = ca._enqueue_render_job_if_eligible(bundle)
+
+    assert result is None  # returns None on silent-fail
+
+
+def test_enqueue_uses_replace_existing_true():
+    """add_job is called with replace_existing=True to prevent ConflictingIdError on rerender (Pitfall 6)."""
+    ca = _get_content_agent()
+    bundle = _make_bundle("infographic", True)
+
+    mock_scheduler = MagicMock()
+    mock_scheduler.add_job = MagicMock()
+
+    with patch("worker.get_scheduler", return_value=mock_scheduler), \
+         patch("agents.image_render_agent.render_bundle_job", new_callable=AsyncMock):
+        ca._enqueue_render_job_if_eligible(bundle)
+
+    call_kwargs = mock_scheduler.add_job.call_args[1] if mock_scheduler.add_job.call_args[1] else {}
+    assert call_kwargs.get("replace_existing") is True, "replace_existing must be True to prevent ConflictingIdError"

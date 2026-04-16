@@ -105,6 +105,58 @@ CREDIBILITY_TIERS: dict[str, float] = {
 }
 DEFAULT_CREDIBILITY = 0.4
 
+# ---------------------------------------------------------------------------
+# Phase 11 — render enqueue helper (CREV-07, CREV-10, D-04, D-18, D-19)
+# ---------------------------------------------------------------------------
+
+# Formats eligible for background image rendering (D-04).
+# All other formats (thread, long_form, breaking_news, video_clip, gold_history) are text-only.
+_RENDER_FORMATS = {"infographic", "quote"}
+
+
+def _enqueue_render_job_if_eligible(bundle) -> None:
+    """Fire-and-forget: schedule an immediate DateTrigger render job for eligible bundles.
+
+    Eligible = compliance_passed=True AND content_type in {"infographic", "quote"} (D-04).
+
+    Enqueue failures are ALWAYS swallowed — rendering is best-effort and must never block
+    or crash the agent (D-18 silent-fail, D-19 agent non-blocking).
+
+    Late imports (worker.get_scheduler, agents.image_render_agent.render_bundle_job) are used
+    to avoid circular import cycles that would occur at module load time.
+
+    Args:
+        bundle: A ContentBundle ORM instance (or any object with .compliance_passed,
+                .content_type, and .id attributes).
+    """
+    if not bundle.compliance_passed:
+        return
+    if (bundle.content_type or "").lower() not in _RENDER_FORMATS:
+        return
+    try:
+        from datetime import datetime, timezone  # noqa: PLC0415
+        from apscheduler.triggers.date import DateTrigger  # noqa: PLC0415
+        from worker import get_scheduler  # noqa: PLC0415
+        from agents.image_render_agent import render_bundle_job  # noqa: PLC0415
+
+        scheduler = get_scheduler()
+        scheduler.add_job(
+            render_bundle_job,
+            trigger=DateTrigger(run_date=datetime.now(timezone.utc)),
+            args=[str(bundle.id)],
+            id=f"render_{bundle.id}",
+            name=f"Image render — bundle {bundle.id}",
+            replace_existing=True,
+            misfire_grace_time=300,
+        )
+    except Exception as exc:  # noqa: BLE001 — never block the agent on render plumbing (D-19)
+        import logging as _logging  # noqa: PLC0415
+        _logging.getLogger(__name__).warning(
+            "Failed to enqueue render job for bundle %s: %s",
+            bundle.id,
+            exc,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Pure scoring functions — module-level for direct testability (CONT-05)
@@ -1391,6 +1443,9 @@ For "quote" format, draft_content must have:
                     })
                     continue
 
+                # Enqueue background render job for infographic/quote bundles (Phase 11, D-04, D-10)
+                _enqueue_render_job_if_eligible(bundle)
+
                 # Create DraftItem + call Senior Agent
                 item = build_draft_item(bundle, rationale)
                 session.add(item)
@@ -1502,6 +1557,9 @@ For "quote" format, draft_content must have:
                 session.add(vc_bundle)
                 await session.flush()
 
+                # Enqueue background render job (no-op for video_clip per D-04; wired for completeness)
+                _enqueue_render_job_if_eligible(vc_bundle)
+
                 if compliance_ok:
                     rationale = f"Video clip from @{clip['author_username']} on gold sector"
                     vc_item = build_draft_item(vc_bundle, rationale)
@@ -1561,6 +1619,9 @@ For "quote" format, draft_content must have:
                 )
                 session.add(q_bundle)
                 await session.flush()
+
+                # Enqueue background render job for quote bundles (Phase 11, D-04, D-10)
+                _enqueue_render_job_if_eligible(q_bundle)
 
                 if compliance_ok:
                     rationale = f"Quote from {qt['author_name']} on gold sector"
