@@ -16,6 +16,8 @@ dependencies = [
     "pyjwt>=2.9",
     "bcrypt>=4.2,<5",
     "aiosqlite>=0.22",
+    "google-genai[aiohttp]==1.73.1",
+    "aioboto3==15.5.0",
 ]
 
 [project.optional-dependencies]

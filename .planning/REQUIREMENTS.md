@@ -115,6 +115,11 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CREV-03**: All sources listed with links
 - [x] **CREV-04**: Infographic preview when applicable
 - [x] **CREV-05**: Approve to queue for posting
+- [ ] **CREV-06**: Content detail modal displays full structured brief for all content formats (infographic, thread, long_form, breaking_news, quote, video_clip) with format-aware rendering
+- [ ] **CREV-07**: Infographic and quote ContentBundles automatically generate AI-rendered images (4 and 2 respectively) stored in Cloudflare R2
+- [ ] **CREV-08**: Rendered images appear in the Content detail modal with skeleton+poll UX and graceful fallback on render failure
+- [ ] **CREV-09**: Operator can trigger a fresh image render via a "Regenerate images" button in the modal
+- [ ] **CREV-10**: Image rendering runs as a background job independent of the Content Agent cron; failures do not block bundle persistence or approval
 
 ### WhatsApp Notifications
 
@@ -276,6 +281,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CREV-03 | Phase 8 | Complete |
 | CREV-04 | Phase 8 | Complete |
 | CREV-05 | Phase 8 | Complete |
+| CREV-06 | Phase 11 | Pending |
+| CREV-07 | Phase 11 | Pending |
+| CREV-08 | Phase 11 | Pending |
+| CREV-09 | Phase 11 | Pending |
+| CREV-10 | Phase 11 | Pending |
 | SETT-01 | Phase 8 | Complete |
 | SETT-02 | Phase 8 | Complete |
 | SETT-03 | Phase 8 | Complete |
@@ -287,8 +297,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EXEC-02 | Phase 9 | Complete |
 
 **Coverage:**
-- v1 requirements: 99 total (note: REQUIREMENTS.md previously stated 78 — actual count from requirement IDs is 99)
-- Mapped to phases: 99
+- v1 requirements: 104 total (note: REQUIREMENTS.md previously stated 78 — actual count from requirement IDs is 99; Phase 11 adds 5 new CREV requirements)
+- Mapped to phases: 104
 - Unmapped: 0
 
 ---

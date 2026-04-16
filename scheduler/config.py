@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     digest_whatsapp_to: Optional[str] = None
     frontend_url: str = "http://localhost:5173"
 
+    # Phase 11 — Image rendering (Gemini / Cloudflare R2)
+    gemini_api_key: Optional[str] = None
+    r2_account_id: Optional[str] = None
+    r2_access_key_id: Optional[str] = None
+    r2_secret_access_key: Optional[str] = None
+    r2_bucket: Optional[str] = None
+    r2_public_base_url: Optional[str] = None
+
 
 @lru_cache
 def get_settings() -> Settings:
