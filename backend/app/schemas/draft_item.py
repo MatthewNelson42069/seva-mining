@@ -1,7 +1,7 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from uuid import UUID
-from typing import Optional
+from typing import Optional, Any
 from enum import Enum
 
 
@@ -34,6 +34,7 @@ class DraftItemResponse(BaseModel):
     decided_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    engagement_snapshot: Optional[Any] = None  # Phase 11: exposes content_bundle_id to frontend
 
 
 class ApproveRequest(BaseModel):

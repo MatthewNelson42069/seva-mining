@@ -27,6 +27,7 @@ export interface DraftItemResponse {
   decided_at?: string
   created_at: string
   updated_at?: string
+  engagement_snapshot?: Record<string, unknown>
 }
 
 export interface QueueListResponse {
@@ -47,6 +48,34 @@ export interface ContentBundleResponse {
   draft_content?: unknown
   compliance_passed?: boolean
   created_at: string
+}
+
+export interface RenderedImage {
+  role: 'twitter_visual' | 'instagram_slide_1' | 'instagram_slide_2' | 'instagram_slide_3'
+  url: string
+  generated_at: string
+}
+
+export interface ContentBundleDetailResponse {
+  id: string
+  story_headline: string
+  story_url?: string
+  source_name?: string
+  content_type?: string
+  score?: number
+  quality_score?: number
+  no_story_flag: boolean
+  deep_research?: unknown
+  draft_content?: unknown
+  compliance_passed?: boolean
+  rendered_images?: RenderedImage[] | null
+  created_at: string
+}
+
+export interface RerenderResponse {
+  bundle_id: string
+  render_job_id: string
+  enqueued_at: string
 }
 
 export const REJECTION_CATEGORIES = [
