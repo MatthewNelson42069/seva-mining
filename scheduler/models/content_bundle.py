@@ -19,6 +19,7 @@ class ContentBundle(Base):
     deep_research = Column(JSONB)              # sources, key_data_points, corroborating_sources
     draft_content = Column(JSONB)              # format-specific draft output
     compliance_passed = Column(Boolean)
+    rendered_images = Column(JSONB, nullable=True)   # array of {role, url, generated_at} — Phase 11
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
