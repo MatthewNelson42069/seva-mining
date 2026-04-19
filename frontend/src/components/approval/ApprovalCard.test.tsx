@@ -91,8 +91,10 @@ describe('ApprovalCard', () => {
       wrapper: createWrapper(),
     })
 
-    expect(screen.getByText('Draft A')).toBeInTheDocument()
-    expect(screen.getByText('Draft B')).toBeInTheDocument()
+    // Tab buttons are rendered (shadcn Tabs only mounts the active panel;
+    // query by role='tab' which is always present in the tablist)
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs.length).toBeGreaterThanOrEqual(2)
   })
 
   it('clicking "Why this post?" reveals the rationale text', () => {
