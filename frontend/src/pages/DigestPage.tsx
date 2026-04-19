@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { parse, format, addDays, subDays, formatDistanceToNow } from 'date-fns'
 import { ChevronLeft, ChevronRight, Calendar, ExternalLink, Newspaper, RefreshCw } from 'lucide-react'
@@ -127,8 +127,9 @@ function StoryCard({ story, index }: { story: NewsStory; index: number }) {
 }
 
 export function DigestPage() {
+  // currentDate: the date the user has navigated to. null means "no explicit selection yet
+  // — fall back to the latest digest returned by the server".
   const [currentDate, setCurrentDate] = useState<string | null>(null)
-  const [latestDate, setLatestDate] = useState<string | null>(null)
 
   // ── Live news feed (always last 24h regardless of date navigation) ──────────
   const newsFeedQuery = useQuery({
@@ -149,12 +150,10 @@ export function DigestPage() {
     },
   })
 
-  useEffect(() => {
-    if (latestQuery.data?.digest_date && currentDate === null) {
-      setCurrentDate(latestQuery.data.digest_date)
-      setLatestDate(latestQuery.data.digest_date)
-    }
-  }, [latestQuery.data, currentDate])
+  // Derived: latestDate always tracks server data — no state, no effect.
+  const latestDate = latestQuery.data?.digest_date ?? null
+  // Effective selection: user's pick, falling back to latest while nothing is selected.
+  const effectiveDate = currentDate ?? latestDate
 
   // ── Date-specific digest (stats navigation) ─────────────────────────────────
   const isAtLatest = currentDate === latestDate
@@ -173,22 +172,26 @@ export function DigestPage() {
   const digest: DailyDigestResponse | null | undefined =
     isAtLatest || !currentDate ? latestQuery.data : dateQuery.data
 
-  const statsLoading = !currentDate
+  const statsLoading = !effectiveDate
     ? latestQuery.isLoading
     : isAtLatest ? latestQuery.isLoading : dateQuery.isLoading
 
   function handlePrev() {
-    if (!currentDate) return
-    setCurrentDate(format(subDays(parse(currentDate, 'yyyy-MM-dd', new Date()), 1), 'yyyy-MM-dd'))
+    const base = currentDate ?? latestDate
+    if (!base) return
+    setCurrentDate(format(subDays(parse(base, 'yyyy-MM-dd', new Date()), 1), 'yyyy-MM-dd'))
   }
   function handleNext() {
-    if (!currentDate) return
-    setCurrentDate(format(addDays(parse(currentDate, 'yyyy-MM-dd', new Date()), 1), 'yyyy-MM-dd'))
+    const base = currentDate ?? latestDate
+    if (!base) return
+    setCurrentDate(format(addDays(parse(base, 'yyyy-MM-dd', new Date()), 1), 'yyyy-MM-dd'))
   }
 
-  const isNextDisabled = currentDate === latestDate
-  const displayDate = currentDate
-    ? format(parse(currentDate, 'yyyy-MM-dd', new Date()), 'EEEE, MMMM d, yyyy')
+  // "Next" is disabled while we're already showing the latest digest (or while no
+  // digest is loaded at all — we can't navigate off nothing).
+  const isNextDisabled = !effectiveDate || effectiveDate === latestDate
+  const displayDate = effectiveDate
+    ? format(parse(effectiveDate, 'yyyy-MM-dd', new Date()), 'EEEE, MMMM d, yyyy')
     : ''
 
   // ── Stats extraction ─────────────────────────────────────────────────────────

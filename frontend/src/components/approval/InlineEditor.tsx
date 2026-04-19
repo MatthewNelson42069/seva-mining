@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 
 interface InlineEditorProps {
@@ -19,14 +19,16 @@ export function InlineEditor({
   onCancel,
   onEditChange,
 }: InlineEditorProps) {
+  // "Storing information from previous renders" pattern from react.dev:
+  // track the previous `text` prop in state and, when it changes while the user
+  // is NOT editing, reset `editValue` during render (no effect, no ref). This is
+  // the officially-recommended alternative to "Syncing state to props with useEffect".
   const [editValue, setEditValue] = useState(text)
-
-  // Sync editValue when the text prop changes (e.g., tab switch)
-  useEffect(() => {
-    if (!isEditing) {
-      setEditValue(text)
-    }
-  }, [text, isEditing])
+  const [prevText, setPrevText] = useState(text)
+  if (!isEditing && prevText !== text) {
+    setPrevText(text)
+    setEditValue(text)
+  }
 
   function handleChange(value: string) {
     setEditValue(value)

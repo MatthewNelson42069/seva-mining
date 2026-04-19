@@ -20,4 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  // shadcn/ui components are generated code that legitimately exports both
+  // components and helpers from the same file (e.g. badgeVariants in badge.tsx).
+  // The react-refresh/only-export-components rule does not apply to them.
+  {
+    files: ['src/components/ui/**'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

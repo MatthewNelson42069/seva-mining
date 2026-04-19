@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useRerenderContentBundle } from '@/hooks/useContentBundle'
 import type { RenderedImage } from '@/api/types'
@@ -31,6 +32,22 @@ export function RenderedImagesGallery({
 }: RenderedImagesGalleryProps) {
   const mutation = useRerenderContentBundle(bundleId)
 
+  // Track whether the bundle is still "young enough" to be in the polling window
+  // (under 10 minutes old). Date.now() is impure so we read it once in a lazy
+  // useState initializer (runs exactly at mount) and then a one-shot timer
+  // flips the flag when the window closes. No Date.now() calls during render.
+  const [isWithinPollingWindow, setIsWithinPollingWindow] = useState(() => {
+    const ageMs = Date.now() - new Date(bundleCreatedAt).getTime()
+    return ageMs < 10 * 60_000
+  })
+  useEffect(() => {
+    const ageMs = Date.now() - new Date(bundleCreatedAt).getTime()
+    const remainingMs = 10 * 60_000 - ageMs
+    if (remainingMs <= 0) return
+    const id = setTimeout(() => setIsWithinPollingWindow(false), remainingMs)
+    return () => clearTimeout(id)
+  }, [bundleCreatedAt])
+
   const expectedCount =
     contentType === 'infographic' ? 4 : contentType === 'quote' ? 2 : 0
 
@@ -38,8 +55,7 @@ export function RenderedImagesGallery({
   if (expectedCount === 0) return null
 
   const images = renderedImages ?? []
-  const ageMinutes = (Date.now() - new Date(bundleCreatedAt).getTime()) / 60000
-  const isPolling = images.length === 0 && ageMinutes < 10
+  const isPolling = images.length === 0 && isWithinPollingWindow
 
   // Sort images by canonical role order
   const sortedImages = [...images].sort(

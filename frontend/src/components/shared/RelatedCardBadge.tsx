@@ -2,7 +2,6 @@ import { Badge } from '@/components/ui/badge'
 import type { Platform } from '@/api/types'
 
 interface RelatedCardBadgeProps {
-  relatedId: string
   relatedPlatform: Platform
   onSwitchPlatform?: (platform: Platform) => void
 }
@@ -13,7 +12,7 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   content: 'Content',
 }
 
-export function RelatedCardBadge({ relatedId: _relatedId, relatedPlatform, onSwitchPlatform }: RelatedCardBadgeProps) {
+export function RelatedCardBadge({ relatedPlatform, onSwitchPlatform }: RelatedCardBadgeProps) {
   function handleClick() {
     onSwitchPlatform?.(relatedPlatform)
   }
