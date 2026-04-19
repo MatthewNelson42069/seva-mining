@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: — Content Preview and Rendered Images
-status: Ready to execute
-stopped_at: Completed 11-04-PLAN.md
-last_updated: "2026-04-19T21:37:31.733Z"
+status: v1.0.1 complete
+stopped_at: Completed Phase 11 — v1.0.1 milestone shipped
+last_updated: "2026-04-19T22:15:00.000Z"
 progress:
   total_phases: 11
-  completed_phases: 8
-  total_plans: 61
-  completed_plans: 49
+  completed_phases: 9
+  total_plans: 68
+  completed_plans: 56
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
-**Current focus:** Phase 11 — content-preview-and-rendered-images
+**Current focus:** v1.0.1 shipped — awaiting next milestone definition
 
 ## Current Position
 
-Phase: 11 (content-preview-and-rendered-images) — EXECUTING
-Plan: 5 of 7
+Phase: Not started (v1.0.2 TBD)
+Plan: Not started
 
 ## Performance Metrics
 
@@ -91,6 +91,9 @@ Plan: 5 of 7
 | Phase 11 P02 | 11 min | 2 tasks | 3 files |
 | Phase 11 P03 | 3 min | 2 tasks | 3 files |
 | Phase 11 P04 | 3 min | 1 tasks | 2 files |
+| Phase 11 P05 | 5 min | 2 tasks | 4 files |
+| Phase 11 P06 | 15 min | 2 tasks | 9 files |
+| Phase 11 P07 | checkpoint | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -177,6 +180,10 @@ Recent decisions affecting current work:
 - [Phase 11-02]: genai_types.GenerateImagesConfig (plural) is the correct class name in google-genai 1.73.1 — RESEARCH.md had typo GenerateImageConfig (singular)
 - [Phase 11-02]: Per-role retry (not per-bundle): each role gets 3 independent attempts; partial renders (e.g. 3/4) written as partial list; empty list on all-roles-failed
 - [Phase 11-02]: Role names use twitter_visual/instagram_slide_1/2/3 convention to match RenderedImage schema; quote=2 roles not 1 per PLAN.md test behaviors
+- [Phase 11-03]: Backend rerender endpoint uses asyncio.create_task in the backend's own event loop — cross-process scheduler.add_job is not possible (backend and scheduler are separate Railway services)
+- [Phase 11-05]: TanStack Query v5 refetchInterval callback receives a query object (not (data, query) like v4); tests exercise the callback directly by extracting the query from the cache to avoid vi.useFakeTimers deadlocks
+- [Phase 11-06]: RenderedImagesGallery mounted only for infographic + quote formats (D-04); other formats never render image skeletons
+- [Phase 11-07]: importlib.util.spec_from_file_location bypasses scheduler/agents/__init__.py tweepy import in the backend process; scheduler/config.py uses extra="ignore" to tolerate backend-only env vars in the shared .env
 
 ### Pending Todos
 
@@ -198,6 +205,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-16T21:13:18.168Z
-Stopped at: Completed 11-04-PLAN.md
+Last session: 2026-04-19T22:15:00.000Z
+Stopped at: Completed Phase 11 — v1.0.1 milestone shipped
 Resume file: None

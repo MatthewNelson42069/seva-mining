@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 9: Agent Execution Polish** - All scoring weights DB-driven and configurable, agent schedule config from Settings, run logs, quota display, graceful failure handling
 
 <!-- Milestone v1.0.1 — Content preview & rendered images -->
-- [ ] **Phase 11: Content Preview and Rendered Images** - Full structured content brief rendering in dashboard modal (infographic, thread, long_form, breaking_news, quote, video_clip) via new `/content-bundles/{id}` endpoint, AI-generated rendered images (Nano Banana/Gemini) for infographic + quote formats stored in Cloudflare R2, background render job so agent cron stays fast, modal displays brief + rendered images inline
+- [x] **Phase 11: Content Preview and Rendered Images** - Full structured content brief rendering in dashboard modal (infographic, thread, long_form, breaking_news, quote, video_clip) via new `/content-bundles/{id}` endpoint, AI-generated rendered images (Nano Banana/Gemini) for infographic + quote formats stored in Cloudflare R2, background render job so agent cron stays fast, modal displays brief + rendered images inline
 
 ## Phase Details
 
@@ -246,7 +246,13 @@ Phase 11 opens the v1.0.1 milestone. Scope: upgrade the Content queue detail mod
 - Rendering latency: background job separate from the 2-hour agent cron, so agent throughput stays fast
 
 Plans:
-- _(to be produced by `/gsd:plan-phase 11`)_
+- [x] 11-01-PLAN.md — Foundation and Wave 0 (deps, env, migration 0006, schemas, worker scheduler, test stubs)
+- [x] 11-02-PLAN.md — Image render service (`render_bundle_job` — Imagen 4 + R2 + silent-fail)
+- [x] 11-03-PLAN.md — Backend endpoints (`GET /content-bundles/{id}`, `POST /content-bundles/{id}/rerender`)
+- [x] 11-04-PLAN.md — Content Agent integration (enqueue render on infographic/quote commit)
+- [x] 11-05-PLAN.md — Frontend API and hook (`useContentBundle` + `useRerenderContentBundle`)
+- [x] 11-06-PLAN.md — Format-aware modal (7 preview components + RenderedImagesGallery)
+- [x] 11-07-PLAN.md — Human verification on staging + milestone finalization
 
 ## Progress
 
@@ -255,7 +261,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10
 
 Milestones:
 - **v1.0** — Phases 1–10 (core four-agent platform + dashboard + WhatsApp)
-- **v1.0.1** — Phase 11 (content preview & rendered images)
+- **v1.0.1** — Phase 11 (content preview & rendered images) — shipped 2026-04-19
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -269,4 +275,4 @@ Milestones:
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |
 | 10. Senior Agent WhatsApp Notifications | 2/3 | Complete    | 2026-04-07 |
-| 11. Content Preview and Rendered Images | 4/7 | In Progress|  |
+| 11. Content Preview and Rendered Images | 7/7 | Complete   | 2026-04-19 |
