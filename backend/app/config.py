@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,6 +38,16 @@ class Settings(BaseSettings):
     r2_secret_access_key: str | None = None
     r2_bucket: str | None = None
     r2_public_base_url: str | None = None
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _jwt_secret_min_length(cls, v: str) -> str:
+        """HS256 requires >=32 bytes of entropy to avoid key-shorter-than-hash weakness."""
+        if len(v) < 32:
+            raise ValueError(
+                f"JWT_SECRET must be at least 32 bytes for SHA256 HMAC security (got {len(v)})"
+            )
+        return v
 
 
 @lru_cache

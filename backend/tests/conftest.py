@@ -10,7 +10,8 @@ import pytest_asyncio
 # ---------------------------------------------------------------------------
 # STEP 1: Set environment variables BEFORE any app imports
 # ---------------------------------------------------------------------------
-_TEST_JWT_SECRET = "test-jwt-secret-for-tests"
+# 32 bytes — passes _jwt_secret_min_length validator
+_TEST_JWT_SECRET = "test-jwt-secret-for-tests-xxxxxx"
 _TEST_PASSWORD = "testpassword"
 _TEST_PASSWORD_HASH = bcrypt.hashpw(_TEST_PASSWORD.encode(), bcrypt.gensalt()).decode()
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
