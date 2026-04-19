@@ -12,16 +12,10 @@ interface RenderedImagesGalleryProps {
 
 const ROLE_ORDER: RenderedImage['role'][] = [
   'twitter_visual',
-  'instagram_slide_1',
-  'instagram_slide_2',
-  'instagram_slide_3',
 ]
 
 const ROLE_LABELS: Record<string, string> = {
   twitter_visual: 'Twitter / X',
-  instagram_slide_1: 'Instagram 1',
-  instagram_slide_2: 'Instagram 2',
-  instagram_slide_3: 'Instagram 3',
 }
 
 export function RenderedImagesGallery({
@@ -49,7 +43,7 @@ export function RenderedImagesGallery({
   }, [bundleCreatedAt])
 
   const expectedCount =
-    contentType === 'infographic' ? 4 : contentType === 'quote' ? 2 : 0
+    contentType === 'infographic' || contentType === 'quote' ? 1 : 0
 
   // Nothing to render for text-only formats
   if (expectedCount === 0) return null
@@ -81,7 +75,7 @@ export function RenderedImagesGallery({
       {isPolling && (
         <>
           <p className="text-xs text-muted-foreground">Rendering images\u2026</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             {Array.from({ length: expectedCount }).map((_, i) => (
               <div
                 key={i}
@@ -94,7 +88,7 @@ export function RenderedImagesGallery({
       )}
 
       {!isPolling && sortedImages.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {sortedImages.map((img) => (
             <a
               key={img.role}

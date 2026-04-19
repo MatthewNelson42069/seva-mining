@@ -9,7 +9,6 @@ interface PlatformTabBarProps {
 
 const PLATFORMS: { value: Platform; label: string }[] = [
   { value: 'twitter', label: 'Twitter' },
-  { value: 'instagram', label: 'Instagram' },
   { value: 'content', label: 'Content' },
 ]
 

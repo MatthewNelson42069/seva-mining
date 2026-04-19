@@ -8,7 +8,6 @@ interface RelatedCardBadgeProps {
 
 const PLATFORM_LABELS: Record<Platform, string> = {
   twitter: 'Twitter',
-  instagram: 'Instagram',
   content: 'Content',
 }
 

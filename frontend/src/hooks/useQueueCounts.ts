@@ -4,8 +4,6 @@ import { getQueue } from '@/api/queue'
 interface QueueCounts {
   twitter: number
   twitterHasMore: boolean
-  instagram: number
-  instagramHasMore: boolean
   content: number
   contentHasMore: boolean
 }
@@ -14,11 +12,6 @@ export function useQueueCounts(): QueueCounts {
   const tw = useQuery({
     queryKey: ['queue-count', 'twitter'],
     queryFn: () => getQueue({ platform: 'twitter', status: 'pending', limit: 100 }),
-    staleTime: 60_000,
-  })
-  const ig = useQuery({
-    queryKey: ['queue-count', 'instagram'],
-    queryFn: () => getQueue({ platform: 'instagram', status: 'pending', limit: 100 }),
     staleTime: 60_000,
   })
   const co = useQuery({
@@ -30,8 +23,6 @@ export function useQueueCounts(): QueueCounts {
   return {
     twitter: tw.data?.items.length ?? 0,
     twitterHasMore: !!tw.data?.next_cursor,
-    instagram: ig.data?.items.length ?? 0,
-    instagramHasMore: !!ig.data?.next_cursor,
     content: co.data?.items.length ?? 0,
     contentHasMore: !!co.data?.next_cursor,
   }

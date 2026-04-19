@@ -12,20 +12,17 @@ export function QueuePage() {
   const [activePlatform, setActivePlatform] = useState<Platform>('twitter')
 
   const twitterQuery = useQueue('twitter')
-  const instagramQuery = useQueue('instagram')
   const contentQuery = useQueue('content')
 
   const twitterCount = twitterQuery.data?.pages.flatMap((p) => p.items).length ?? 0
-  const instagramCount = instagramQuery.data?.pages.flatMap((p) => p.items).length ?? 0
   const contentCount = contentQuery.data?.pages.flatMap((p) => p.items).length ?? 0
 
   const counts: Record<Platform, number> = {
     twitter: twitterCount,
-    instagram: instagramCount,
     content: contentCount,
   }
 
-  const activeQuery = { twitter: twitterQuery, instagram: instagramQuery, content: contentQuery }[activePlatform]
+  const activeQuery = { twitter: twitterQuery, content: contentQuery }[activePlatform]
   const activeItems = activeQuery.data?.pages.flatMap((p) => p.items) ?? []
   const isLoading = activeQuery.isLoading
   const hasNextPage = activeQuery.hasNextPage

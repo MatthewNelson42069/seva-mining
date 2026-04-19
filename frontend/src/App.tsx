@@ -19,7 +19,6 @@ export default function App() {
 
             {/* Platform queues */}
             <Route path="/twitter" element={<PlatformQueuePage platform="twitter" />} />
-            <Route path="/instagram" element={<PlatformQueuePage platform="instagram" />} />
             <Route path="/content" element={<PlatformQueuePage platform="content" />} />
 
             {/* Other pages */}

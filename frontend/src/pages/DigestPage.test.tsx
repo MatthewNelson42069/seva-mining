@@ -28,7 +28,7 @@ const mockLatestDigest: DailyDigestResponse = {
   id: 'aaaaaaaa-0000-0000-0000-000000000001',
   digest_date: '2026-04-02',
   top_stories: [],
-  queue_snapshot: { twitter: 3, instagram: 2, content: 1 },
+  queue_snapshot: { twitter: 3, content: 1 },
   yesterday_approved: { count: 4, items: [] },
   yesterday_rejected: { count: 1, items: [] },
   yesterday_expired: { count: 2, items: [] },
@@ -104,11 +104,9 @@ describe('DigestPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Twitter')).toBeInTheDocument()
     })
-    expect(screen.getByText('Instagram')).toBeInTheDocument()
     expect(screen.getByText('Content')).toBeInTheDocument()
     // Check counts appear
     expect(screen.getByText('3')).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
   })
 
@@ -166,7 +164,7 @@ describe('DigestPage', () => {
           id: 'aaaaaaaa-0000-0000-0000-000000000003',
           digest_date: params.date as string,
           top_stories: [],
-          queue_snapshot: { twitter: 1, instagram: 0, content: 0 },
+          queue_snapshot: { twitter: 1, content: 0 },
           yesterday_approved: { count: 2, items: [] },
           yesterday_rejected: { count: 0, items: [] },
           yesterday_expired: { count: 1, items: [] },

@@ -1,10 +1,9 @@
-import { MessageSquare, Camera, FileText } from 'lucide-react'
+import { MessageSquare, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { Platform } from '@/api/types'
 
 const PLATFORM_CONFIG: Record<Platform, { label: string; icon: React.ElementType }> = {
   twitter: { label: 'Twitter', icon: MessageSquare },
-  instagram: { label: 'Instagram', icon: Camera },
   content: { label: 'Content', icon: FileText },
 }
 

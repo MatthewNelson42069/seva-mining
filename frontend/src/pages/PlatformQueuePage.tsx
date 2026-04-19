@@ -13,7 +13,6 @@ import type { AgentRunResponse } from '@/api/types'
 
 const PLATFORM_LABELS: Record<Platform, string> = {
   twitter: 'Twitter',
-  instagram: 'Instagram',
   content: 'Content',
 }
 

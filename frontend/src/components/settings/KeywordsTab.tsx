@@ -109,7 +109,6 @@ export function KeywordsTab() {
                     onChange={e => setAddPlatform(e.target.value)}
                   >
                     <option value="twitter">twitter</option>
-                    <option value="instagram">instagram</option>
                     <option value="content">content</option>
                   </select>
                 </td>

@@ -15,7 +15,6 @@ import { QuotaBar } from './QuotaBar'
 const AGENT_OPTIONS = [
   { value: '', label: 'All agents' },
   { value: 'twitter_agent', label: 'twitter_agent' },
-  { value: 'instagram_agent', label: 'instagram_agent' },
   { value: 'content_agent', label: 'content_agent' },
   { value: 'senior_agent', label: 'senior_agent' },
 ]

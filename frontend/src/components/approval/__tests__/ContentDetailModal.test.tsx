@@ -177,14 +177,13 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
     expect(screen.getByText('BREAKING: Gold surpasses $3,000/oz for the first time.')).toBeInTheDocument()
   })
 
-  // Test 5 — quote renders QuotePreview AND RenderedImagesGallery (expectedCount=2)
+  // Test 5 — quote renders QuotePreview AND RenderedImagesGallery (expectedCount=1)
   it('renders QuotePreview and RenderedImagesGallery when bundle.content_type === "quote"', () => {
     const bundle = makeBundle({
       content_type: 'quote',
       draft_content: {
         format: 'quote',
         twitter_post: 'Gold never lies.',
-        instagram_post: 'Gold never lies. #gold',
         attributed_to: 'Warren Buffett',
         source_url: 'https://berkshire.com',
       },
@@ -202,7 +201,7 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
 
     expect(screen.getByText(/QUOTE/i)).toBeInTheDocument()
     expect(screen.getByText('Gold never lies.')).toBeInTheDocument()
-    // RenderedImagesGallery appears for quote (expectedCount=2)
+    // RenderedImagesGallery appears for quote (expectedCount=1)
     expect(screen.getByRole('button', { name: /Regenerate images/i })).toBeInTheDocument()
   })
 
@@ -213,7 +212,6 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
       draft_content: {
         format: 'video_clip',
         twitter_caption: 'Watch the gold market analysis clip.',
-        instagram_caption: 'Gold market analysis. #gold #mining',
         video_url: 'https://youtube.com/watch?v=abc',
       },
     })
@@ -281,7 +279,7 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
     expect(screen.getByText(/Rendering images/i)).toBeInTheDocument()
     // Should show skeleton loading divs
     const loadingElements = screen.getAllByLabelText('Loading image')
-    expect(loadingElements.length).toBe(4) // infographic = 4 expected
+    expect(loadingElements.length).toBe(1) // infographic = 1 expected (twitter_visual only after IG purge)
   })
 
   // Test 10 — hides skeletons after 10 minutes with no images

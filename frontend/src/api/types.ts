@@ -1,5 +1,5 @@
 export type DraftStatus = 'pending' | 'approved' | 'edited_approved' | 'rejected' | 'expired'
-export type Platform = 'twitter' | 'instagram' | 'content'
+export type Platform = 'twitter' | 'content'
 
 export interface DraftAlternative {
   text: string
@@ -51,7 +51,7 @@ export interface ContentBundleResponse {
 }
 
 export interface RenderedImage {
-  role: 'twitter_visual' | 'instagram_slide_1' | 'instagram_slide_2' | 'instagram_slide_3'
+  role: 'twitter_visual'
   url: string
   generated_at: string
 }

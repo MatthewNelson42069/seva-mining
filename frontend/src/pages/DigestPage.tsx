@@ -10,7 +10,6 @@ import type { NewsStory } from '@/api/digests'
 
 interface QueueSnapshot {
   twitter?: number
-  instagram?: number
   content?: number
   total?: number
 }
@@ -220,8 +219,8 @@ export function DigestPage() {
             <div className="bg-muted animate-pulse rounded h-8 w-8" />
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="bg-muted animate-pulse rounded-xl h-20" />)}
+        <div className="grid grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => <div key={i} className="bg-muted animate-pulse rounded-xl h-20" />)}
         </div>
         {[...Array(5)].map((_, i) => (
           <div key={i} className="bg-muted animate-pulse rounded-xl h-20 w-full" />
@@ -251,14 +250,10 @@ export function DigestPage() {
 
       {/* ── Stats row ── */}
       {!statsLoading && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div className="rounded-xl border bg-card p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Twitter</p>
             <p className="text-xl font-semibold">{snapshot.twitter ?? 0}</p>
-          </div>
-          <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Instagram</p>
-            <p className="text-xl font-semibold">{snapshot.instagram ?? 0}</p>
           </div>
           <div className="rounded-xl border bg-card p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Content</p>

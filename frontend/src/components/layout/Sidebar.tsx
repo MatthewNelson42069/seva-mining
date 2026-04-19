@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Bird, Camera, FileText, Newspaper, Settings, LogOut } from 'lucide-react'
+import { Bird, FileText, Newspaper, Settings, LogOut } from 'lucide-react'
 import { useAppStore } from '@/stores'
 import { useQueueCounts } from '@/hooks/useQueueCounts'
 import { cn } from '@/lib/utils'
@@ -25,12 +25,6 @@ export function Sidebar() {
       label: 'Twitter',
       icon: <Bird className="size-4" />,
       badge: countLabel(counts.twitter, counts.twitterHasMore),
-    },
-    {
-      to: '/instagram',
-      label: 'Instagram',
-      icon: <Camera className="size-4" />,
-      badge: countLabel(counts.instagram, counts.instagramHasMore),
     },
     {
       to: '/content',

@@ -6,12 +6,11 @@ import type { Platform } from '@/api/types'
 
 const defaultCounts: Record<Platform, number> = {
   twitter: 0,
-  instagram: 0,
   content: 0,
 }
 
 describe('PlatformTabBar', () => {
-  it('renders three tabs: Twitter, Instagram, Content', () => {
+  it('renders two tabs: Twitter, Content', () => {
     render(
       <PlatformTabBar
         activeTab="twitter"
@@ -20,14 +19,12 @@ describe('PlatformTabBar', () => {
       />
     )
     expect(screen.getByText('Twitter')).toBeInTheDocument()
-    expect(screen.getByText('Instagram')).toBeInTheDocument()
     expect(screen.getByText('Content')).toBeInTheDocument()
   })
 
   it('shows badge counts when count > 0', () => {
     const counts: Record<Platform, number> = {
       twitter: 5,
-      instagram: 3,
       content: 0,
     }
     render(
@@ -38,7 +35,6 @@ describe('PlatformTabBar', () => {
       />
     )
     expect(screen.getByText('5')).toBeInTheDocument()
-    expect(screen.getByText('3')).toBeInTheDocument()
     // content has 0 — badge should not appear
     expect(screen.queryByText('0')).not.toBeInTheDocument()
   })
@@ -55,8 +51,8 @@ describe('PlatformTabBar', () => {
       />
     )
 
-    await user.click(screen.getByText('Instagram'))
-    expect(onTabChange).toHaveBeenCalledWith('instagram')
+    await user.click(screen.getByText('Content'))
+    expect(onTabChange).toHaveBeenCalledWith('content')
   })
 
   it('active tab reflects the activeTab prop', () => {
