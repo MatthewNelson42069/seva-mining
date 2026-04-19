@@ -184,6 +184,8 @@ Recent decisions affecting current work:
 - [Phase 11-05]: TanStack Query v5 refetchInterval callback receives a query object (not (data, query) like v4); tests exercise the callback directly by extracting the query from the cache to avoid vi.useFakeTimers deadlocks
 - [Phase 11-06]: RenderedImagesGallery mounted only for infographic + quote formats (D-04); other formats never render image skeletons
 - [Phase 11-07]: importlib.util.spec_from_file_location bypasses scheduler/agents/__init__.py tweepy import in the backend process; scheduler/config.py uses extra="ignore" to tolerate backend-only env vars in the shared .env
+- [2026-04-19 / quick 260419-lvy]: Instagram Agent (Phase 6) fully deprecated and purged from codebase — Apify scraping not viable, $50/mo spend cut; Seva Mining is now a three-agent system (Twitter + Senior + Content). Frontend IG UI removed, scheduler IG job removed, Apify deps removed from scheduler/backend. Content agent still emits instagram_post/instagram_caption/instagram_brief/carousel fields and image_render still emits IG slide roles, but nothing downstream consumes them (no migration written — safe no-op data).
+- [2026-04-19 / quick 260419-lvy]: Content queue page now groups by agent_run matching Twitter pattern (showRunGroups = platform === 'twitter' || 'content'); content branch renders ContentSummaryCard inside grouped layout.
 
 ### Pending Todos
 
@@ -198,6 +200,7 @@ None yet.
 | 260409-qe8 | Fix Twitter engagement gate (None impression_count skips views check) + content agent non-ISO date fallback | 2026-04-09 | aecc81b | | [260409-qe8](./quick/260409-qe8-fix-twitter-engagement-gate-and-content-/) |
 | 260419-ko3 | Fix 8 pre-existing test failures (backend + scheduler + frontend) | 2026-04-19 | 0cd0432 | | [260419-ko3](./quick/260419-ko3-fix-8-pre-existing-test-failures-across-/) |
 | 260419-l5t | Post-v1.0.1 health-check cleanup: env.example hygiene, ruff+eslint lint-zero, JWT_SECRET length assertion | 2026-04-19 | 8bfdfea | Verified | [260419-l5t](./quick/260419-l5t-post-v1-0-1-health-check-cleanup-env-exa/) |
+| 260419-lvy | Full purge Instagram agent + content queue run-grouping (deprecated Phase 6) | 2026-04-19 | b2ff329 / accf735 / 2eb9125 | | [260419-lvy](./quick/260419-lvy-full-purge-instagram-agent-content-queue/) |
 
 ### Blockers/Concerns
 

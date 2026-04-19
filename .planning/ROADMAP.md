@@ -1,8 +1,10 @@
 # Roadmap: Seva Mining AI Social Media Agency
 
+> **DEPRECATION NOTICE (2026-04-19):** The Instagram Agent (Phase 6) has been fully removed from the product scope. Apify-based Instagram scraping proved non-viable and the platform-economics no longer justify the spend (~$50/mo). Seva Mining is now a **three-agent** system (Twitter, Senior, Content). Phase 6 is retained below for historical context only — it will never be executed. Any dependencies or references to the Instagram Agent in later phases (Phase 7 dual-platform content, Phase 10 notifications, Phase 11 carousel rendering) are also deprecated in-place. See quick task `260419-lvy` for the purge commits.
+
 ## Overview
 
-Build a four-agent AI monitoring and drafting system from the ground up. The dependency graph dictates the build order: database schema and infrastructure first (everything depends on it), then the FastAPI backend, then the React approval dashboard (human workflow must be testable before agents run), then agents in ascending complexity (Twitter Agent first — simplest pipeline — then Senior Agent core to manage the queue before adding more agents, then Instagram Agent, then Content Agent — most complex). Dashboard views for digest and content review, and full Settings configurability, are wired last once agents are producing verified output.
+Build a three-agent AI monitoring and drafting system from the ground up. The dependency graph dictates the build order: database schema and infrastructure first (everything depends on it), then the FastAPI backend, then the React approval dashboard (human workflow must be testable before agents run), then agents in ascending complexity (Twitter Agent first — simplest pipeline — then Senior Agent core to manage the queue before adding more agents, then Content Agent — most complex). Dashboard views for digest and content review, and full Settings configurability, are wired last once agents are producing verified output.
 
 ## Phases
 
@@ -17,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: React Approval Dashboard** - Tabbed approval interface, approval cards with full context and inline editing, approve/edit+approve/reject actions, copy-to-clipboard, direct source links
 - [x] **Phase 4: Twitter Agent** - X API v2 monitoring, engagement scoring with recency decay, dual-format drafting with compliance checker, monthly quota counter with hard-stop logic (completed 2026-04-02)
 - [ ] **Phase 5: Senior Agent Core** - Story fingerprint deduplication, 15-item queue cap, auto-expiry sweep, WhatsApp morning digest and alert dispatch
-- [ ] **Phase 6: Instagram Agent** - Apify scraper integration, per-hashtag baseline tracking, retry/health logic, comment draft alternatives with compliance checker
+- [ ] **~~Phase 6: Instagram Agent~~** - **DEPRECATED 2026-04-19. Never executed. Retained for historical context only.** Apify scraper integration, per-hashtag baseline tracking, retry/health logic, comment draft alternatives with compliance checker
 - [x] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), dual-platform output (Twitter + Instagram), cross-run dedup, 12pm midday run, bi-weekly Gold History agent, compliance checker (completed 2026-04-07)
 - [ ] **Phase 8: Dashboard Views and Digest** - Daily digest view, content review page, full Settings page wired to live DB config
 - [ ] **Phase 9: Agent Execution Polish** - All scoring weights DB-driven and configurable, agent schedule config from Settings, run logs, quota display, graceful failure handling
@@ -124,7 +126,9 @@ Plans:
 - [ ] 05-05-PLAN.md — Morning digest: assembly, DailyDigest record, WhatsApp dispatch with 7 variables (TDD)
 - [ ] 05-06-PLAN.md — Worker wiring, Twitter Agent integration, config seed, human verification checkpoint
 
-### Phase 6: Instagram Agent
+### ~~Phase 6: Instagram Agent~~
+**DEPRECATED 2026-04-19 — see quick task `260419-lvy`. The Instagram Agent is out of product scope. This phase will never execute. All `scheduler/agents/instagram_agent.py` code, Apify dependencies, Instagram platform tabs, and IG watchlist toggles have been purged. Plans `06-01..06-05` below are retained as historical record only.**
+
 **Goal**: The Instagram Agent runs on schedule, scrapes qualifying gold-sector posts via Apify with health monitoring, drafts comment alternatives with compliance checking, and handles scraper failures gracefully with alerting
 **Depends on**: Phase 5
 **Requirements**: INST-01, INST-02, INST-03, INST-04, INST-05, INST-06, INST-07, INST-08, INST-09, INST-10, INST-11, INST-12
@@ -270,7 +274,7 @@ Milestones:
 | 3. React Approval Dashboard | 3/5 | In Progress|  |
 | 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
 | 5. Senior Agent Core | 0/6 | Planned    |  |
-| 6. Instagram Agent | 0/5 | Planned    |  |
+| 6. Instagram Agent | 0/5 | **Deprecated 2026-04-19** |  |
 | 7. Content Agent | 10/10 | Complete   | 2026-04-07 |
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |
 | 9. Agent Execution Polish | 2/2 | Complete   |  |

@@ -3,21 +3,22 @@
 
 **Seva Mining — AI Social Media Agency**
 
-A four-agent AI system that monitors the gold sector on X (Twitter) and Instagram 24/7, drafts engagement content, and surfaces everything to a web dashboard for manual approval. The system handles research, scoring, and drafting — you review, approve, copy, and post. Nothing is ever posted automatically. The Senior Agent sends daily digests and alerts via WhatsApp.
+A three-agent AI system that monitors the gold sector on X (Twitter) and news feeds 24/7, drafts engagement content, and surfaces everything to a web dashboard for manual approval. The system handles research, scoring, and drafting — you review, approve, copy, and post. Nothing is ever posted automatically. The Senior Agent sends daily digests and alerts via WhatsApp.
+
+> **Historical note (2026-04-19):** The original design included a fourth agent — an Instagram Agent using an Apify scraper. That agent was deprecated and fully purged on 2026-04-19 (quick task `260419-lvy`). Apify-based scraping was not viable and the ~$50/mo spend did not fit the budget. The system is now three agents: Twitter, Senior, and Content. Any remaining references to Instagram in code (dormant content-agent output fields `instagram_post` / `instagram_caption` / `instagram_brief` / `instagram_carousel`, and image-render slide roles `instagram_slide_1..3`) are inert — nothing downstream consumes them.
 
 **Core Value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made. If a draft wouldn't make a senior gold analyst stop scrolling, it shouldn't exist.
 
 ### Constraints
 
-- **Budget**: ~$255-275/month total operating cost
+- **Budget**: ~$205-225/month total operating cost
 - **X API**: Basic tier ($100/mo) — read-only access
-- **Instagram**: Apify scraper (~$50/mo) — managed scraping with bot detection handling
 - **News**: SerpAPI (~$50/mo) + RSS feeds (free)
 - **AI**: Anthropic Claude API (~$30-50/mo)
 - **Hosting**: Railway for backend (API + separate scheduler worker), Vercel for frontend (subdomain)
 - **Database**: PostgreSQL via Neon (free tier, upgrade to Pro when 512MB fills)
 - **WhatsApp**: Twilio (~$5/mo)
-- **Stack**: FastAPI (Python) backend, React + Tailwind CSS frontend, APScheduler in separate worker process
+- **Stack**: FastAPI (Python) backend, React + Tailwind CSS frontend, APScheduler in separate worker process (three scheduled jobs: twitter_agent, content_agent, senior_agent)
 - **Auth**: Simple password login, single user
 - **Schema**: Full schema from day one including all columns for alternatives, event mode, quality scores. JSONB array for draft alternatives. Keep all data forever (no retention policy).
 <!-- GSD:project-end -->
@@ -42,7 +43,6 @@ A four-agent AI system that monitors the gold sector on X (Twitter) and Instagra
 | anthropic | 0.86.0 | Claude API SDK | Official Python SDK. Async client (`AsyncAnthropic`) pairs naturally with FastAPI. Use for all LLM calls — message drafting, scoring, agent reasoning. |
 | Twilio | 9.x | WhatsApp notifications | Official Python SDK. `client.messages.create(from_='whatsapp:+...', to='whatsapp:+...')`. Pre-register message templates for outbound notifications outside 24h window. |
 | tweepy | 4.x | X (Twitter) API client | Official Python library for X API v2. Basic tier ($100/mo) gives read access — use `Client` (not legacy `API` class which is v1.1 only). |
-| apify-client | 2.5.0 | Instagram scraping | Calls Apify's hosted Instagram scraper Actors (`apify/instagram-scraper`). `ApifyClientAsync` for async usage. Apify handles bot detection, proxy rotation, and rate limiting. |
 | feedparser | 6.0.x | RSS ingestion | Battle-tested universal feed parser (15+ years). Handles RSS 0.9x/1.0/2.0 and Atom. Last release: Sep 2025. Single call: `feedparser.parse(url)`. |
 | serpapi | latest | News search | Official SerpAPI Python client. Google News search endpoint for structured current-events data. Supplement RSS with keyword-driven searches. |
 ### Supporting Libraries
@@ -55,7 +55,7 @@ A four-agent AI system that monitors the gold sector on X (Twitter) and Instagra
 | httpx | 0.27.x | Async HTTP client | Used by anthropic SDK internally. Also use directly for any additional API calls (SerpAPI, external webhooks). Do not mix with `requests` in async code. |
 | passlib + bcrypt | passlib 1.7.x | Password hashing | For the single-user password auth. Hash the password at setup time, compare on login. No need for full OAuth machinery. |
 | python-jose | 3.x | JWT tokens | Session token after password login. Short-lived JWTs stored in localStorage on the frontend. |
-| TanStack Query | 5.x | Frontend server state | React Query v5. Handles API data fetching, caching, and background refetching for the dashboard. Each approval tab (Twitter, Instagram, Content) gets independent query keys. |
+| TanStack Query | 5.x | Frontend server state | React Query v5. Handles API data fetching, caching, and background refetching for the dashboard. Each approval tab (Twitter, Content) gets independent query keys. |
 | Zustand | 5.x | Frontend client state | Lightweight store for UI-only state: active tab, modal open/closed, inline edit mode, optimistic approval state before server confirms. Pair with TanStack Query — don't store server data here. |
 | shadcn/ui | latest (Tailwind v4 branch) | UI component library | Copy-paste components, not a dependency. Approval cards, buttons, badges, tabs. Uses Radix UI primitives for accessibility. Verify Tailwind v4 compatibility — the `tailwind-v4` branch of shadcn is the correct one. |
 | date-fns | 3.x | Date formatting | Recency decay display, timestamp formatting on approval cards. Lighter than dayjs for tree-shaking. |
@@ -75,9 +75,8 @@ A four-agent AI system that monitors the gold sector on X (Twitter) and Instagra
 ## Alternatives Considered
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| APScheduler 3.x (worker process) | Celery + Redis | If you need distributed workers across multiple machines or >100 concurrent tasks. Overkill here — adds Redis infrastructure cost (~$15/mo) with no benefit for a single-user 4-agent system. |
+| APScheduler 3.x (worker process) | Celery + Redis | If you need distributed workers across multiple machines or >100 concurrent tasks. Overkill here — adds Redis infrastructure cost (~$15/mo) with no benefit for a single-user 3-agent system. |
 | APScheduler 3.x (worker process) | ARQ + Redis | Good choice if you already have Redis. ARQ is async-native and pairs naturally with FastAPI. Viable swap if you need job queuing (not just cron). Adds Redis dependency. |
-| apify-client (managed) | Playwright/Selenium DIY scraping | Only if Apify costs become prohibitive at scale. DIY Instagram scraping is brittle — anti-bot systems require constant maintenance. Apify's managed solution is worth the $50/mo for v1. |
 | tweepy v2 Client | python-twitter-v2 / httpx direct | Tweepy is the community standard, actively maintained. Only use httpx direct if you need endpoints Tweepy doesn't expose (rare for Basic read-only). |
 | feedparser | fastfeedparser | fastfeedparser is ~10x faster but less battle-tested on malformed feeds. Worth considering if ingesting >1,000 feeds/run. Overkill for 4 feeds. |
 | Neon (serverless Postgres) | Supabase Postgres | Supabase bundles auth, storage, realtime — all unused here. Neon is leaner and Railway is the deployment target, not Supabase's stack. |
@@ -92,12 +91,11 @@ A four-agent AI system that monitors the gold sector on X (Twitter) and Instagra
 | `AsyncIOScheduler` inside Gunicorn multi-worker | Each Gunicorn worker spawns its own scheduler — agents would run N times per cycle (N = worker count). Use a dedicated single-process worker. | APScheduler in a separate Railway service with `--workers 1` |
 | Auto-posting to any platform | Out of scope by design. Never implement. Even accidental partial implementation creates compliance and reputational risk for the client. | Clipboard copy + direct link only |
 | Pydantic v1 (`from pydantic import BaseModel` with v1 patterns) | FastAPI 0.135+ deprecates v1 support. Will break on Python 3.14+. | Pydantic v2 patterns: `model_config = ConfigDict(...)` |
-| `instagram-private-api` or instaloader | Direct Instagram scraping without Apify. These libraries are banned by Instagram ToS and break frequently. | apify-client calling `apify/instagram-scraper` |
-| Celery for this use case | Adds Redis broker, separate worker, Celery Beat, and operational overhead for 4 cron jobs. The complexity-to-benefit ratio is wrong for this scale. | APScheduler in dedicated worker process |
+| Celery for this use case | Adds Redis broker, separate worker, Celery Beat, and operational overhead for 3 cron jobs. The complexity-to-benefit ratio is wrong for this scale. | APScheduler in dedicated worker process |
 | `create_engine()` (sync SQLAlchemy) | Blocks event loop in async FastAPI context. | `create_async_engine()` with `asyncpg` |
 ## Stack Patterns by Variant
 - The API service runs FastAPI via `uvicorn`. The scheduler worker runs `python -m app.worker` — a script that starts `AsyncIOScheduler` and blocks via `asyncio.run()`. Configure as two separate Railway services in one project. Both share the same Neon database. Worker has no public port.
-- Each agent (Senior, Content, Twitter, Instagram) is a Python module called by APScheduler jobs, not a microservice. All agents run in the same scheduler worker process. They communicate via the PostgreSQL database (not queues). This is the simplest correct architecture for the scale and budget.
+- Each agent (Senior, Content, Twitter) is a Python module called by APScheduler jobs, not a microservice. All agents run in the same scheduler worker process. They communicate via the PostgreSQL database (not queues). This is the simplest correct architecture for the scale and budget.
 - Single password stored as bcrypt hash in an environment variable (not in DB). On login, compare hash, return a short-lived JWT (24h). Frontend stores JWT in localStorage and sends as `Authorization: Bearer` header. No refresh token needed for a single-user internal tool.
 ## Version Compatibility
 | Package A | Compatible With | Notes |
@@ -112,7 +110,6 @@ A four-agent AI system that monitors the gold sector on X (Twitter) and Instagra
 - FastAPI PyPI — version 0.135.1 confirmed: https://pypi.org/project/fastapi/
 - Anthropic SDK PyPI — version 0.86.0 confirmed: https://pypi.org/project/anthropic/
 - APScheduler PyPI — stable 3.11.2, alpha 4.0.0a6 confirmed: https://pypi.org/project/APScheduler/
-- apify-client PyPI — version 2.5.0 confirmed: https://pypi.org/project/apify-client/
 - Neon connection pooling docs — PgBouncer transaction mode, `-pooler` endpoint pattern: https://neon.com/docs/connect/connection-pooling
 - Neon + FastAPI async guide: https://neon.com/guides/fastapi-async
 - SQLAlchemy 2.0 + asyncpg patterns (MEDIUM confidence, multiple consistent sources): https://leapcell.io/blog/building-high-performance-async-apis-with-fastapi-sqlalchemy-2-0-and-asyncpg

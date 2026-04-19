@@ -42,20 +42,22 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **TWIT-13**: Dashboard displays current quota usage and alerts when quota is low
 - [x] **TWIT-14**: All drafts sent to Senior Agent with rationale explaining why this post matters and what angle the draft takes
 
-### Instagram Agent
+### ~~Instagram Agent~~ (DEPRECATED 2026-04-19)
 
-- [x] **INST-01**: Agent monitors Instagram via Apify scraper using configurable hashtags and account watchlist every 4 hours
-- [x] **INST-02**: Agent scores posts: likes x1 + comment count x2 + normalized follower count x1.5
-- [x] **INST-03**: Minimum engagement gate: 200+ likes from last 8 hours
-- [x] **INST-04**: Top 3 posts per run passed to drafting
-- [x] **INST-05**: Agent drafts 2-3 alternative comments per qualifying post (1-2 sentences each)
-- [x] **INST-06**: No hashtags in any drafted comment, ever
-- [x] **INST-07**: Each draft evaluated against quality rubric before queuing
-- [x] **INST-08**: Separate Claude compliance-checker call on every draft
-- [x] **INST-09**: Retry logic for Apify scraping failures with exponential backoff
-- [x] **INST-10**: Scraper health monitoring: detect silent failures (HTTP 200 with empty results) by comparing against baseline expected volume
-- [x] **INST-11**: Scraper failure alerts surfaced in agent run logs and WhatsApp if critical
-- [x] **INST-12**: Items expire after 12 hours
+> **DEPRECATED 2026-04-19 via quick task `260419-lvy`.** Instagram Agent removed from scope — Apify-based scraping proved non-viable and the $50/mo spend no longer fits the budget. All INST-* requirements below are retained for historical context only; none will be implemented. The `scheduler/agents/instagram_agent.py` module, Apify deps, and frontend Instagram UI have been purged from the codebase.
+
+- [ ] ~~**INST-01**~~: Agent monitors Instagram via Apify scraper using configurable hashtags and account watchlist every 4 hours **(DEPRECATED)**
+- [ ] ~~**INST-02**~~: Agent scores posts: likes x1 + comment count x2 + normalized follower count x1.5 **(DEPRECATED)**
+- [ ] ~~**INST-03**~~: Minimum engagement gate: 200+ likes from last 8 hours **(DEPRECATED)**
+- [ ] ~~**INST-04**~~: Top 3 posts per run passed to drafting **(DEPRECATED)**
+- [ ] ~~**INST-05**~~: Agent drafts 2-3 alternative comments per qualifying post (1-2 sentences each) **(DEPRECATED)**
+- [ ] ~~**INST-06**~~: No hashtags in any drafted comment, ever **(DEPRECATED)**
+- [ ] ~~**INST-07**~~: Each draft evaluated against quality rubric before queuing **(DEPRECATED)**
+- [ ] ~~**INST-08**~~: Separate Claude compliance-checker call on every draft **(DEPRECATED)**
+- [ ] ~~**INST-09**~~: Retry logic for Apify scraping failures with exponential backoff **(DEPRECATED)**
+- [ ] ~~**INST-10**~~: Scraper health monitoring: detect silent failures (HTTP 200 with empty results) by comparing against baseline expected volume **(DEPRECATED)**
+- [ ] ~~**INST-11**~~: Scraper failure alerts surfaced in agent run logs and WhatsApp if critical **(DEPRECATED)**
+- [ ] ~~**INST-12**~~: Items expire after 12 hours **(DEPRECATED)**
 
 ### Content Agent
 
@@ -244,18 +246,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WHAT-02 | Phase 5 | Complete |
 | WHAT-03 | Phase 5 | Complete |
 | WHAT-05 | Phase 5 | Complete |
-| INST-01 | Phase 6 | Complete |
-| INST-02 | Phase 6 | Complete |
-| INST-03 | Phase 6 | Complete |
-| INST-04 | Phase 6 | Complete |
-| INST-05 | Phase 6 | Complete |
-| INST-06 | Phase 6 | Complete |
-| INST-07 | Phase 6 | Complete |
-| INST-08 | Phase 6 | Complete |
-| INST-09 | Phase 6 | Complete |
-| INST-10 | Phase 6 | Complete |
-| INST-11 | Phase 6 | Complete |
-| INST-12 | Phase 6 | Complete |
+| INST-01 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-02 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-03 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-04 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-05 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-06 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-07 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-08 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-09 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-10 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-11 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
+| INST-12 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
 | CONT-01 | Phase 7 | Complete |
 | CONT-02 | Phase 7 | Complete |
 | CONT-03 | Phase 7 | Complete |
