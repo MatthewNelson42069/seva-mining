@@ -4,7 +4,7 @@ milestone: v1.0.1
 milestone_name: — Content Preview and Rendered Images
 status: v1.0.1 complete
 stopped_at: Completed Phase 11 — v1.0.1 milestone shipped
-last_updated: "2026-04-19T22:15:00.000Z"
+last_updated: "2026-04-19T22:30:00.000Z"
 progress:
   total_phases: 11
   completed_phases: 9
@@ -191,12 +191,13 @@ None yet.
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260407-n9t | Content agent schedule fix (6am/12pm PST) + enhanced WhatsApp notification with titles | 2026-04-07 | 9bc17e1 | [260407-n9t](./quick/260407-n9t-content-agent-schedule-fix-and-enhanced-/) |
-| 260407-neq | Switch content agent from two cron jobs to single interval trigger every 2 hours | 2026-04-07 | 8b1e22e | [260407-neq](./quick/260407-neq-switch-content-agent-to-interval-every-2/) |
-| 260409-qe8 | Fix Twitter engagement gate (None impression_count skips views check) + content agent non-ISO date fallback | 2026-04-09 | aecc81b | [260409-qe8](./quick/260409-qe8-fix-twitter-engagement-gate-and-content-/) |
-| 260419-ko3 | Fix 8 pre-existing test failures (backend + scheduler + frontend) | 2026-04-19 | 0cd0432 | [260419-ko3](./quick/260419-ko3-fix-8-pre-existing-test-failures-across-/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260407-n9t | Content agent schedule fix (6am/12pm PST) + enhanced WhatsApp notification with titles | 2026-04-07 | 9bc17e1 | | [260407-n9t](./quick/260407-n9t-content-agent-schedule-fix-and-enhanced-/) |
+| 260407-neq | Switch content agent from two cron jobs to single interval trigger every 2 hours | 2026-04-07 | 8b1e22e | | [260407-neq](./quick/260407-neq-switch-content-agent-to-interval-every-2/) |
+| 260409-qe8 | Fix Twitter engagement gate (None impression_count skips views check) + content agent non-ISO date fallback | 2026-04-09 | aecc81b | | [260409-qe8](./quick/260409-qe8-fix-twitter-engagement-gate-and-content-/) |
+| 260419-ko3 | Fix 8 pre-existing test failures (backend + scheduler + frontend) | 2026-04-19 | 0cd0432 | | [260419-ko3](./quick/260419-ko3-fix-8-pre-existing-test-failures-across-/) |
+| 260419-l5t | Post-v1.0.1 health-check cleanup: env.example hygiene, ruff+eslint lint-zero, JWT_SECRET length assertion | 2026-04-19 | 8bfdfea | Verified | [260419-l5t](./quick/260419-l5t-post-v1-0-1-health-check-cleanup-env-exa/) |
 
 ### Blockers/Concerns
 
@@ -206,6 +207,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-19T22:15:00.000Z
-Stopped at: Completed Phase 11 — v1.0.1 milestone shipped
+Last session: 2026-04-19T22:30:00.000Z
+Stopped at: Completed quick task 260419-l5t — v1.0.1 health-check cleanup (env.example rebuild, ruff+eslint zero, JWT_SECRET validator)
 Resume file: None
