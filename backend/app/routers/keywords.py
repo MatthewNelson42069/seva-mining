@@ -1,11 +1,13 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
+
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.keyword import Keyword
-from app.schemas.keyword import KeywordCreate, KeywordUpdate, KeywordResponse
+from app.schemas.keyword import KeywordCreate, KeywordResponse, KeywordUpdate
 
 router = APIRouter(
     prefix="/keywords",

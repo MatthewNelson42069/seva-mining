@@ -16,7 +16,7 @@ os.environ.setdefault("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
 os.environ.setdefault("DIGEST_WHATSAPP_TO", "whatsapp:+15550001234")
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from twilio.base.exceptions import TwilioRestException
 
 

@@ -2,11 +2,10 @@
 Shared test fixtures for backend tests.
 """
 import os
-import sys
+
+import bcrypt
 import pytest
 import pytest_asyncio
-import bcrypt
-from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # STEP 1: Set environment variables BEFORE any app imports
@@ -35,8 +34,13 @@ os.environ["FRONTEND_URL"] = "http://localhost:3000"
 # STEP 2: Patch create_async_engine to strip PostgreSQL-only pool kwargs
 #         before app.database is first imported.
 # ---------------------------------------------------------------------------
-from sqlalchemy.ext.asyncio import create_async_engine as _real_create_async_engine
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import (  # noqa: E402 (must come after env setup above)
+    AsyncSession,
+    async_sessionmaker,
+)
+from sqlalchemy.ext.asyncio import (  # noqa: E402 (must come after env setup above)
+    create_async_engine as _real_create_async_engine,
+)
 
 _SQLITE_INCOMPATIBLE_KWARGS = {"pool_size", "max_overflow", "pool_pre_ping", "pool_recycle"}
 
@@ -49,18 +53,19 @@ def _sqlite_safe_create_async_engine(url, **kwargs):
     return _real_create_async_engine(url, **kwargs)
 
 # Patch at module level before app.database imports it
-import sqlalchemy.ext.asyncio as _sqla_async
+import sqlalchemy.ext.asyncio as _sqla_async  # noqa: E402 (deliberate late import so we can monkey-patch)
+
 _sqla_async.create_async_engine = _sqlite_safe_create_async_engine
 
 # ---------------------------------------------------------------------------
 # STEP 3: Now safely import app modules
 # ---------------------------------------------------------------------------
-from httpx import AsyncClient, ASGITransport
-from app.main import app
-from app.config import get_settings
-from app.auth import create_access_token
-from app.database import get_db
+from httpx import ASGITransport, AsyncClient  # noqa: E402 (must follow engine patch)
 
+from app.auth import create_access_token  # noqa: E402 (must follow engine patch)
+from app.config import get_settings  # noqa: E402 (must follow engine patch)
+from app.database import get_db  # noqa: E402 (must follow engine patch)
+from app.main import app  # noqa: E402 (must follow engine patch)
 
 # ---------------------------------------------------------------------------
 # Fixtures

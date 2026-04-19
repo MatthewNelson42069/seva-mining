@@ -10,10 +10,10 @@ platforms to enable immediate dashboard testing without running the agents.
 import asyncio
 import os
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.models.draft_item import DraftItem, DraftStatus
 
@@ -26,7 +26,7 @@ def _get_engine():
     # Strip sslmode from URL and use connect_args instead (asyncpg requirement)
     url = database_url
     if "sslmode=" in url:
-        from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+        from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
         parsed = urlparse(url)
         qs = parse_qs(parsed.query)
         qs.pop("sslmode", None)
@@ -40,7 +40,7 @@ def _get_engine():
     )
 
 
-now = datetime.now(timezone.utc)
+now = datetime.now(UTC)
 
 
 def _dt(minutes_ago: int) -> datetime:
@@ -694,7 +694,9 @@ async def main() -> None:
     async with session_factory() as session:
         # Idempotency check — skip if pending items already exist
         result = await session.execute(
-            select(func.count()).select_from(DraftItem).where(DraftItem.status == DraftStatus.pending)
+            select(func.count())
+            .select_from(DraftItem)
+            .where(DraftItem.status == DraftStatus.pending)
         )
         existing_count = result.scalar_one()
 

@@ -1,7 +1,9 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timedelta, timezone
+
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.agent_run import AgentRun
@@ -21,7 +23,7 @@ async def list_agent_runs(
     db: AsyncSession = Depends(get_db),
 ):
     """List agent runs, optionally filtered by agent_name. Defaults to last 7 days."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     stmt = select(AgentRun).where(AgentRun.created_at >= cutoff)
     if agent_name:
         stmt = stmt.where(AgentRun.agent_name == agent_name)

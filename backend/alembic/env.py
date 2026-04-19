@@ -2,14 +2,13 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-from sqlalchemy.ext.asyncio import async_engine_from_config, create_async_engine
 from sqlalchemy import pool
-
-from alembic import context
+from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import all models BEFORE setting target_metadata.
 # Without these imports, Alembic sees no tables and generates an empty migration. (Pitfall 5)
 import app.models  # noqa: F401 — registers all 6 models with Base.metadata
+from alembic import context
 from app.models.base import Base
 
 # Alembic Config object — provides access to alembic.ini values

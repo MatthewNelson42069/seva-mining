@@ -10,8 +10,9 @@ sent, 'viral' = viral alert sent). alerted_expiry_at records when an expiry aler
 dispatched to prevent duplicate sends for the same item.
 Requirements: SENR-05, SENR-09, WHAT-02, WHAT-03
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers
 revision = "0004"
@@ -21,10 +22,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # engagement_alert_level: null = no alert, 'watchlist' = first alert sent, 'viral' = viral alert sent
-    op.add_column("draft_items", sa.Column("engagement_alert_level", sa.String(20), nullable=True))
+    # engagement_alert_level: null = no alert, 'watchlist' = first alert sent,
+    # 'viral' = viral alert sent
+    op.add_column(
+        "draft_items",
+        sa.Column("engagement_alert_level", sa.String(20), nullable=True),
+    )
     # alerted_expiry_at: timestamp when expiry alert was dispatched (dedup for WHAT-03)
-    op.add_column("draft_items", sa.Column("alerted_expiry_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column(
+        "draft_items",
+        sa.Column("alerted_expiry_at", sa.DateTime(timezone=True), nullable=True),
+    )
 
 
 def downgrade() -> None:

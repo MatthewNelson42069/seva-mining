@@ -2,18 +2,19 @@
 CRUD endpoint tests for watchlists, keywords, agent-runs, digests, and content.
 Requirements: EXEC-01 (agent-runs filter), AUTH-03 (all endpoints require auth)
 """
+from datetime import UTC, datetime
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Text, Numeric, Date
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import Boolean, Date, DateTime, Integer, Numeric, String, Text
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from app.main import app
-from app.database import get_db
 from app.auth import create_access_token
+from app.database import get_db
+from app.main import app
 
 # Use a separate in-memory SQLite for these tests (tables created fresh each time)
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
@@ -28,8 +29,11 @@ class _TestBase(DeclarativeBase):
     pass
 
 
-import uuid as _uuid
-from sqlalchemy import Column as Col
+import uuid as _uuid  # noqa: E402 (deliberate late import, keeps SQLite shim self-contained)
+
+from sqlalchemy import (  # noqa: E402 (deliberate late import, keeps SQLite shim self-contained)
+    Column as Col,
+)
 
 
 def _uuid_default():
@@ -46,7 +50,7 @@ class _Watchlist(_TestBase):
     follower_threshold = Col(Integer)
     notes = Col(Text)
     active = Col(Boolean, nullable=False, default=True)
-    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     updated_at = Col(DateTime(timezone=True))
 
 
@@ -57,7 +61,7 @@ class _Keyword(_TestBase):
     platform = Col(String(20))
     weight = Col(Numeric(4, 2), default=1.0)
     active = Col(Boolean, nullable=False, default=True)
-    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     updated_at = Col(DateTime(timezone=True))
 
 
@@ -73,7 +77,7 @@ class _AgentRun(_TestBase):
     errors = Col(SQLiteJSON)
     status = Col(String(20))
     notes = Col(Text)
-    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
 
 
 class _DailyDigest(_TestBase):
@@ -87,7 +91,7 @@ class _DailyDigest(_TestBase):
     yesterday_expired = Col(SQLiteJSON)
     priority_alert = Col(SQLiteJSON)
     whatsapp_sent_at = Col(DateTime(timezone=True))
-    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
 
 
 class _ContentBundle(_TestBase):
@@ -104,7 +108,7 @@ class _ContentBundle(_TestBase):
     draft_content = Col(SQLiteJSON)
     compliance_passed = Col(Boolean)
     rendered_images = Col(SQLiteJSON)  # Phase 11 addition — array of {role, url, generated_at}
-    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
 
 
 class _Config(_TestBase):
@@ -185,8 +189,8 @@ async def test_create_watchlist(authed_db_client):
 async def test_list_watchlists_with_platform_filter(authed_db_client):
     """GET /watchlists?platform=twitter filters by platform."""
     # Create two entries
-    await authed_db_client.post("/watchlists", json={"platform": "twitter", "account_handle": "@tw1"})
-    await authed_db_client.post("/watchlists", json={"platform": "instagram", "account_handle": "@ig1"})
+    await authed_db_client.post("/watchlists", json={"platform": "twitter", "account_handle": "@tw1"})  # noqa: E501
+    await authed_db_client.post("/watchlists", json={"platform": "instagram", "account_handle": "@ig1"})  # noqa: E501
 
     response = await authed_db_client.get("/watchlists?platform=twitter")
     assert response.status_code == 200
@@ -317,7 +321,7 @@ async def test_agent_runs_filter_by_name(authed_db_client):
     # Directly insert agent run records via the override session
     override_fn = app.dependency_overrides.get(get_db)
     async for db in override_fn():
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         run_twitter = _AgentRun(
             agent_name="twitter_agent",
             started_at=now,

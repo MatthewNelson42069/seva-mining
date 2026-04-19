@@ -1,5 +1,5 @@
-from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import MetaData
+from sqlalchemy.orm import DeclarativeBase
 
 # Explicit naming conventions prevent unnamed constraints in Alembic migrations.
 # Required for Alembic to correctly detect and diff constraints. (D-04, Pattern 1)

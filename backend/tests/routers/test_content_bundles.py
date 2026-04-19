@@ -5,19 +5,17 @@ Uses mock AsyncSession to avoid PostgreSQL-only type conflicts with SQLite.
 Requirements: CREV-02 (GET detail), CREV-06 (full payload), CREV-09 (rerender 202)
 """
 import asyncio
-import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
-from app.main import app
-from app.database import get_db
 from app.auth import create_access_token
-
+from app.database import get_db
+from app.main import app
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -49,11 +47,11 @@ def make_content_bundle(
     bundle.score = score
     bundle.quality_score = quality_score
     bundle.no_story_flag = no_story_flag
-    bundle.deep_research = deep_research or {"key_data_points": ["Central banks bought 1,037t in 2023"]}
+    bundle.deep_research = deep_research or {"key_data_points": ["Central banks bought 1,037t in 2023"]}  # noqa: E501
     bundle.draft_content = draft_content or {"format": "infographic", "headline": "Gold Surge"}
     bundle.compliance_passed = compliance_passed
     bundle.rendered_images = rendered_images
-    bundle.created_at = created_at or datetime(2026, 4, 16, 10, 0, 0, tzinfo=timezone.utc)
+    bundle.created_at = created_at or datetime(2026, 4, 16, 10, 0, 0, tzinfo=UTC)
     return bundle
 
 
@@ -177,7 +175,7 @@ async def test_get_content_bundle_rendered_images_null_returns_null():
 
 @pytest.mark.asyncio
 async def test_rerender_returns_202():
-    """POST /content-bundles/{id}/rerender returns 202 with {bundle_id, render_job_id, enqueued_at}."""
+    """POST /content-bundles/{id}/rerender returns 202 with {bundle_id, render_job_id, enqueued_at}."""  # noqa: E501
     bundle_id = uuid.uuid4()
     bundle = make_content_bundle(id=bundle_id)
     mock_db = make_mock_db(bundle)
@@ -191,7 +189,7 @@ async def test_rerender_returns_202():
             mock_job = AsyncMock()
             mock_get_job.return_value = mock_job
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())
+                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())  # noqa: E501
 
         assert resp.status_code == 202
         data = resp.json()
@@ -205,7 +203,7 @@ async def test_rerender_returns_202():
 
 @pytest.mark.asyncio
 async def test_rerender_clears_existing_images():
-    """POST /content-bundles/{id}/rerender clears bundle.rendered_images to [] before enqueueing."""
+    """POST /content-bundles/{id}/rerender clears bundle.rendered_images to [] before enqueueing."""  # noqa: E501
     bundle_id = uuid.uuid4()
     bundle = make_content_bundle(
         id=bundle_id,
@@ -226,7 +224,7 @@ async def test_rerender_clears_existing_images():
             mock_job = AsyncMock()
             mock_get_job.return_value = mock_job
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())
+                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())  # noqa: E501
 
         assert resp.status_code == 202
         # Verify rendered_images was cleared to [] before commit
@@ -247,7 +245,7 @@ async def test_rerender_404_on_missing_bundle():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/content-bundles/{uuid.uuid4()}/rerender", headers=authed_headers())
+            resp = await ac.post(f"/content-bundles/{uuid.uuid4()}/rerender", headers=authed_headers())  # noqa: E501
 
         assert resp.status_code == 404
     finally:
@@ -290,7 +288,7 @@ async def test_rerender_enqueues_render_bundle_job():
             mock_get_job.return_value = mock_job
 
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())
+                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())  # noqa: E501
 
             # Let the event loop tick so create_task runs the coroutine
             await asyncio.sleep(0.05)

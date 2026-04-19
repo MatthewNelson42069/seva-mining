@@ -16,8 +16,7 @@ Tests use pytest-asyncio (asyncio_mode=auto set in pyproject.toml).
 import os
 import sys
 import uuid
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock
 
 # Ensure scheduler root is on sys.path for absolute imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))

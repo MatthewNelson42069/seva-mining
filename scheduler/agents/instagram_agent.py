@@ -16,7 +16,6 @@ import json
 import logging
 import math
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
 from anthropic import AsyncAnthropic
 from apify_client import ApifyClientAsync
@@ -274,7 +273,7 @@ class InstagramAgent:
         result = await session.execute(
             select(Keyword.term).where(
                 Keyword.platform == "instagram",
-                Keyword.active == True,
+                Keyword.active.is_(True),
             )
         )
         return [row for row in result.scalars().all()]
@@ -284,7 +283,7 @@ class InstagramAgent:
         result = await session.execute(
             select(Watchlist).where(
                 Watchlist.platform == "instagram",
-                Watchlist.active == True,
+                Watchlist.active.is_(True),
             )
         )
         return [

@@ -1,11 +1,12 @@
-from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+from enum import StrEnum
+from typing import Any
 from uuid import UUID
-from typing import Optional, Any
-from enum import Enum
+
+from pydantic import BaseModel, ConfigDict
 
 
-class DraftStatusEnum(str, Enum):
+class DraftStatusEnum(StrEnum):
     pending = "pending"
     approved = "approved"
     edited_approved = "edited_approved"
@@ -18,34 +19,34 @@ class DraftItemResponse(BaseModel):
     id: UUID
     platform: str
     status: DraftStatusEnum
-    source_url: Optional[str] = None
-    source_text: Optional[str] = None
-    source_account: Optional[str] = None
-    follower_count: Optional[float] = None
-    score: Optional[float] = None
-    quality_score: Optional[float] = None
+    source_url: str | None = None
+    source_text: str | None = None
+    source_account: str | None = None
+    follower_count: float | None = None
+    score: float | None = None
+    quality_score: float | None = None
     alternatives: list = []
-    rationale: Optional[str] = None
-    urgency: Optional[str] = None
-    related_id: Optional[UUID] = None
-    rejection_reason: Optional[str] = None
-    edit_delta: Optional[str] = None
-    expires_at: Optional[datetime] = None
-    decided_at: Optional[datetime] = None
+    rationale: str | None = None
+    urgency: str | None = None
+    related_id: UUID | None = None
+    rejection_reason: str | None = None
+    edit_delta: str | None = None
+    expires_at: datetime | None = None
+    decided_at: datetime | None = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    engagement_snapshot: Optional[Any] = None  # Phase 11: exposes content_bundle_id to frontend
+    updated_at: datetime | None = None
+    engagement_snapshot: Any | None = None  # Phase 11: exposes content_bundle_id to frontend
 
 
 class ApproveRequest(BaseModel):
-    edited_text: Optional[str] = None  # per D-05: optional inline edit on approve
+    edited_text: str | None = None  # per D-05: optional inline edit on approve
 
 
 class RejectRequest(BaseModel):
     category: str  # per D-12: off-topic, low-quality, bad-timing, tone-wrong, duplicate
-    notes: Optional[str] = None  # per D-12: optional free-text
+    notes: str | None = None  # per D-12: optional free-text
 
 
 class QueueListResponse(BaseModel):
     items: list[DraftItemResponse]
-    next_cursor: Optional[str] = None  # per D-02: base64 encoded created_at:id
+    next_cursor: str | None = None  # per D-02: base64 encoded created_at:id

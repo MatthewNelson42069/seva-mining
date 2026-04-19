@@ -2,7 +2,6 @@
 Tests for SQLAlchemy async engine configuration.
 Covers: INFRA-07 — Neon connection pooling config
 """
-import os
 import pytest
 
 
@@ -32,6 +31,7 @@ def test_engine_uses_pool_pre_ping():
     Engine must have pool_pre_ping=True for Neon serverless cold-start handling.
     """
     import importlib
+
     import app.database
     importlib.reload(app.database)
     from app.database import engine
@@ -43,6 +43,7 @@ def test_engine_uses_pool_recycle_300():
     Engine must have pool_recycle=300 to match Neon 5-min auto-suspend timeout.
     """
     import importlib
+
     import app.database
     importlib.reload(app.database)
     from app.database import engine
@@ -54,6 +55,7 @@ def test_engine_uses_asyncpg_driver():
     DATABASE_URL must use postgresql+asyncpg:// scheme (not psycopg2 or sync).
     """
     import importlib
+
     import app.database
     importlib.reload(app.database)
     from app.database import engine

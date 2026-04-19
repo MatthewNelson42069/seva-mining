@@ -6,17 +6,16 @@ DraftItem uses PostgreSQL ENUM so SQLite in-memory can't run schema-level tests.
 """
 import json
 import uuid
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
-from app.main import app
-from app.database import get_db
 from app.auth import create_access_token
-
+from app.database import get_db
+from app.main import app
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -48,7 +47,7 @@ def make_draft_item(
     item.edit_delta = None
     item.expires_at = None
     item.decided_at = None
-    item.created_at = datetime(2026, 3, 31, 12, 0, 0, tzinfo=timezone.utc)
+    item.created_at = datetime(2026, 3, 31, 12, 0, 0, tzinfo=UTC)
     item.updated_at = None
     item.event_mode = None
     item.engagement_snapshot = None
@@ -90,8 +89,8 @@ class TestStateMachine:
 
     async def test_pending_to_approved_is_valid(self):
         """pending -> approved should succeed."""
-        from app.routers.queue import _enforce_transition, VALID_TRANSITIONS
         from app.models.draft_item import DraftStatus
+        from app.routers.queue import _enforce_transition
 
         item = make_draft_item(status="pending")
         # Should not raise
@@ -99,25 +98,26 @@ class TestStateMachine:
 
     async def test_pending_to_edited_approved_is_valid(self):
         """pending -> edited_approved should succeed."""
-        from app.routers.queue import _enforce_transition
         from app.models.draft_item import DraftStatus
+        from app.routers.queue import _enforce_transition
 
         item = make_draft_item(status="pending")
         await _enforce_transition(item, DraftStatus.edited_approved)
 
     async def test_pending_to_rejected_is_valid(self):
         """pending -> rejected should succeed."""
-        from app.routers.queue import _enforce_transition
         from app.models.draft_item import DraftStatus
+        from app.routers.queue import _enforce_transition
 
         item = make_draft_item(status="pending")
         await _enforce_transition(item, DraftStatus.rejected)
 
     async def test_invalid_transition_raises_409(self):
         """approved -> approved should raise 409."""
-        from app.routers.queue import _enforce_transition
-        from app.models.draft_item import DraftStatus
         from fastapi import HTTPException
+
+        from app.models.draft_item import DraftStatus
+        from app.routers.queue import _enforce_transition
 
         item = make_draft_item(status="approved")
         with pytest.raises(HTTPException) as exc_info:
@@ -126,9 +126,10 @@ class TestStateMachine:
 
     async def test_rejected_to_approved_raises_409(self):
         """rejected -> approved should raise 409 (no re-approve)."""
-        from app.routers.queue import _enforce_transition
-        from app.models.draft_item import DraftStatus
         from fastapi import HTTPException
+
+        from app.models.draft_item import DraftStatus
+        from app.routers.queue import _enforce_transition
 
         item = make_draft_item(status="rejected")
         with pytest.raises(HTTPException) as exc_info:
@@ -137,9 +138,10 @@ class TestStateMachine:
 
     async def test_expired_cannot_be_approved(self):
         """expired -> approved should raise 409."""
-        from app.routers.queue import _enforce_transition
-        from app.models.draft_item import DraftStatus
         from fastapi import HTTPException
+
+        from app.models.draft_item import DraftStatus
+        from app.routers.queue import _enforce_transition
 
         item = make_draft_item(status="expired")
         with pytest.raises(HTTPException) as exc_info:
@@ -148,8 +150,8 @@ class TestStateMachine:
 
     def test_valid_transitions_structure(self):
         """VALID_TRANSITIONS must have DraftStatus.pending as key."""
-        from app.routers.queue import VALID_TRANSITIONS
         from app.models.draft_item import DraftStatus
+        from app.routers.queue import VALID_TRANSITIONS
 
         assert DraftStatus.pending in VALID_TRANSITIONS
         allowed = VALID_TRANSITIONS[DraftStatus.pending]

@@ -19,7 +19,7 @@ from typing import Optional
 
 import tweepy.asynchronous
 from anthropic import AsyncAnthropic
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import get_settings

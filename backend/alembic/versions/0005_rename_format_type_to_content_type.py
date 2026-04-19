@@ -9,8 +9,8 @@ The expanded 7-format content type system uses content_type as the canonical
 field name. All models, schemas, agents, and frontend code reference content_type.
 Requirements: CONT-09
 """
+
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers
 revision = "0005"

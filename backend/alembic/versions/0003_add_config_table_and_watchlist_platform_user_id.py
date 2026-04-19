@@ -9,8 +9,9 @@ platform_user_id on watchlists caches the Twitter numeric user ID, resolved lazi
 by the Twitter agent to avoid repeated username-to-ID lookup API calls (TWIT-11).
 Requirements: TWIT-01, TWIT-11, TWIT-12, TWIT-13
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers
 revision = "0003"

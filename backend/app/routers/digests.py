@@ -1,9 +1,10 @@
+from datetime import UTC, date, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import date, datetime, timezone, timedelta
-from typing import Optional
-from pydantic import BaseModel
+
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.daily_digest import DailyDigest
@@ -19,10 +20,10 @@ router = APIRouter(
 
 class NewsStory(BaseModel):
     headline: str
-    source: Optional[str] = None
-    time: Optional[str] = None
-    url: Optional[str] = None
-    score: Optional[float] = None
+    source: str | None = None
+    time: str | None = None
+    url: str | None = None
+    score: float | None = None
 
 
 @router.get("/news-feed", response_model=list[NewsStory])
@@ -37,7 +38,7 @@ async def get_news_feed(
     reflects live ingested data rather than a stale stored digest snapshot.
     Ordered by score DESC then created_at DESC.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cutoff = datetime.now(UTC) - timedelta(hours=hours)
     stmt = (
         select(DraftItem)
         .where(

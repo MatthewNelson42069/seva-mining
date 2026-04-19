@@ -8,8 +8,9 @@ Add edit_delta column to draft_items table to preserve original draft text
 when operator edits a draft before approving (D-14).
 Requirements: AUTH-01, AUTH-02, AUTH-03
 """
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers
 revision = "0002"

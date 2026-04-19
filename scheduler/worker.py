@@ -10,7 +10,6 @@ Decisions: D-12 (APScheduler 3.11.2), D-13 (advisory lock), D-14 (placeholder jo
 Phase 5 (SENR): expiry_sweep and morning_digest jobs wired to SeniorAgent.
 """
 import asyncio
-import inspect
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler

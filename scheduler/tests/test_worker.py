@@ -2,7 +2,6 @@
 Tests for APScheduler worker process.
 Covers: INFRA-05 (advisory lock), EXEC-03 (async jobs), EXEC-04 (graceful error handling)
 """
-import asyncio
 import inspect
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch

@@ -11,7 +11,6 @@ pure string-assertion unit tests with no external dependencies.
 """
 import os
 import sys
-import pytest
 
 # Ensure scheduler root is on sys.path for absolute imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))

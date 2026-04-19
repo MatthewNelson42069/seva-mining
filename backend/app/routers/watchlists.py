@@ -1,11 +1,13 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
+
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.watchlist import Watchlist
-from app.schemas.watchlist import WatchlistCreate, WatchlistUpdate, WatchlistResponse
+from app.schemas.watchlist import WatchlistCreate, WatchlistResponse, WatchlistUpdate
 
 router = APIRouter(
     prefix="/watchlists",

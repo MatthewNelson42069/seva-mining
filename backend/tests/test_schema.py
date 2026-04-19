@@ -4,9 +4,10 @@ Covers: INFRA-01 (all 6 tables), INFRA-02 (indexes), INFRA-06 (Alembic at head)
 Requires DATABASE_URL env var pointing to Neon (skipped otherwise).
 """
 import os
+
 import pytest
-from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 _db_url = os.getenv("DATABASE_URL", "")
 # Skip if DATABASE_URL is absent or points to a fake/test host (e.g. set by test_health.py)

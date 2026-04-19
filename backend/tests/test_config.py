@@ -2,7 +2,6 @@
 Tests for pydantic-settings config loading.
 Covers: INFRA-08 — environment variable configuration
 """
-import os
 import pytest
 from pydantic import ValidationError
 

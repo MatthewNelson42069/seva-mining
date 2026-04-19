@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Numeric, Text, DateTime, Boolean, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+
+from sqlalchemy import Boolean, Column, DateTime, Index, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+
 from app.models.base import Base
 
 
@@ -12,7 +14,8 @@ class ContentBundle(Base):
     story_headline = Column(Text, nullable=False)
     story_url = Column(Text)
     source_name = Column(String(255))
-    content_type = Column(String(50))           # thread, long_form, infographic, breaking_news, video_clip, quote, gold_history
+    # thread, long_form, infographic, breaking_news, video_clip, quote, gold_history
+    content_type = Column(String(50))
     score = Column(Numeric(5, 2))
     quality_score = Column(Numeric(5, 2))
     no_story_flag = Column(Boolean, nullable=False, server_default="false")

@@ -451,7 +451,6 @@ async def test_expiry_12h():
 @pytest.mark.asyncio
 async def test_instagram_whatsapp_notification_fires_when_items_queued():
     """send_whatsapp_message called with Instagram count when items_queued > 0."""
-    from agents.instagram_agent import InstagramAgent
     from unittest.mock import patch, AsyncMock, MagicMock
 
     ia = _get_instagram_agent()

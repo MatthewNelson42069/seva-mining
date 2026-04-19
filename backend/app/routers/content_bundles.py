@@ -16,7 +16,7 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -141,5 +141,5 @@ async def rerender_content_bundle(
     return RerenderResponse(
         bundle_id=bundle_id,
         render_job_id=job_id,
-        enqueued_at=datetime.now(timezone.utc).isoformat(),
+        enqueued_at=datetime.now(UTC).isoformat(),
     )

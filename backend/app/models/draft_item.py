@@ -1,12 +1,14 @@
-import enum
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Numeric, Text, DateTime, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM
+from enum import StrEnum
+
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
+
 from app.models.base import Base
 
 
-class DraftStatus(str, enum.Enum):
+class DraftStatus(StrEnum):
     pending = "pending"
     approved = "approved"
     edited_approved = "edited_approved"

@@ -757,7 +757,6 @@ def test_engagement_alert_watchlist_early():
              patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
             # Patch the items query to return our watchlist item
             call_count = 0
-            original_execute = mock_session.execute.side_effect
 
             async def execute_side_effect(stmt):
                 nonlocal call_count
@@ -993,12 +992,14 @@ def test_morning_digest_assembly():
         item.expires_at = now
         return item
 
-    approved_1 = make_item(uuid.uuid4(), "approved", 9.0, "twitter", "@Kitco", "Gold hits high. Details here.", "https://ex.com/1")
-    approved_2 = make_item(uuid.uuid4(), "edited_approved", 8.5, "instagram", "@GoldInvestor", "Fed signals rate cut. Market reacts.", "https://ex.com/2")
-    approved_3 = make_item(uuid.uuid4(), "approved", 7.8, "content", "@NewsDesk", "Mining output rises quarterly. Analysts bullish.", "https://ex.com/3")
-    rejected_1 = make_item(uuid.uuid4(), "rejected", 5.0, "twitter", "@Spam", "Not relevant. Discard.", "https://ex.com/4")
-    expired_1 = make_item(uuid.uuid4(), "expired", 4.0, "twitter", "@Old", "Old story expired. Not shown.", "https://ex.com/5")
-    expired_2 = make_item(uuid.uuid4(), "expired", 3.5, "twitter", "@Old2", "Another expired. Done.", "https://ex.com/6")
+    # These items document the expected counts; the digest aggregates only via count queries,
+    # so the individual objects are not referenced — keep them as documentation via `_` names.
+    _approved_1 = make_item(uuid.uuid4(), "approved", 9.0, "twitter", "@Kitco", "Gold hits high. Details here.", "https://ex.com/1")  # noqa: E501
+    _approved_2 = make_item(uuid.uuid4(), "edited_approved", 8.5, "instagram", "@GoldInvestor", "Fed signals rate cut. Market reacts.", "https://ex.com/2")  # noqa: E501
+    _approved_3 = make_item(uuid.uuid4(), "approved", 7.8, "content", "@NewsDesk", "Mining output rises quarterly. Analysts bullish.", "https://ex.com/3")  # noqa: E501
+    _rejected_1 = make_item(uuid.uuid4(), "rejected", 5.0, "twitter", "@Spam", "Not relevant. Discard.", "https://ex.com/4")  # noqa: E501
+    _expired_1 = make_item(uuid.uuid4(), "expired", 4.0, "twitter", "@Old", "Old story expired. Not shown.", "https://ex.com/5")  # noqa: E501
+    _expired_2 = make_item(uuid.uuid4(), "expired", 3.5, "twitter", "@Old2", "Another expired. Done.", "https://ex.com/6")  # noqa: E501
 
     # Top 5 stories query: 3 items by score DESC
     top_story_1 = make_item(uuid.uuid4(), "approved", 9.0, "twitter", "@Kitco", "Gold hits all-time high. Markets rally strongly.", "https://ex.com/t1")
@@ -1056,10 +1057,10 @@ def test_morning_digest_assembly():
     assert len(digest["top_stories"]) == 3, f"Expected 3 top stories, got {len(digest['top_stories'])}"
     for story in digest["top_stories"]:
         assert "headline" in story, f"Missing 'headline' key in story: {story}"
-        assert "source_account" in story, f"Missing 'source_account' key"
-        assert "platform" in story, f"Missing 'platform' key"
-        assert "score" in story, f"Missing 'score' key"
-        assert "source_url" in story, f"Missing 'source_url' key"
+        assert "source_account" in story, "Missing 'source_account' key"
+        assert "platform" in story, "Missing 'platform' key"
+        assert "score" in story, "Missing 'score' key"
+        assert "source_url" in story, "Missing 'source_url' key"
 
     # queue_snapshot: correct platform counts and total
     qs = digest["queue_snapshot"]
@@ -1184,7 +1185,6 @@ async def test_morning_digest_calls_send_whatsapp_message():
     """run_morning_digest uses send_whatsapp_message (not send_whatsapp_template)."""
     from agents.senior_agent import SeniorAgent
     from unittest.mock import patch, AsyncMock, MagicMock
-    from datetime import date
 
     agent = SeniorAgent()
 

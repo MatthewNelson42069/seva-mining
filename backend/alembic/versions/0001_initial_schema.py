@@ -9,9 +9,10 @@ Creates all 6 tables with JSONB columns, draftstatus enum, and indexes.
 Requirements: INFRA-01, INFRA-02, INFRA-06
 Decisions: D-03, D-06, D-07, D-08
 """
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers
 revision = "0001"

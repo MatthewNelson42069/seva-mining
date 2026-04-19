@@ -1,18 +1,19 @@
-from pydantic import BaseModel, ConfigDict
 from datetime import date, datetime
+from typing import Any
 from uuid import UUID
-from typing import Optional, Any
+
+from pydantic import BaseModel, ConfigDict
 
 
 class DailyDigestResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     digest_date: date
-    top_stories: Optional[Any] = None
-    queue_snapshot: Optional[Any] = None
-    yesterday_approved: Optional[Any] = None
-    yesterday_rejected: Optional[Any] = None
-    yesterday_expired: Optional[Any] = None
-    priority_alert: Optional[Any] = None
-    whatsapp_sent_at: Optional[datetime] = None
+    top_stories: Any | None = None
+    queue_snapshot: Any | None = None
+    yesterday_approved: Any | None = None
+    yesterday_rejected: Any | None = None
+    yesterday_expired: Any | None = None
+    priority_alert: Any | None = None
+    whatsapp_sent_at: datetime | None = None
     created_at: datetime

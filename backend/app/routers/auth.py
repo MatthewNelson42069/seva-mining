@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, status
-from app.schemas.auth import LoginRequest, TokenResponse
-from app.auth import verify_password, create_access_token
+
+from app.auth import create_access_token, verify_password
 from app.config import get_settings
+from app.schemas.auth import LoginRequest, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

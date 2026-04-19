@@ -1,17 +1,19 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.config import get_settings
 from app.database import engine
+from app.routers.agent_runs import router as agent_runs_router
 from app.routers.auth import router as auth_router
+from app.routers.config import router as config_router
+from app.routers.content import router as content_router
+from app.routers.content_bundles import router as content_bundles_router
+from app.routers.digests import router as digests_router
+from app.routers.keywords import router as keywords_router
 from app.routers.queue import router as queue_router
 from app.routers.watchlists import router as watchlists_router
-from app.routers.keywords import router as keywords_router
-from app.routers.agent_runs import router as agent_runs_router
-from app.routers.digests import router as digests_router
-from app.routers.content import router as content_router
-from app.routers.config import router as config_router
-from app.routers.content_bundles import router as content_bundles_router
 
 
 @asynccontextmanager

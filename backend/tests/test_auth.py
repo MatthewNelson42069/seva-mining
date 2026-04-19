@@ -3,15 +3,19 @@ Auth endpoint and unit tests.
 Requirements: AUTH-01, AUTH-02, AUTH-03
 Decisions: D-08 (7-day JWT expiry)
 """
-import pytest
+from datetime import UTC, datetime
+
 import bcrypt
-import jwt
-from datetime import datetime, timezone, timedelta
+import pytest
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.auth import verify_password, create_access_token, decode_token, TOKEN_EXPIRE_DAYS, ALGORITHM
+from app.auth import (
+    TOKEN_EXPIRE_DAYS,
+    create_access_token,
+    decode_token,
+    verify_password,
+)
 from app.dependencies import get_current_user
-
 
 # ===========================================================================
 # Unit tests for auth helpers (no HTTP, no DB)
@@ -42,8 +46,8 @@ def test_token_has_7day_expiry():
     """Decoded token exp is approximately 7 days from now (D-08)."""
     token = create_access_token()
     payload = decode_token(token)
-    exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
-    now = datetime.now(timezone.utc)
+    exp = datetime.fromtimestamp(payload["exp"], tz=UTC)
+    now = datetime.now(UTC)
     delta = exp - now
     # Should be within 1 minute of 7 days
     assert abs(delta.total_seconds() - TOKEN_EXPIRE_DAYS * 86400) < 60
@@ -69,7 +73,7 @@ async def test_protected_endpoint_invalid_token():
 
 @pytest.mark.asyncio
 async def test_login_success(client):
-    """POST /auth/login with correct password returns 200 + access_token + token_type=bearer (AUTH-01)."""
+    """POST /auth/login with correct password returns 200 + access_token + token_type=bearer (AUTH-01)."""  # noqa: E501
     # The env sets dashboard_password to bcrypt hash of "testpassword"
     response = await client.post("/auth/login", json={"password": "testpassword"})
     assert response.status_code == 200

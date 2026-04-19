@@ -441,7 +441,6 @@ def build_draft_item(content_bundle, rationale: str):
     Returns:
         DraftItem ready to be persisted to the database.
     """
-    import json  # noqa: PLC0415
     from models.draft_item import DraftItem  # noqa: PLC0415
 
     # Extract actual copyable draft text for the alternatives field.
@@ -1594,7 +1593,7 @@ For "quote" format, draft_content must have:
                     logger.info("Quote tweet already covered today: %s", tweet_url)
                     continue
 
-                speaker_title = f"Author, macro investor"  # Default; Claude will improve
+                speaker_title = "Author, macro investor"  # Default; Claude will improve
                 draft_content = await self._draft_quote_post(
                     quote_text=qt["text"],
                     speaker=qt["author_name"],

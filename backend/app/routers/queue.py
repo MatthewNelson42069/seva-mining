@@ -1,10 +1,10 @@
-import json
 import base64
-from datetime import datetime, timezone
+import json
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, and_
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -136,7 +136,7 @@ async def approve_item(
         await _enforce_transition(item, DraftStatus.approved)
         item.status = DraftStatus.approved
 
-    item.decided_at = datetime.now(timezone.utc)
+    item.decided_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(item)
     return DraftItemResponse.model_validate(item)
@@ -158,7 +158,7 @@ async def reject_item(
 
     item.status = DraftStatus.rejected
     item.rejection_reason = json.dumps({"category": body.category, "notes": body.notes})
-    item.decided_at = datetime.now(timezone.utc)
+    item.decided_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(item)
     return DraftItemResponse.model_validate(item)

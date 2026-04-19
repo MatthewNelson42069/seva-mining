@@ -6,5 +6,5 @@ pytest.skip("queue schema test deferred to Plan 11-03", allow_module_level=True)
 
 
 async def test_queue_response_includes_engagement_snapshot(authed_client):
-    """Queue list response items include engagement_snapshot with content_bundle_id for content-agent drafts."""
+    """Queue list response items include engagement_snapshot with content_bundle_id for content-agent drafts."""  # noqa: E501
     pass

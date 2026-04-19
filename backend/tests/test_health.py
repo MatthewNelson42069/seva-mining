@@ -3,6 +3,7 @@ Tests for FastAPI health check endpoint.
 Covers: INFRA-09 — health check endpoints, INFRA-03 — FastAPI backend
 """
 import os
+
 import pytest
 from fastapi.testclient import TestClient
 
