@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     # Optional — agents that need these will fail gracefully if absent
     x_api_key: Optional[str] = None
     x_api_secret: Optional[str] = None
-    apify_api_token: Optional[str] = None
     serpapi_api_key: Optional[str] = None
     twilio_account_sid: Optional[str] = None
     twilio_auth_token: Optional[str] = None

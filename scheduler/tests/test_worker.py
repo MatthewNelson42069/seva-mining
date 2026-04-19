@@ -21,7 +21,6 @@ os.environ.setdefault("DIGEST_WHATSAPP_TO", "whatsapp:+1x")
 os.environ.setdefault("X_API_BEARER_TOKEN", "x")
 os.environ.setdefault("X_API_KEY", "x")
 os.environ.setdefault("X_API_SECRET", "x")
-os.environ.setdefault("APIFY_API_TOKEN", "x")
 os.environ.setdefault("SERPAPI_API_KEY", "x")
 os.environ.setdefault("FRONTEND_URL", "https://x.com")
 
@@ -64,7 +63,7 @@ async def test_job_exception_does_not_propagate():
         raise RuntimeError("Agent crashed")
 
     # Must not raise — worker process must survive
-    await with_advisory_lock(mock_conn, 1002, "instagram_agent", failing_job)
+    await with_advisory_lock(mock_conn, 1001, "twitter_agent", failing_job)
 
     # Lock release must have been called (finally block)
     assert mock_conn.execute.call_count == 2  # acquire + release
@@ -84,18 +83,19 @@ async def test_placeholder_job_is_async():
 
 
 @pytest.mark.asyncio
-async def test_all_five_jobs_registered():
+async def test_all_four_jobs_registered():
     """
-    build_scheduler() must register exactly 5 jobs with the correct IDs.
+    build_scheduler() must register exactly 4 jobs with the correct IDs.
     Covers: INFRA-05 (D-14 job schedule skeleton); updated in 07-10 for midday + gold history jobs.
     Updated in Phase 10-03: expiry_sweep removed (run_expiry_sweep preserved but not scheduled).
     Updated in 260407-neq: content_agent_midday removed; content_agent uses interval trigger.
+    Updated in 260419-lvy: instagram_agent removed (Instagram agent purged from codebase).
     """
     mock_engine = MagicMock()
     scheduler = await build_scheduler(mock_engine)
     job_ids = {job.id for job in scheduler.get_jobs()}
     expected_ids = {
-        "content_agent", "twitter_agent", "instagram_agent",
+        "content_agent", "twitter_agent",
         "morning_digest", "gold_history_agent",
     }
     assert job_ids == expected_ids, f"Got job IDs: {job_ids}"
@@ -114,8 +114,8 @@ def test_expiry_sweep_removed_from_job_lock_ids():
 
 
 @pytest.mark.asyncio
-async def test_build_scheduler_has_5_jobs_no_expiry_sweep():
-    """build_scheduler() returns 5 jobs; expiry_sweep is absent."""
+async def test_build_scheduler_has_4_jobs_no_expiry_sweep():
+    """build_scheduler() returns 4 jobs; expiry_sweep and instagram_agent are absent."""
     mock_engine = AsyncMock()
     mock_session = AsyncMock()
 
@@ -137,9 +137,10 @@ async def test_build_scheduler_has_5_jobs_no_expiry_sweep():
     job_ids = {job.id for job in scheduler.get_jobs()}
     assert "expiry_sweep" not in job_ids
     assert "content_agent_midday" not in job_ids
+    assert "instagram_agent" not in job_ids
     assert "morning_digest" in job_ids
     assert "twitter_agent" in job_ids
-    assert len(job_ids) == 5
+    assert len(job_ids) == 4
     if scheduler.running:
         scheduler.shutdown()
 
@@ -152,4 +153,5 @@ def test_read_schedule_config_defaults_no_expiry_sweep():
     source = inspect.getsource(_read_schedule_config)
     assert "expiry_sweep_interval_minutes" not in source
     assert "content_agent_midday_hour" not in source
+    assert "instagram_interval_hours" not in source
     assert "content_agent_interval_hours" in source

@@ -23,7 +23,8 @@ class ContentBundleResponse(BaseModel):
 
 class RenderedImage(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    # "twitter_visual" | "instagram_slide_1" | "instagram_slide_2" | "instagram_slide_3"
+    # "twitter_visual" — IG slide roles still emitted by image_render but frontend
+    # renders only twitter_visual after 260419-lvy.
     role: str
     url: str
     generated_at: str   # ISO-8601

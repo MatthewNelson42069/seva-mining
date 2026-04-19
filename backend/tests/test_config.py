@@ -35,7 +35,6 @@ def test_settings_loads_from_env(monkeypatch):
         "X_API_BEARER_TOKEN": "bearertest",
         "X_API_KEY": "keytest",
         "X_API_SECRET": "secrettest",
-        "APIFY_API_TOKEN": "apifytest",
         "SERPAPI_API_KEY": "serpapitest",
         "JWT_SECRET": "a" * 32,  # >=32 bytes to pass validator
         "DASHBOARD_PASSWORD": "passwordtest",

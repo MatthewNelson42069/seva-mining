@@ -11,7 +11,7 @@ class Watchlist(Base):
     __tablename__ = "watchlists"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    platform = Column(String(20), nullable=False)     # twitter, instagram
+    platform = Column(String(20), nullable=False)     # twitter
     account_handle = Column(String(255), nullable=False)
     # Twitter numeric user ID, resolved lazily by agent
     platform_user_id = Column(String(50), nullable=True)

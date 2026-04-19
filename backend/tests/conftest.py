@@ -25,7 +25,6 @@ os.environ["DIGEST_WHATSAPP_TO"] = "whatsapp:+15551234567"
 os.environ["X_API_BEARER_TOKEN"] = "test-bearer"
 os.environ["X_API_KEY"] = "test-key"
 os.environ["X_API_SECRET"] = "test-secret"
-os.environ["APIFY_API_TOKEN"] = "test-token"
 os.environ["SERPAPI_API_KEY"] = "test-key"
 os.environ["JWT_SECRET"] = _TEST_JWT_SECRET
 os.environ["DASHBOARD_PASSWORD"] = _TEST_PASSWORD_HASH

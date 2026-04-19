@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class WatchlistCreate(BaseModel):
-    platform: str   # twitter or instagram
+    platform: str   # twitter
     account_handle: str
     relationship_value: int | None = None  # 1-5 for Twitter
     follower_threshold: int | None = None  # for Instagram

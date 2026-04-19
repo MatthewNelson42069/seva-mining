@@ -6,7 +6,7 @@ Usage: DATABASE_URL=postgresql+asyncpg://... uv run python seed_content_data.py
 
 This script is self-contained — it builds its own async engine directly from
 the DATABASE_URL environment variable and does NOT import Settings (which
-requires all env vars to be set). This matches the seed_instagram_data.py pattern.
+requires all env vars to be set).
 
 Idempotent: existing records are skipped, not overwritten.
 

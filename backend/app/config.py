@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     x_api_key: str | None = None
     x_api_secret: str | None = None
 
-    apify_api_token: str | None = None
     serpapi_api_key: str | None = None
 
     # Phase 11 — Image rendering (Gemini / Cloudflare R2)

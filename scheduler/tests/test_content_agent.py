@@ -24,7 +24,6 @@ os.environ.setdefault("DIGEST_WHATSAPP_TO", "whatsapp:+1x")
 os.environ.setdefault("X_API_BEARER_TOKEN", "test-bearer-token")
 os.environ.setdefault("X_API_KEY", "test-key")
 os.environ.setdefault("X_API_SECRET", "test-secret")
-os.environ.setdefault("APIFY_API_TOKEN", "test-apify-token")
 os.environ.setdefault("SERPAPI_API_KEY", "x")
 os.environ.setdefault("FRONTEND_URL", "https://x.com")
 

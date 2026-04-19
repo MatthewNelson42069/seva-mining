@@ -2,7 +2,7 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-It starts AsyncIOScheduler with 5 jobs and uses PostgreSQL advisory locks
+It starts AsyncIOScheduler with 4 jobs and uses PostgreSQL advisory locks
 to prevent duplicate execution during Railway zero-downtime deploys.
 
 Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04, TWIT-01, SENR-01, SENR-09
@@ -21,7 +21,6 @@ from models.config import Config
 from agents.content_agent import ContentAgent
 from agents.gold_history_agent import GoldHistoryAgent
 from agents.twitter_agent import TwitterAgent
-from agents.instagram_agent import InstagramAgent
 from agents.senior_agent import SeniorAgent, seed_senior_config
 
 logging.basicConfig(
@@ -51,7 +50,6 @@ def get_scheduler() -> AsyncIOScheduler:
 # These IDs are stable for the lifetime of the project.
 JOB_LOCK_IDS: dict[str, int] = {
     "twitter_agent": 1001,
-    "instagram_agent": 1002,
     "content_agent": 1003,
     "morning_digest": 1005,
     "gold_history_agent": 1009,
@@ -138,7 +136,6 @@ def _make_job(job_name: str, engine):
     or placeholder with the advisory lock.
 
     - twitter_agent: TwitterAgent().run()
-    - instagram_agent: InstagramAgent().run()            [Phase 6 — INST-01]
     - morning_digest: SeniorAgent().run_morning_digest() [Phase 5 — SENR-01]
     - All other jobs use placeholder_job until their phases are built.
 
@@ -149,14 +146,6 @@ def _make_job(job_name: str, engine):
         async with engine.connect() as conn:
             if job_name == "twitter_agent":
                 agent = TwitterAgent()
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    agent.run,
-                )
-            elif job_name == "instagram_agent":
-                agent = InstagramAgent()
                 await with_advisory_lock(
                     conn,
                     JOB_LOCK_IDS[job_name],
@@ -205,7 +194,6 @@ async def _read_schedule_config(engine) -> dict[str, str]:
     """
     defaults = {
         "twitter_interval_hours": "2",
-        "instagram_interval_hours": "4",
         "content_agent_interval_hours": "2",
         "morning_digest_schedule_hour": "8",
         "gold_history_hour": "9",
@@ -239,22 +227,20 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
 
     Config keys:
     - twitter_interval_hours (default: 2)
-    - instagram_interval_hours (default: 4)
     - content_agent_interval_hours (default: 2)
     - morning_digest_schedule_hour (default: 8)
     """
     cfg = await _read_schedule_config(engine)
 
     twitter_hours = int(cfg["twitter_interval_hours"])
-    instagram_hours = int(cfg["instagram_interval_hours"])
     content_hours = int(cfg["content_agent_interval_hours"])
     digest_hour = int(cfg["morning_digest_schedule_hour"])
     gold_history_hour = int(cfg["gold_history_hour"])
 
     logger.info(
-        "Schedule config: twitter=%dh, instagram=%dh, content=%dh, "
+        "Schedule config: twitter=%dh, content=%dh, "
         "digest=cron(%d:00 UTC), gold_history=cron(%d:00 bi-weekly Sun)",
-        twitter_hours, instagram_hours, content_hours,
+        twitter_hours, content_hours,
         digest_hour, gold_history_hour,
     )
 
@@ -273,13 +259,6 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         hours=twitter_hours,
         id="twitter_agent",
         name=f"Twitter Agent — every {twitter_hours} hours",
-    )
-    scheduler.add_job(
-        _make_job("instagram_agent", engine),
-        trigger="interval",
-        hours=instagram_hours,
-        id="instagram_agent",
-        name=f"Instagram Agent — every {instagram_hours} hours",
     )
     scheduler.add_job(
         _make_job("morning_digest", engine),
@@ -358,7 +337,6 @@ async def _validate_env() -> None:
         "DATABASE_URL": bool(settings.database_url),
     }
     optional = {
-        "APIFY_API_TOKEN": bool(settings.apify_api_token),
         "SERPAPI_API_KEY": bool(settings.serpapi_api_key),
         "TWILIO_ACCOUNT_SID": bool(settings.twilio_account_sid),
     }

@@ -28,7 +28,7 @@ class DraftItem(Base):
     __tablename__ = "draft_items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    platform = Column(String(20), nullable=False)          # twitter, instagram, content
+    platform = Column(String(20), nullable=False)          # twitter, content
     status = Column(draft_status_enum, nullable=False, server_default="pending")
     source_url = Column(Text)
     source_text = Column(Text)
