@@ -103,6 +103,7 @@ class _ContentBundle(_TestBase):
     deep_research = Col(SQLiteJSON)
     draft_content = Col(SQLiteJSON)
     compliance_passed = Col(Boolean)
+    rendered_images = Col(SQLiteJSON)  # Phase 11 addition — array of {role, url, generated_at}
     created_at = Col(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
