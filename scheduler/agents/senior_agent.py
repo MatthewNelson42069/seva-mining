@@ -670,9 +670,10 @@ class SeniorAgent:
             {
                 # source_text first line is the news headline (e.g. "Reuters: Gold hits...")
                 "headline": (item.source_text or "").split("\n")[0].strip() or self._headline_from_rationale(item.rationale),
-                "source": item.source_account or "",
+                "source_account": item.source_account or "",
+                "platform": item.platform or "",
                 "time": item.created_at.isoformat() if item.created_at else None,
-                "url": item.source_url,
+                "source_url": item.source_url,
                 "score": float(item.score or 0),
             }
             for item in top_items
