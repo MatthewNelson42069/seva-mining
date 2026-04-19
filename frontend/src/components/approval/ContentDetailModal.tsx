@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -7,6 +6,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { DraftItemResponse, DraftAlternative } from '@/api/types'
+import { useContentBundle } from '@/hooks/useContentBundle'
+import { InfographicPreview } from '@/components/content/InfographicPreview'
+import { ThreadPreview } from '@/components/content/ThreadPreview'
+import { LongFormPreview } from '@/components/content/LongFormPreview'
+import { BreakingNewsPreview } from '@/components/content/BreakingNewsPreview'
+import { QuotePreview } from '@/components/content/QuotePreview'
+import { VideoClipPreview } from '@/components/content/VideoClipPreview'
+import { RenderedImagesGallery } from '@/components/content/RenderedImagesGallery'
 
 interface ContentDetailModalProps {
   item: DraftItemResponse
@@ -14,39 +21,41 @@ interface ContentDetailModalProps {
   onClose: () => void
 }
 
-const FORMAT_LABELS: Record<string, string> = {
-  thread: 'Thread',
-  long_post: 'Long Post',
-  article: 'Article',
-  infographic: 'Infographic Brief',
+// Formats that have a structured preview renderer
+const FORMAT_RENDERERS: Record<string, true> = {
+  infographic: true,
+  thread: true,
+  long_form: true,
+  breaking_news: true,
+  quote: true,
+  video_clip: true,
 }
 
 export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModalProps) {
-  const [activeTab, setActiveTab] = useState(0)
-  const activeAlternative: DraftAlternative | undefined = item.alternatives[activeTab]
+  // Pull content_bundle_id from engagement_snapshot (populated by Plan 01 schema change)
+  const bundleId =
+    (item.engagement_snapshot as Record<string, unknown> | undefined)?.content_bundle_id as
+      | string
+      | undefined
 
-  // Extract headline from source_text first line
-  const headline = item.source_text?.split('\n')[0] ?? 'Content Review'
+  const { data: bundle, isError, isLoading } = useContentBundle(bundleId ?? null)
+
+  const headline =
+    bundle?.story_headline ?? item.source_text?.split('\n')[0] ?? 'Content Review'
+
+  const contentType = bundle?.content_type ?? ''
+  // Fallback path: no bundle id, fetch failed, or unknown format → flat text (D-24)
+  const showFallback = !bundleId || isError || !FORMAT_RENDERERS[contentType]
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base leading-snug pr-8">{headline}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Format badge */}
-          {item.alternatives[0]?.type && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Format</span>
-              <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                {FORMAT_LABELS[item.alternatives[0].type] ?? item.alternatives[0].type}
-              </span>
-            </div>
-          )}
-
-          {/* Source info */}
+          {/* Source metadata */}
           {(item.source_account || item.source_url) && (
             <div className="text-xs text-muted-foreground space-y-0.5">
               {item.source_account && <p>Source: {item.source_account}</p>}
@@ -63,56 +72,46 @@ export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModal
             </div>
           )}
 
-          {/* Full source text */}
-          {item.source_text && (
-            <div className="bg-muted/40 rounded-lg p-3">
-              <p className="text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">Story summary</p>
-              <p className="text-sm leading-relaxed text-foreground">{item.source_text}</p>
+          {/* Loading state — brief skeleton while bundle is fetching */}
+          {isLoading && bundleId && (
+            <div className="space-y-2" aria-label="Loading content bundle">
+              <div className="h-4 bg-muted/40 rounded animate-pulse w-3/4" />
+              <div className="h-4 bg-muted/40 rounded animate-pulse w-1/2" />
+              <div className="h-4 bg-muted/40 rounded animate-pulse w-2/3" />
             </div>
           )}
 
-          {/* Draft alternatives tabs */}
-          {item.alternatives.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Draft alternatives</p>
-
-              {/* Tab bar */}
-              <div className="flex gap-1 border-b border-border">
-                {item.alternatives.map((alt, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setActiveTab(idx)}
-                    className={[
-                      'px-3 py-1.5 text-xs font-medium transition-colors border-b-2 -mb-px',
-                      activeTab === idx
-                        ? 'border-blue-600 text-blue-600'
-                        : 'border-transparent text-muted-foreground hover:text-foreground',
-                    ].join(' ')}
-                  >
-                    {alt.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Active draft content */}
-              {activeAlternative && (
-                <div className="bg-background border border-border rounded-lg p-4">
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{activeAlternative.text}</p>
-                </div>
-              )}
-            </div>
+          {/* Brief renders immediately (D-13) */}
+          {!isLoading && (
+            showFallback ? (
+              <FlatTextFallback item={item} />
+            ) : (
+              bundle && (
+                <>
+                  {renderForFormat(contentType, bundle)}
+                  {/* Gallery mounts for infographic/quote; RenderedImagesGallery self-returns null for others */}
+                  <RenderedImagesGallery
+                    bundleId={bundle.id}
+                    contentType={bundle.content_type ?? ''}
+                    renderedImages={bundle.rendered_images ?? []}
+                    bundleCreatedAt={bundle.created_at}
+                  />
+                </>
+              )
+            )
           )}
 
-          {/* Why this format */}
+          {/* Rationale */}
           {item.rationale && (
             <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Why this format?</p>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Why this format?
+              </p>
               <p className="text-sm leading-relaxed text-muted-foreground">{item.rationale}</p>
             </div>
           )}
 
-          {/* Score */}
+          {/* Quality score */}
           {item.score != null && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Quality score:</span>
@@ -124,5 +123,40 @@ export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModal
         <DialogFooter showCloseButton />
       </DialogContent>
     </Dialog>
+  )
+}
+
+type BundleData = NonNullable<ReturnType<typeof useContentBundle>['data']>
+
+function renderForFormat(contentType: string, bundle: BundleData) {
+  const draft = bundle.draft_content as unknown
+  switch (contentType) {
+    case 'infographic':
+      return <InfographicPreview draft={draft as Parameters<typeof InfographicPreview>[0]['draft']} images={bundle.rendered_images} />
+    case 'thread':
+      return <ThreadPreview draft={draft} />
+    case 'long_form':
+      return <LongFormPreview draft={draft} />
+    case 'breaking_news':
+      return <BreakingNewsPreview draft={draft} />
+    case 'quote':
+      return <QuotePreview draft={draft} />
+    case 'video_clip':
+      return <VideoClipPreview draft={draft} />
+    default:
+      return null
+  }
+}
+
+function FlatTextFallback({ item }: { item: DraftItemResponse }) {
+  // Preserve the pre-Phase-11 behavior: render draft alternatives as plain text (D-24)
+  const alt: DraftAlternative | undefined = item.alternatives[0]
+  if (!alt) {
+    return <p className="text-sm text-muted-foreground">No draft content available.</p>
+  }
+  return (
+    <div className="bg-background border border-border rounded-lg p-4">
+      <p className="text-sm leading-relaxed whitespace-pre-wrap">{alt.text}</p>
+    </div>
   )
 }
