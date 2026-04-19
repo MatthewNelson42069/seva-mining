@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import type { RenderedImage } from '@/api/types'
 
 interface InfographicDraft {
   format: 'infographic'
@@ -10,7 +11,13 @@ interface InfographicDraft {
   caption_text: string
 }
 
-export function InfographicPreview({ draft }: { draft: InfographicDraft }) {
+export function InfographicPreview({
+  draft,
+  images,
+}: {
+  draft: InfographicDraft
+  images?: RenderedImage[] | null
+}) {
   const keyStats = draft.key_stats ?? []
   const visualStructure = draft.visual_structure ?? ''
   const captionText = draft.caption_text ?? ''
@@ -60,6 +67,16 @@ export function InfographicPreview({ draft }: { draft: InfographicDraft }) {
       )}
       {captionText && (
         <p className="text-sm text-muted-foreground border-t pt-3 mt-3">{captionText}</p>
+      )}
+      {images && images.length > 0 && (
+        <div className="space-y-2 border-t pt-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Rendered previews</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {images.map((img) => (
+              <img key={img.role} src={img.url} alt={img.role} className="w-full rounded border" loading="lazy" />
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
