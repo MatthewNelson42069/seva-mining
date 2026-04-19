@@ -80,15 +80,13 @@ Rebuilt `.env.example` to the 20 vars the code actually reads, wired `scheduler/
 
 ## Operator Action Required After Merge
 
-Your local `backend/.env` has a JWT_SECRET shorter than 32 bytes (25 bytes per the lint noise in `InsecureKeyLengthWarning` emitted by the JWT library during tests). The backend API will now refuse to boot until you regenerate it:
+**None — false alarm (corrected 2026-04-19 post-merge).**
 
-```bash
-openssl rand -hex 32
-```
+Initial summary claimed the local `backend/.env` JWT_SECRET was 25 bytes and would block backend boot after this task. Verified live after merge: the real value in `backend/.env` is **64 chars / 32 bytes of entropy**, which passes the new validator cleanly. `cd backend && uv run python -c "from app.main import app"` boots with 27 routes, no ValidationError.
 
-Paste the output into `backend/.env` as the new `JWT_SECRET` value (hex output is 64 chars — comfortably over the 32-byte floor). Existing issued JWTs will become invalid after rotation — this is a single-user internal tool, so just log in again.
+The original misread traced to the `InsecureKeyLengthWarning: The HMAC key is 25 bytes long` warning that appeared in `pytest` output. That warning was emitted by the `pyjwt` library inside test fixtures which set a shorter placeholder (`"dev-secret-change-me-abc12"`, 25 chars) for isolated test runs — not from the real `.env`. Tests continue to pass because the Task 4 fixture updates (`conftest.py`, `test_config.py`, `test_database.py`, `test_whatsapp.py`) bumped those placeholders to `"a" * 32`.
 
-This is by design — the whole point of Task 4's validator is to fail fast at boot rather than silently sign with a weak key.
+**If you ever want to rotate the JWT_SECRET for good hygiene**, the one-liner is still: `openssl rand -hex 32` → paste into `backend/.env` as the new `JWT_SECRET` value. Existing issued JWTs become invalid after rotation, but this is a single-user tool, so just log in again. Not required — current secret is fine.
 
 ## Files Touched (per commit)
 
