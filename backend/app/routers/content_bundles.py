@@ -45,23 +45,46 @@ def _get_render_bundle_job():
     """
     Return the render_bundle_job coroutine function from the scheduler package.
 
-    Returns a no-op async stub if image_render_agent.py does not yet exist
-    (e.g. running before Plan 02 is merged). Plan 07 checkpoint verifies this
-    is wired correctly in the Railway deploy.
+    Uses importlib.util.spec_from_file_location to load image_render_agent.py
+    DIRECTLY — bypassing scheduler/agents/__init__.py, which eagerly imports
+    TwitterAgent → tweepy (not installed in the backend venv).
+
+    Returns a no-op async stub if image_render_agent.py is missing or fails to
+    load (logs the reason). Plan 07 checkpoint verifies this is wired correctly
+    in the Railway deploy.
     """
-    try:
-        from agents.image_render_agent import render_bundle_job  # type: ignore[import]
-        return render_bundle_job
-    except ImportError:
+    import importlib.util
+
+    module_path = os.path.join(_SCHEDULER_PATH, "agents", "image_render_agent.py")
+    if not os.path.exists(module_path):
         logger.warning(
-            "image_render_agent not found — rerender endpoint will fire a no-op stub. "
-            "Wire scheduler/agents/image_render_agent.py (Plan 11-02) to enable real rendering."
+            "image_render_agent.py not found at %s — rerender will fire a no-op stub.",
+            module_path,
         )
+    else:
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "seva_image_render_agent", module_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(
+                    "spec_from_file_location returned None for image_render_agent.py"
+                )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.render_bundle_job
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning(
+                "Failed to load image_render_agent via importlib (%s: %s) — "
+                "rerender will fire a no-op stub.",
+                type(exc).__name__,
+                exc,
+            )
 
-        async def _noop_render_bundle_job(bundle_id: str) -> None:
-            logger.info("No-op render_bundle_job called for bundle %s (stub)", bundle_id)
+    async def _noop_render_bundle_job(bundle_id: str) -> None:
+        logger.info("No-op render_bundle_job called for bundle %s (stub)", bundle_id)
 
-        return _noop_render_bundle_job
+    return _noop_render_bundle_job
 
 
 # ---------------------------------------------------------------------------

@@ -8,6 +8,11 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # Tolerate extra env vars so the backend process can load
+        # scheduler.agents.image_render_agent via importlib without choking on
+        # backend-only vars (jwt_secret, dashboard_password, …) in the shared
+        # .env / Railway project env space. See Plan 11-07 finalization.
+        extra="ignore",
     )
 
     # Required — scheduler cannot start without these
