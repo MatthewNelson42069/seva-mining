@@ -1,8 +1,8 @@
 """
 Content Agent — ingest, deduplicate, score, and select daily gold sector stories.
 
-Monitors RSS feeds (Kitco, Mining.com, JMN, WGC, Reuters, Bloomberg, GoldSeek,
-Investing.com) and SerpAPI news search every ~6 hours for qualifying stories.
+Monitors RSS feeds (Kitco, Mining.com, JMN, WGC, Reuters, Bloomberg (commodities),
+GoldSeek) and SerpAPI news search every ~6 hours for qualifying stories.
 Applies scoring (relevance, recency, credibility), deduplication (URL + headline
 similarity), cross-run deduplication, and selects ALL stories above the 7.0/10
 quality threshold for multi-story output.
@@ -44,9 +44,8 @@ RSS_FEEDS = [
     ("https://www.juniorminingnetwork.com/feed", "juniorminingnetwork.com"),
     ("https://www.gold.org/goldhub/news/feed", "gold.org"),
     ("https://feeds.reuters.com/reuters/businessNews", "reuters.com"),
-    ("https://feeds.bloomberg.com/markets/news.rss", "bloomberg.com"),
+    ("https://feeds.bloomberg.com/commodities/news.rss", "bloomberg.com"),
     ("https://goldseek.com/feed/", "goldseek.com"),
-    ("https://www.investing.com/rss/news_25.rss", "investing.com"),
 ]
 
 # ---------------------------------------------------------------------------
