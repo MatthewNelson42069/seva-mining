@@ -13,8 +13,12 @@ const {
   XAxis,
   YAxis,
   CartesianGrid,
-  Legend,
 } = require('recharts');
+
+// NOTE: Recharts' <Legend> component renders to a sibling <div class="recharts-legend-wrapper">
+// outside the main chart <svg>. Our SVG extractor (non-greedy match in render-chart.js) stops at
+// the chart's </svg>, so the Recharts legend would be dropped. We render an inline SVG legend
+// below for multi_line charts instead — stays inside the captured <svg>.
 
 /**
  * LineChart component.
@@ -125,14 +129,27 @@ function LineChart(props) {
       activeDot: false,
       strokeDasharray: '5 3',
     }),
-    // Legend (multi_line only)
-    isMultiLine && React.createElement(Legend, {
-      wrapperStyle: {
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 11,
-        color: '#5A6B7A',
-      },
-    })
+    // Inline SVG legend (multi_line only) — rendered inside the chart <svg>, top-right
+    isMultiLine && React.createElement('rect', {
+      x: width - 260, y: 34, width: 14, height: 14, fill: '#1E3A5F', rx: 2,
+    }),
+    isMultiLine && React.createElement('text', {
+      x: width - 242, y: 45,
+      fontFamily: 'Inter, sans-serif',
+      fontSize: 12,
+      fontWeight: '500',
+      fill: '#0C1B32',
+    }, label1),
+    isMultiLine && React.createElement('rect', {
+      x: width - 140, y: 34, width: 14, height: 14, fill: '#4A7FA5', rx: 2,
+    }),
+    isMultiLine && React.createElement('text', {
+      x: width - 122, y: 45,
+      fontFamily: 'Inter, sans-serif',
+      fontSize: 12,
+      fontWeight: '500',
+      fill: '#0C1B32',
+    }, label2)
   );
 }
 

@@ -12,8 +12,11 @@ const {
   XAxis,
   YAxis,
   CartesianGrid,
-  Legend,
 } = require('recharts');
+
+// NOTE: Recharts' <Legend> renders outside the main chart <svg> (sibling <div>). Our non-greedy
+// SVG extractor in render-chart.js stops at the chart's </svg>, so the Recharts legend is dropped.
+// We render an inline SVG legend below for stacked_area charts — stays inside the captured <svg>.
 
 /**
  * AreaChart component.
@@ -127,14 +130,27 @@ function AreaChart(props) {
       dot: false,
       activeDot: false,
     }),
-    // Legend (stacked_area only)
-    isStacked && React.createElement(Legend, {
-      wrapperStyle: {
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 11,
-        color: '#5A6B7A',
-      },
-    })
+    // Inline SVG legend (stacked_area only) — rendered inside the chart <svg>, top-right
+    isStacked && React.createElement('rect', {
+      x: width - 260, y: 34, width: 14, height: 14, fill: '#1E3A5F', fillOpacity: 0.7, rx: 2,
+    }),
+    isStacked && React.createElement('text', {
+      x: width - 242, y: 45,
+      fontFamily: 'Inter, sans-serif',
+      fontSize: 12,
+      fontWeight: '500',
+      fill: '#0C1B32',
+    }, label1),
+    isStacked && React.createElement('rect', {
+      x: width - 140, y: 34, width: 14, height: 14, fill: '#4A7FA5', fillOpacity: 0.5, rx: 2,
+    }),
+    isStacked && React.createElement('text', {
+      x: width - 122, y: 45,
+      fontFamily: 'Inter, sans-serif',
+      fontSize: 12,
+      fontWeight: '500',
+      fill: '#0C1B32',
+    }, label2)
   );
 }
 

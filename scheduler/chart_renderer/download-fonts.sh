@@ -20,10 +20,10 @@ curl -L --fail --retry 3 \
 
 echo "[download-fonts] Extracting Inter-Regular.ttf and Inter-Bold.ttf..."
 
-# The zip contains fonts in "Inter Desktop/" subdirectory
+# The zip contains fonts in "extras/ttf/" subdirectory (Inter 4.0 layout)
 unzip -j /tmp/inter.zip \
-  "Inter Desktop/Inter-Regular.ttf" \
-  "Inter Desktop/Inter-Bold.ttf" \
+  "extras/ttf/Inter-Regular.ttf" \
+  "extras/ttf/Inter-Bold.ttf" \
   -d fonts/
 
 rm /tmp/inter.zip

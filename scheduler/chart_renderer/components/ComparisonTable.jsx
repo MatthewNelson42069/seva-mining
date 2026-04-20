@@ -41,12 +41,10 @@ function ComparisonTable(props) {
   const TITLE_H = subtitle ? 90 : 65;
   const tableW = width - PAD_X * 2;
 
-  // Column widths
+  // Column widths — split remaining space evenly across data columns (2 or 3 of them)
   const labelColW = hasCol3 ? tableW * 0.35 : tableW * 0.4;
-  const dataColW = hasCol3
-    ? (tableW - labelColW) / 2
-    : (tableW - labelColW);
-  const col3W = hasCol3 ? (tableW - labelColW) / 2 : 0;
+  const dataColsN = hasCol3 ? 3 : 2;
+  const dataColW = (tableW - labelColW) / dataColsN;
 
   // Row heights
   const headerH = 44;
@@ -58,9 +56,10 @@ function ComparisonTable(props) {
   const tableY = TITLE_H + Math.max(0, (height - TITLE_H - 40 - tableH) / 2);
 
   // Column X positions
-  const col0X = PAD_X;                          // Label column start
-  const col1X = PAD_X + labelColW;              // Data col 1 start
-  const col2X = hasCol3 ? col1X + dataColW : 0; // Data col 2 start
+  const col0X = PAD_X;                    // Label column start
+  const col1X = PAD_X + labelColW;        // Data col 1 start
+  const col2X = col1X + dataColW;         // Data col 2 start
+  const col3X = col2X + dataColW;         // Data col 3 start (only used when hasCol3)
 
   const tableRows = rows.map((row, i) => {
     const rowY = tableY + headerH + i * rowH;
@@ -101,22 +100,25 @@ function ComparisonTable(props) {
       }, row.col1 || ''),
     ];
 
+    // Col2 (always present — schema guarantees row.col2)
+    elements.push(
+      React.createElement('text', {
+        key: `row-col2-${i}`,
+        x: col2X + dataColW / 2,
+        y: textY,
+        textAnchor: 'middle',
+        dominantBaseline: 'middle',
+        fontFamily: 'Inter, sans-serif',
+        fontSize: 13,
+        fontWeight: '400',
+        fill: BODY_TEXT,
+      }, row.col2 || '')
+    );
     if (hasCol3) {
       elements.push(
         React.createElement('text', {
-          key: `row-col2-${i}`,
-          x: col2X + col3W / 2,
-          y: textY,
-          textAnchor: 'middle',
-          dominantBaseline: 'middle',
-          fontFamily: 'Inter, sans-serif',
-          fontSize: 13,
-          fontWeight: '400',
-          fill: BODY_TEXT,
-        }, row.col2 || ''),
-        React.createElement('text', {
           key: `row-col3-${i}`,
-          x: col2X + dataColW + col3W / 2,
+          x: col3X + dataColW / 2,
           y: textY,
           textAnchor: 'middle',
           dominantBaseline: 'middle',
@@ -125,20 +127,6 @@ function ComparisonTable(props) {
           fontWeight: '400',
           fill: BODY_TEXT,
         }, row.col3 || '')
-      );
-    } else {
-      elements.push(
-        React.createElement('text', {
-          key: `row-col2-${i}`,
-          x: col1X + dataColW / 2,
-          y: textY,
-          textAnchor: 'middle',
-          dominantBaseline: 'middle',
-          fontFamily: 'Inter, sans-serif',
-          fontSize: 13,
-          fontWeight: '400',
-          fill: BODY_TEXT,
-        }, row.col2 || '')
       );
     }
 
@@ -182,22 +170,25 @@ function ComparisonTable(props) {
     }, col1_header || 'A'),
   ];
 
+  // Col2 header (always present)
+  headerElements.push(
+    React.createElement('text', {
+      key: 'hdr-col2',
+      x: col2X + dataColW / 2,
+      y: headerTextY,
+      textAnchor: 'middle',
+      dominantBaseline: 'middle',
+      fontFamily: 'Inter, sans-serif',
+      fontSize: 13,
+      fontWeight: '700',
+      fill: HEADER_TEXT,
+    }, col2_header || 'B')
+  );
   if (hasCol3) {
     headerElements.push(
       React.createElement('text', {
-        key: 'hdr-col2',
-        x: col2X + col3W / 2,
-        y: headerTextY,
-        textAnchor: 'middle',
-        dominantBaseline: 'middle',
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 13,
-        fontWeight: '700',
-        fill: HEADER_TEXT,
-      }, col2_header || 'B'),
-      React.createElement('text', {
         key: 'hdr-col3',
-        x: col2X + dataColW + col3W / 2,
+        x: col3X + dataColW / 2,
         y: headerTextY,
         textAnchor: 'middle',
         dominantBaseline: 'middle',
@@ -206,20 +197,6 @@ function ComparisonTable(props) {
         fontWeight: '700',
         fill: HEADER_TEXT,
       }, col3_header || 'C')
-    );
-  } else {
-    headerElements.push(
-      React.createElement('text', {
-        key: 'hdr-col2',
-        x: col1X + dataColW / 2,
-        y: headerTextY,
-        textAnchor: 'middle',
-        dominantBaseline: 'middle',
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 13,
-        fontWeight: '700',
-        fill: HEADER_TEXT,
-      }, col2_header || 'B')
     );
   }
 

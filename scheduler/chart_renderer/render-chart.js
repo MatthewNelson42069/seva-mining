@@ -91,9 +91,28 @@ function renderChart(spec) {
 
   // renderToStaticMarkup requires explicit width/height — NEVER use ResponsiveContainer.
   // Recharts v2.x SSR works with fixed dimensions; v3.x SSR is broken (issue #5997).
-  const svgString = ReactDOMServer.renderToStaticMarkup(
+  const markup = ReactDOMServer.renderToStaticMarkup(
     React.createElement(Component, { ...spec, width, height })
   );
+
+  // Recharts v2 wraps the SVG in a <div class="recharts-wrapper">...<svg>...</svg></div>.
+  // resvg-js requires a standalone SVG root, so strip the wrapper if present.
+  // Pure-SVG components (StatCallouts, ComparisonTable, Timeline) return <svg> directly —
+  // for those the regex match just returns the original markup, unchanged.
+  //
+  // Use non-greedy matching: Recharts' <Legend> component emits its own nested <svg>
+  // elements inside a sibling <div class="recharts-legend-wrapper">. A greedy regex would
+  // swallow past the chart's </svg> and include the legend div, producing invalid markup.
+  // Recharts charts don't nest <svg> inside <svg>, so the first </svg> always closes the chart.
+  const svgMatch = markup.match(/<svg[\s\S]*?<\/svg>/);
+  let svgString = svgMatch ? svgMatch[0] : markup;
+
+  // resvg-js requires the SVG namespace attribute on the root <svg> to parse successfully.
+  // Recharts v2 SSR omits xmlns; pure-SVG components set it explicitly.
+  // Inject it only when absent (idempotent for the pure-SVG path).
+  if (!/\bxmlns\s*=/.test(svgString.slice(0, 200))) {
+    svgString = svgString.replace(/^<svg\b/, '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
 
   const resvgOpts = {
     fitTo: { mode: 'width', value: width },
