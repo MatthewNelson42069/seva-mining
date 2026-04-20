@@ -194,7 +194,7 @@ async def _read_schedule_config(engine) -> dict[str, str]:
     """
     defaults = {
         "twitter_interval_hours": "2",
-        "content_agent_interval_hours": "2",
+        "content_agent_interval_hours": "3",
         "morning_digest_schedule_hour": "8",
         "gold_history_hour": "9",
     }
@@ -308,6 +308,8 @@ async def upsert_agent_config() -> None:
         # Anthropic relevance scoring fallback is 0.5 — lower threshold so more stories pass.
         # With 0.5 relevance: (0.5*0.4 + recency*0.3 + cred*0.3)*10 = min 4.0 for old/unknown sources
         "content_quality_threshold": "7.0",    # restored — feed narrowing + gold gate replace this workaround
+        "content_agent_interval_hours": "3",   # Railway overwrites live DB on startup
+        "content_recency_weight": "0.40",      # bump from 0.30 — favours fresher stories
     }
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
