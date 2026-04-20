@@ -925,13 +925,12 @@ async def test_quote_draft_returns_three_new_fields():
     agent.anthropic = AsyncMock()
     agent.anthropic.messages.create = AsyncMock(return_value=_make_mfy_quote_response())
 
-    quote_tweet = {
-        "author_name": "Janet Yellen",
-        "author_username": "JanetYellen",
-        "text": "Gold is the ultimate store of value.",
-        "tweet_url": "https://x.com/JanetYellen/status/123",
-    }
-    result = await agent._draft_quote_post(quote_tweet)
+    result = await agent._draft_quote_post(
+        quote_text="Gold is the ultimate store of value.",
+        speaker="Janet Yellen",
+        speaker_title="Former U.S. Treasury Secretary",
+        source_url="https://x.com/JanetYellen/status/123",
+    )
     assert result is not None
     draft_content = result
 

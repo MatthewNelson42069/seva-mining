@@ -26,6 +26,7 @@ from bs4 import BeautifulSoup
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agents.brand_preamble import BRAND_PREAMBLE
 from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
@@ -703,10 +704,9 @@ def _extract_check_text(draft_content: dict) -> str:
         parts.append(draft_content.get("post", ""))
     elif fmt == "infographic":
         parts.append(draft_content.get("twitter_caption", ""))
-        for chart in draft_content.get("charts", []):
-            if isinstance(chart, dict):
-                parts.append(chart.get("title", ""))
-                parts.append(chart.get("subtitle", ""))
+        parts.append(draft_content.get("suggested_headline", ""))
+        parts.extend(draft_content.get("data_facts", []) or [])
+        # Do NOT compliance-check image_prompt — it's brand preamble + derived text, not novel content
     elif fmt == "gold_history":
         parts.extend(draft_content.get("tweets", []))
         for slide in draft_content.get("instagram_carousel", []):
@@ -719,8 +719,10 @@ def _extract_check_text(draft_content: dict) -> str:
         parts.append(draft_content.get("instagram_caption", ""))
     elif fmt == "quote":
         parts.append(draft_content.get("twitter_post", ""))
-        parts.append(draft_content.get("instagram_post", ""))
         parts.append(draft_content.get("quote_text", ""))
+        parts.append(draft_content.get("suggested_headline", ""))
+        parts.extend(draft_content.get("data_facts", []) or [])
+        # Do NOT compliance-check image_prompt — it's brand preamble + derived text, not novel content
     return " ".join(p for p in parts if p)
 
 
@@ -1050,7 +1052,6 @@ Respond in valid JSON:
             "notable statements from gold sector figures. Format: quote in quotation "
             "marks, attribution line, then 1-2 lines of analyst context explaining why "
             "this matters for the gold market. Lead with the quote. "
-            "Also provide an Instagram-adapted version (same structure, can expand slightly). "
             "You never mention Seva Mining. You never give financial advice."
         )
         user_prompt = f"""Draft a pull-quote post for this statement from {speaker} ({speaker_title}).
@@ -1061,7 +1062,9 @@ Source URL: {source_url}
 Respond in valid JSON:
 {{
   "twitter_post": "full formatted quote post for X (quote + attribution + 1-2 lines analyst context)",
-  "instagram_post": "same formatted for Instagram (can expand slightly)"
+  "suggested_headline": "short editorial title for the visual artifact, ideally <=60 chars",
+  "data_facts": ["1-5 key facts or data points that contextualize this quote — each <=120 chars"],
+  "image_prompt_direction": "2-4 sentences describing what the pull-quote card should look like: how to present the quote as hero element, attribution placement, any context stats to feature. Focus on STORY-SPECIFIC visual direction only — brand palette and dimensions are applied automatically."
 }}"""
 
         try:
@@ -1082,6 +1085,22 @@ Respond in valid JSON:
             logger.warning("_draft_quote_post JSON parse failed: %s", exc)
             return None
 
+        # Build image_prompt for quote (mfy pivot — operator pastes into claude.ai)
+        direction = parsed.pop("image_prompt_direction", "").strip()
+        facts = parsed.get("data_facts") or []
+        if not isinstance(facts, list):
+            facts = []
+        parsed["data_facts"] = facts[:5]
+        headline = parsed.get("suggested_headline", "")
+        facts_block = "\n".join(f"- {f}" for f in parsed["data_facts"])
+        parsed["image_prompt"] = (
+            f"{BRAND_PREAMBLE}\n\n"
+            f"ARTIFACT TYPE: pull-quote card (NOT a chart — center the quote itself as the hero element).\n\n"
+            f"HEADLINE FOR THIS VISUAL:\n{headline}\n\n"
+            f"KEY FACTS TO FEATURE:\n{facts_block}\n\n"
+            f"STORY-SPECIFIC DIRECTION:\n{direction}"
+        )
+
         return {
             "format": "quote",
             "speaker": speaker,
@@ -1089,7 +1108,9 @@ Respond in valid JSON:
             "quote_text": quote_text,
             "source_url": source_url,
             "twitter_post": parsed.get("twitter_post", ""),
-            "instagram_post": parsed.get("instagram_post", ""),
+            "suggested_headline": parsed.get("suggested_headline", ""),
+            "data_facts": parsed.get("data_facts", []),
+            "image_prompt": parsed.get("image_prompt", ""),
         }
 
     async def _research_and_draft(
@@ -1138,21 +1159,15 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
    - "thread" — for fact-rich stories where a few data points or facts can be strung together into a narrative. Each tweet carries one fact or angle. Use when the story is a collection of data points rather than one sustained argument. Produces BOTH a tweet thread (3-5 tweets, each <=280 chars) AND a long-form X post (<=2200 chars). Default for ambiguous stories.
    - "long_form" — for article-style analysis: a single sustained piece built around one powerful argument or insight, like a short analyst op-ed. Must read like an article, not a long social post — with a clear thesis, supporting evidence, and a sharpened takeaway. Single X post 400-2200 chars. Minimum 400 chars — if you cannot write at least 400 chars of article-quality analyst prose, choose a different format instead.
    - "breaking_news" — for urgency/speed stories ("this just happened, pay attention"): major price moves, major announcements, stories where speed is the value. 1-3 punchy lines, ALL CAPS for key terms, no hashtags. Optional infographic pairing if story also has strong visual data.
-   - "infographic" — for stories with clear comparison, trend, or historical parallel with >=4 stats — better visualized than narrated. Choose this when the data is the story. Produces a chart image (1 or 2 charts) + Twitter caption.
-   - "quote" — when a strong text quote from a credible named figure is found in the article content. Pull-quote format: quote in quotation marks, attribution, 1-2 lines of analyst context. Produces dual-platform output.
+   - "infographic" — for stories with clear comparison, trend, or historical parallel with >=4 stats — better visualized than narrated. Choose this when the data is the story. Produces a tweet caption PLUS three fields (suggested_headline, data_facts, image_prompt) the operator will paste into claude.ai to render the visual.
+   - "quote" — when a strong text quote from a credible named figure is found in the article content. Pull-quote format: quote in quotation marks, attribution, 1-2 lines of analyst context. Produces a tweet post plus three fields (suggested_headline, data_facts, image_prompt) for the operator to render in claude.ai.
    - "video_clip" — NOT chosen here; produced by direct Twitter search of credible gold sector video accounts. Skip this option.
    - "gold_history" — NOT chosen here; produced by a separate bi-weekly Gold History job. Skip this option.
 
    Default (ambiguous story): "thread"
 
 3. Draft the content in your chosen format.
-4. For "quote" format, follow this visual design system for the Instagram post:
-   - Aesthetic: Minimalist, data-forward, a16z-inspired clean editorial style
-   - Brand colors: Background #F0ECE4 (warm cream), Primary text #0C1B32 (deep navy), Gold accent #D4AF37 (metallic gold, used sparingly for key numbers/highlights)
-   - Large bold headline or stat as the visual anchor
-   - Body text max 15 words per post
-   - Gold accent on 1-2 elements max per visual
-5. Provide a brief rationale for your format choice (1-2 sentences).
+4. Provide a brief rationale for your format choice (1-2 sentences).
 
 Respond in valid JSON with this structure:
 {{
@@ -1172,47 +1187,19 @@ For "breaking_news" format, draft_content must have:
 {{"format": "breaking_news", "tweet": "1-3 line breaking news tweet with ALL CAPS key terms, no hashtags", "infographic_brief": null}}
 
 For "infographic" format, draft_content must have:
-{{"format": "infographic", "twitter_caption": "1-3 sentences for X in senior analyst voice", "charts": [<chart_spec_1>, <chart_spec_2_optional>]}}
-
-Each chart_spec object must have:
-{{
-  "type": "one of: bar | horizontal_bar | line | multi_line | area | stacked_area | stat_callouts | comparison_table | timeline",
-  "title": "headline above the chart (left-aligned, bold)",
-  "subtitle": "optional sub-headline",
-  "source": "citation for data source (bottom-right of chart)",
-  "data": [{{"label": "...", "value": 1234.5, "value2": null}}],
-  "stats": [{{"value": "2,400", "label": "Gold $/oz", "source": "WGC"}}],
-  "rows": [{{"label": "Metric", "col1": "...", "col2": "...", "col3": null}}],
-  "events": [{{"date": "Jan 2024", "label": "Fed pivot", "highlight": false}}],
-  "col1_header": "Column A",
-  "col2_header": "Column B",
-  "col3_header": null,
-  "unit": "$/oz",
-  "x_label": null,
-  "y_label": null
+{{"format": "infographic",
+  "twitter_caption": "1-3 sentences for X in senior analyst voice",
+  "suggested_headline": "short editorial title for the artifact, ideally <=60 chars",
+  "data_facts": ["1-5 key numbers, percentages, quotes, or data points the image should feature — each <=120 chars"],
+  "image_prompt_direction": "2-4 sentences telling claude.ai what kind of visual to build: which chart type (bar / line / stat-callouts / comparison-table / timeline), what the X and Y axes should be, what specific numbers/labels to use, and what the visual hierarchy should be. DO NOT restate the brand palette or layout rules — those are applied automatically. Focus on the STORY-SPECIFIC visual direction."
 }}
 
-Notes on data fields: populate only the field relevant to the chart type:
-  - "data" for bar, horizontal_bar, line, multi_line, area, stacked_area
-  - "stats" for stat_callouts
-  - "rows" for comparison_table
-  - "events" for timeline
-
-Chart type guidance:
-  - bar / horizontal_bar: 4-12 data points comparing categories. Use horizontal_bar for long category labels.
-  - line: time series with 4-24 data points. Use when trend over time is the story.
-  - multi_line: two competing time series (data[].value and data[].value2). Use for comparisons like gold vs USD.
-  - area: cumulative trend. stacked_area: two stacked series showing composition.
-  - stat_callouts: 2-4 large-number "hero stats" grid. Use when the numbers themselves are the story.
-  - comparison_table: 2-3 column table of metrics. Use for side-by-side entity comparisons.
-  - timeline: event sequence on a horizontal axis. Use for "key events in context" stories.
-
-Carousel rule: emit charts=[spec1, spec2] ONLY when the story genuinely needs two views to convey the full picture (e.g. a time-trend + a category-breakdown of the same phenomenon). Default is a single chart. Two charts must be independently meaningful — never split a single dataset in two.
-
-Visual style guidance: a16z-inspired — minimal, data-forward, clean. Let the data speak. No decorative elements.
-
 For "quote" format, draft_content must have:
-{{"format": "quote", "speaker": "Full Name", "speaker_title": "title/credentials", "quote_text": "\\"the exact quote in quotation marks\\"", "source_url": "...", "twitter_post": "quote + attribution + 1-2 lines analyst context for X", "instagram_post": "same formatted for Instagram (can expand slightly)"}}"""
+{{"format": "quote", "speaker": "Full Name", "speaker_title": "title/credentials", "quote_text": "\\"the exact quote in quotation marks\\"", "source_url": "...", "twitter_post": "quote + attribution + 1-2 lines analyst context for X",
+  "suggested_headline": "short editorial title for the artifact, ideally <=60 chars",
+  "data_facts": ["1-5 key facts or data points that contextualize this quote — each <=120 chars"],
+  "image_prompt_direction": "2-4 sentences describing what the quote card should look like: how to present the pull-quote, attribution placement, any context stats to feature. Focus on STORY-SPECIFIC visual direction only."
+}}"""
 
         system_prompt = (
             "You are a senior gold market analyst. Authoritative, inside-the-room perspective. "
@@ -1261,6 +1248,24 @@ For "quote" format, draft_content must have:
                 )
                 self._skipped_short_longform += 1
                 return None
+
+        # Build image_prompt for infographic format (mfy pivot — operator pastes into claude.ai).
+        if draft_content.get("format") == "infographic":
+            direction = draft_content.pop("image_prompt_direction", "").strip()
+            # Clamp data_facts to 1-5 items
+            facts = draft_content.get("data_facts") or []
+            if not isinstance(facts, list):
+                facts = []
+            draft_content["data_facts"] = facts[:5]
+            # Build final paste-ready prompt
+            headline = draft_content.get("suggested_headline", "")
+            facts_block = "\n".join(f"- {f}" for f in draft_content["data_facts"])
+            draft_content["image_prompt"] = (
+                f"{BRAND_PREAMBLE}\n\n"
+                f"HEADLINE FOR THIS VISUAL:\n{headline}\n\n"
+                f"KEY FACTS TO FEATURE:\n{facts_block}\n\n"
+                f"STORY-SPECIFIC DIRECTION:\n{direction}"
+            )
 
         # Update deep_research with extracted key data points
         updated_research = dict(deep_research)
