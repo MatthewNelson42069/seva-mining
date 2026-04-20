@@ -203,6 +203,7 @@ None yet.
 | 260419-lvy | Full purge Instagram agent + content queue run-grouping (deprecated Phase 6) | 2026-04-19 | b2ff329 / accf735 / 2eb9125 / 4ab94e7 | Verified | [260419-lvy](./quick/260419-lvy-full-purge-instagram-agent-content-queue/) |
 | 260419-n4f | Content agent relevance cleanup — Bloomberg commodities swap, drop Investing.com, sharpen prompt, two-bucket gold gate, restore 7.0 threshold | 2026-04-19 | 502ae3e / 010926d / 2cfc9cb | Verified | [260419-n4f](./quick/260419-n4f-content-agent-relevance-cleanup-swap-blo/) |
 | 260419-r0r | Long_form 400-char minimum floor + sharpen thread vs long_form prompt (thread=fact-rich, long_form=article-style) | 2026-04-20 | f30dd44 / 14caedc | Verified | [260419-r0r](./quick/260419-r0r-enforce-400-char-minimum-floor-on-long-f/) |
+| 260419-rqx | Content agent tuning — 3h cadence, 0.40 recency weight, top-5 Haiku format-first pipeline, listicle rejection in gold gate | 2026-04-20 | 663d6d8 / 7fb5517 / af37d3c | Verified | [260419-rqx](./quick/260419-rqx-content-agent-tuning-pass-cadence-top-5-/) |
 
 ### Blockers/Concerns
 
@@ -212,6 +213,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-20T02:50:00.000Z
-Stopped at: Completed quick task 260419-r0r — long_form 400-char minimum floor + sharpen thread vs long_form prompt distinction
+Last session: 2026-04-20T03:30:00.000Z
+Stopped at: Completed quick task 260419-rqx — content agent tuning pass (3h cadence, 0.40 recency weight, top-5 format-first pipeline, listicle rejection in gold gate)
 Resume file: None
