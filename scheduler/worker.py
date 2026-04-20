@@ -295,11 +295,11 @@ async def upsert_agent_config() -> None:
     """
     overrides = {
         # Twitter engagement gate
-        # Fresh tweets (fetched within 2h window) accumulate few likes — keep threshold very low.
-        # Quality is enforced by composite score ranking, not absolute like counts.
-        "twitter_min_likes_general": "5",       # was 50 — fresh tweets rarely reach 50 likes in 2h
+        # Operator rule (260420-lw4): must have ≥50 likes.
+        "twitter_min_likes_general": "50",
         "twitter_min_views_general": "0",       # Basic tier never returns impression_count
-        "twitter_min_likes_watchlist": "0",     # Let all watchlist tweets through; score sorts quality
+        # Operator rule (260420-lw4): ≥50 likes applies even to watchlist accounts — quality over recency.
+        "twitter_min_likes_watchlist": "50",
         "twitter_min_views_watchlist": "0",     # Basic tier never returns impression_count
         # Instagram engagement gate
         # Relaxed: 3-day lookback window + 72h age filter lets posts accumulate engagement
