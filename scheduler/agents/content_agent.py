@@ -1286,7 +1286,16 @@ For "quote" format, draft_content must have:
             response = await self.anthropic.messages.create(
                 model="claude-sonnet-4-6",
                 max_tokens=10,
-                system="Rate the relevance of this news story to the gold mining and precious metals sector on a scale of 0.0 to 1.0. Reply with only a decimal number.",
+                system=(
+                    "Rate the relevance of this news story to the gold sector using these bands:\n"
+                    "0.7-1.0: Directly about gold, precious metals, gold mining, gold ETFs, central bank gold, or gold-specific analysis.\n"
+                    "0.5-0.8: Systemic financial or geopolitical shock that would plausibly move gold prices — "
+                    "e.g. major war escalation, sanctions on oil exporters, Strait of Hormuz disruption, "
+                    "Fed/USD policy shock, currency crisis, or global recession signal.\n"
+                    "0.0-0.3: Generic business, equity markets, sector news unrelated to gold, "
+                    "option traders, private credit, quizzes, or financial clickbait with no gold angle.\n"
+                    "Reply with only a decimal number."
+                ),
                 messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
             )
             score = float(response.content[0].text.strip())
