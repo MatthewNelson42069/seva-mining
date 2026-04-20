@@ -650,3 +650,113 @@ def test_enqueue_uses_replace_existing_true():
 
     call_kwargs = mock_scheduler.add_job.call_args[1] if mock_scheduler.add_job.call_args[1] else {}
     assert call_kwargs.get("replace_existing") is True, "replace_existing must be True to prevent ConflictingIdError"
+
+
+# ---------------------------------------------------------------------------
+# quick-260419-r0r: long_form 400-char minimum floor tests
+# ---------------------------------------------------------------------------
+
+def _mock_longform_response(post_text):
+    import json
+    payload = json.dumps({
+        "format": "long_form",
+        "rationale": "Single coherent narrative.",
+        "key_data_points": ["$3,500/oz"],
+        "draft_content": {"format": "long_form", "post": post_text},
+    })
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=payload)]
+    return mock_response
+
+
+@pytest.mark.asyncio
+async def test_long_form_accepted_at_minimum():
+    """long_form post of exactly 400 chars is accepted and returned normally."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent.anthropic.messages.create = AsyncMock(return_value=_mock_longform_response("A" * 400))
+
+    story = {"title": "Gold hits $3,500 as Fed signals rate pause", "link": "https://example.com/gold"}
+    deep_research = {
+        "article_text": "Gold prices surged to record highs...",
+        "article_fetch_succeeded": True,
+        "corroborating_sources": [],
+        "key_data_points": [],
+    }
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    assert result[0]["post"] == "A" * 400
+    assert agent._skipped_short_longform == 0
+
+
+@pytest.mark.asyncio
+async def test_long_form_accepted_well_above_minimum():
+    """long_form post of 800 chars is accepted and counter stays at 0."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent.anthropic.messages.create = AsyncMock(return_value=_mock_longform_response("A" * 800))
+
+    story = {"title": "Gold hits $3,500 as Fed signals rate pause", "link": "https://example.com/gold"}
+    deep_research = {
+        "article_text": "Gold prices surged to record highs...",
+        "article_fetch_succeeded": True,
+        "corroborating_sources": [],
+        "key_data_points": [],
+    }
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    assert agent._skipped_short_longform == 0
+
+
+@pytest.mark.asyncio
+async def test_long_form_rejected_below_minimum():
+    """long_form post of 350 chars is rejected: returns None, counter increments to 1."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent.anthropic.messages.create = AsyncMock(return_value=_mock_longform_response("A" * 350))
+
+    story = {"title": "Gold hits $3,500 as Fed signals rate pause", "link": "https://example.com/gold"}
+    deep_research = {
+        "article_text": "Gold prices surged to record highs...",
+        "article_fetch_succeeded": True,
+        "corroborating_sources": [],
+        "key_data_points": [],
+    }
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is None
+    assert agent._skipped_short_longform == 1
+
+
+@pytest.mark.asyncio
+async def test_long_form_boundary_399_chars():
+    """long_form post of 399 chars is rejected (strict < 400 comparison)."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent.anthropic.messages.create = AsyncMock(return_value=_mock_longform_response("A" * 399))
+
+    story = {"title": "Gold hits $3,500 as Fed signals rate pause", "link": "https://example.com/gold"}
+    deep_research = {
+        "article_text": "Gold prices surged to record highs...",
+        "article_fetch_succeeded": True,
+        "corroborating_sources": [],
+        "key_data_points": [],
+    }
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is None
+    assert agent._skipped_short_longform == 1
