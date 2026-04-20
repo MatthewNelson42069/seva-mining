@@ -7,20 +7,20 @@ Used by:
 - chart_renderer_client.py: serializes ChartSpec to Node chart renderer stdin
 
 Design decisions:
-- ChartType is str,Enum so JSON serializes to the string value (not .value wrapper)
+- ChartType is StrEnum so JSON serializes to the string value (not .value wrapper)
 - BundleCharts.charts has Field(max_length=2) — 1-or-2 chart constraint at validation time
 - All list fields use default_factory=list (not []) to avoid mutable default sharing
 - width/height default to 1200x675 (16:9 Twitter) so chart_spec can omit them
 """
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Optional
 
 from pydantic import BaseModel, Field
 
 
-class ChartType(str, Enum):
+class ChartType(StrEnum):
     """Supported chart types for infographic rendering."""
 
     bar = "bar"

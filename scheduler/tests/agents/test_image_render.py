@@ -104,28 +104,51 @@ def _make_session_factory(bundle):
 # ---------------------------------------------------------------------------
 
 
-async def test_render_bundle_infographic_produces_four_images(fake_imagen_client, fake_r2_client, monkeypatch):
-    """render_bundle_job on an infographic bundle writes exactly 4 entries to rendered_images."""
+async def test_render_bundle_infographic_produces_chart_images(fake_r2_client, monkeypatch):
+    """render_bundle_job on an infographic bundle with valid chart_spec produces twitter_visual via ChartRendererClient.
+
+    Updated for 260419-t78: infographic bundles now use ChartRendererClient (Recharts SSR),
+    not Gemini Imagen. The old 4-image output (twitter_visual + 3 instagram_slides) is replaced
+    with 1-2 chart images (twitter_visual / twitter_visual_2).
+    """
     from agents.image_render_agent import render_bundle_job
+    from unittest.mock import patch, AsyncMock
 
     fake_r2_session, fake_s3 = fake_r2_client
-    bundle = _make_bundle(content_type="infographic")
+    # Bundle with valid chart_spec in draft_content
+    bundle = _make_bundle(
+        content_type="infographic",
+        draft_content={
+            "format": "infographic",
+            "twitter_caption": "Gold up 3% on central bank demand.",
+            "charts": [
+                {
+                    "type": "bar",
+                    "title": "Central Bank Gold Purchases",
+                    "data": [{"label": "Q1 2024", "value": 1136.0}],
+                }
+            ],
+        },
+    )
     session_factory, session = _make_session_factory(bundle)
 
+    mock_chart_client = AsyncMock()
+    mock_chart_client.render_charts = AsyncMock(return_value=[FAKE_PNG])
+
     monkeypatch.setattr("agents.image_render_agent.async_sessionmaker", lambda *a, **kw: session_factory)
-    monkeypatch.setattr("agents.image_render_agent.genai.Client", lambda: fake_imagen_client)
     monkeypatch.setattr("agents.image_render_agent.aioboto3.Session", lambda: fake_r2_session)
 
-    await render_bundle_job(str(bundle.id))
+    with patch("agents.chart_renderer_client.get_chart_renderer_client", return_value=mock_chart_client):
+        await render_bundle_job(str(bundle.id))
 
     assert bundle.rendered_images is not None
-    assert len(bundle.rendered_images) == 4
+    assert len(bundle.rendered_images) == 1
     roles = [img["role"] for img in bundle.rendered_images]
-    assert roles == ["twitter_visual", "instagram_slide_1", "instagram_slide_2", "instagram_slide_3"]
-    for img in bundle.rendered_images:
-        assert img["url"].startswith(R2_BASE_URL)
-        assert "role" in img
-        assert "generated_at" in img
+    assert "twitter_visual" in roles
+    # No instagram_slide roles
+    assert not any("instagram_slide" in r for r in roles)
+    assert bundle.rendered_images[0]["url"].startswith(R2_BASE_URL)
+    assert "generated_at" in bundle.rendered_images[0]
     session.commit.assert_called_once()
 
 
@@ -201,11 +224,24 @@ async def test_render_bundle_skips_unsupported_format(fake_imagen_client, fake_r
 
 
 async def test_render_bundle_retries_on_transient_failure(fake_r2_client, monkeypatch):
-    """When generate_images raises on attempt 1+2 and succeeds on attempt 3, rendered_images has correct entries."""
+    """For quote format: generate_images raises on attempt 1+2 and succeeds on attempt 3.
+
+    Updated for 260419-t78: retry behavior now only applies to the quote path (Gemini).
+    Infographic path uses ChartRendererClient and has its own retry/error handling.
+    This test verifies quote retry behavior is unchanged.
+    """
     from agents.image_render_agent import render_bundle_job
 
     fake_r2_session, fake_s3 = fake_r2_client
-    bundle = _make_bundle(content_type="infographic")
+    bundle = _make_bundle(
+        content_type="quote",
+        draft_content={
+            "format": "quote",
+            "twitter_post": '"Gold is the ultimate safe haven" — Jim Rogers',
+            "instagram_post": '"Gold is the ultimate safe haven" — Jim Rogers',
+            "speaker": "Jim Rogers",
+        },
+    )
     session_factory, session = _make_session_factory(bundle)
 
     # Build a fresh fake client where the FIRST two calls to generate_images fail,
@@ -245,10 +281,22 @@ async def test_render_bundle_retries_on_transient_failure(fake_r2_client, monkey
 
 
 async def test_render_bundle_silent_fail_after_permanent_error(monkeypatch):
-    """When generate_images raises on ALL attempts for all roles, render_bundle_job returns None (no raise) — D-18."""
+    """When generate_images raises on ALL attempts for all quote roles, render_bundle_job returns None — D-18.
+
+    Updated for 260419-t78: testing the quote path (Gemini). Infographic now uses
+    ChartRendererClient which has its own silent-fail path tested in test_image_render_agent.py.
+    """
     from agents.image_render_agent import render_bundle_job
 
-    bundle = _make_bundle(content_type="infographic")
+    bundle = _make_bundle(
+        content_type="quote",
+        draft_content={
+            "format": "quote",
+            "twitter_post": '"Gold matters" — Jim Rogers',
+            "instagram_post": '"Gold matters" — Jim Rogers',
+            "speaker": "Jim Rogers",
+        },
+    )
     session_factory, session = _make_session_factory(bundle)
 
     # All calls to generate_images always raise

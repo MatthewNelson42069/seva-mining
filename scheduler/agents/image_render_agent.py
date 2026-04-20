@@ -35,15 +35,11 @@ BRAND_PALETTE = (
     "#D4AF37 gold accents."
 )
 
-# D-04 (corrected): infographic produces 4 images; quote produces 2 images (twitter_visual + instagram_slide_1).
-# Role names use the "twitter_visual" / "instagram_slide_N" convention from the RenderedImage schema.
+# D-04 (updated): infographic format is now handled by chart renderer (not Gemini).
+# See _render_infographic_charts() for the infographic code path.
+# quote: handled by Gemini Imagen — 2 roles (twitter_visual + instagram_slide_1).
 ROLES_BY_FORMAT: dict[str, list[tuple[str, str]]] = {
-    "infographic": [
-        ("twitter_visual", "16:9"),
-        ("instagram_slide_1", "1:1"),
-        ("instagram_slide_2", "1:1"),
-        ("instagram_slide_3", "1:1"),
-    ],
+    # infographic: NOT in this dict — handled by _render_infographic_charts() via ChartRendererClient
     "quote": [
         ("twitter_visual", "16:9"),
         ("instagram_slide_1", "1:1"),
@@ -95,7 +91,14 @@ async def _render_and_persist(session: AsyncSession, bundle_id: UUID) -> None:
         )
         return
 
-    roles = ROLES_BY_FORMAT.get((bundle.content_type or "").lower())
+    # Infographic format: handled by chart renderer (Recharts SSR → resvg-js → PNG)
+    # Quote format: continues below to Gemini Imagen path
+    format_type = (bundle.content_type or "").lower()
+    if format_type == "infographic":
+        await _render_infographic_charts(session, bundle)
+        return
+
+    roles = ROLES_BY_FORMAT.get(format_type)
     if not roles:
         logger.info(
             "render: bundle %s format=%r has no render roles — skipping",
@@ -146,6 +149,107 @@ async def _render_and_persist(session: AsyncSession, bundle_id: UUID) -> None:
         bundle_id,
         len(rendered),
         len(roles),
+    )
+
+
+async def _render_infographic_charts(session: AsyncSession, bundle) -> None:
+    """Render infographic charts via ChartRendererClient (Recharts SSR → resvg-js → PNG).
+
+    Reads charts from bundle.draft_content['charts'], validates via BundleCharts schema,
+    calls the chart renderer, uploads PNGs to R2, and writes rendered_images to the bundle.
+
+    D-18 silent-fail contract: all exceptions are caught and logged, never raised.
+    Partial success: charts that return None are skipped; remaining PNGs are uploaded.
+    """
+    from agents.chart_renderer_client import get_chart_renderer_client  # noqa: PLC0415
+    from models.chart_spec import BundleCharts  # noqa: PLC0415
+    from pydantic import ValidationError  # noqa: PLC0415
+
+    bundle_id = bundle.id
+    draft = bundle.draft_content or {}
+    charts_raw = draft.get("charts")
+
+    if not charts_raw:
+        logger.warning(
+            "render: infographic bundle %s has no 'charts' key in draft_content — skipping render",
+            bundle_id,
+        )
+        bundle.rendered_images = []
+        await session.commit()
+        return
+
+    # Validate via BundleCharts schema
+    try:
+        payload = BundleCharts.model_validate({
+            "charts": charts_raw,
+            "twitter_caption": draft.get("twitter_caption", ""),
+        })
+    except (ValidationError, Exception) as exc:
+        logger.error(
+            "render: infographic bundle %s BundleCharts validation failed: %s — skipping render",
+            bundle_id,
+            exc,
+        )
+        bundle.rendered_images = []
+        await session.commit()
+        return
+
+    # Call chart renderer
+    try:
+        png_list = await get_chart_renderer_client().render_charts(payload)
+    except Exception as exc:
+        logger.error(
+            "render: chart renderer failed for bundle %s: %s",
+            bundle_id,
+            exc,
+            exc_info=True,
+        )
+        bundle.rendered_images = []
+        await session.commit()
+        return
+
+    # Upload non-None PNGs to R2
+    roles_for_charts = ["twitter_visual", "twitter_visual_2"]
+    rendered = []
+
+    for i, png_bytes in enumerate(png_list):
+        if png_bytes is None:
+            logger.warning(
+                "render: bundle %s chart index %d returned None (render failed) — skipping",
+                bundle_id,
+                i,
+            )
+            continue
+
+        role = roles_for_charts[i] if i < len(roles_for_charts) else f"twitter_visual_{i + 1}"
+        timestamp = int(datetime.now(timezone.utc).timestamp())
+        object_key = f"content-bundles/{bundle_id}/{role}-{timestamp}.png"
+
+        try:
+            url = await _upload_to_r2(png_bytes, object_key)
+        except Exception as exc:
+            logger.error(
+                "render: R2 upload failed for bundle %s role %s: %s",
+                bundle_id,
+                role,
+                exc,
+                exc_info=True,
+            )
+            continue
+
+        rendered.append({
+            "role": role,
+            "url": url,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    bundle.rendered_images = rendered
+    await session.commit()
+    logger.info(
+        "render: infographic bundle %s produced %d/%d chart images",
+        bundle_id,
+        len(rendered),
+        len(png_list),
     )
 
 

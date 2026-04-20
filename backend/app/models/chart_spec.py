@@ -13,13 +13,12 @@ NOTE: Keep in sync with scheduler/models/chart_spec.py manually.
 """
 from __future__ import annotations
 
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ChartType(str, Enum):
+class ChartType(StrEnum):
     """Supported chart types for infographic rendering."""
 
     bar = "bar"
@@ -38,7 +37,7 @@ class DataPoint(BaseModel):
 
     label: str  # XAxis category or date string
     value: float  # Primary series value
-    value2: Optional[float] = None  # Second series for multi_line/stacked_area
+    value2: float | None = None  # Second series for multi_line/stacked_area
 
 
 class StatCallout(BaseModel):
@@ -46,7 +45,7 @@ class StatCallout(BaseModel):
 
     value: str  # Pre-formatted string, e.g. "2,400"
     label: str  # Label below the value, e.g. "Gold $/oz"
-    source: Optional[str] = None  # Optional source citation
+    source: str | None = None  # Optional source citation
 
 
 class TableRow(BaseModel):
@@ -55,7 +54,7 @@ class TableRow(BaseModel):
     label: str  # Left column (row label)
     col1: str  # First data column
     col2: str  # Second data column
-    col3: Optional[str] = None  # Optional third data column
+    col3: str | None = None  # Optional third data column
 
 
 class TimelineEvent(BaseModel):
@@ -71,25 +70,25 @@ class ChartSpec(BaseModel):
 
     type: ChartType
     title: str
-    subtitle: Optional[str] = None
-    source: Optional[str] = None
-    x_label: Optional[str] = None
-    y_label: Optional[str] = None
-    unit: Optional[str] = None
+    subtitle: str | None = None
+    source: str | None = None
+    x_label: str | None = None
+    y_label: str | None = None
+    unit: str | None = None
 
     data: list[DataPoint] = Field(default_factory=list)
     stats: list[StatCallout] = Field(default_factory=list)
     rows: list[TableRow] = Field(default_factory=list)
     events: list[TimelineEvent] = Field(default_factory=list)
 
-    col1_header: Optional[str] = None
-    col2_header: Optional[str] = None
-    col3_header: Optional[str] = None
+    col1_header: str | None = None
+    col2_header: str | None = None
+    col3_header: str | None = None
 
     width: int = 1200
     height: int = 675
 
-    series_labels: Optional[list[str]] = None
+    series_labels: list[str] | None = None
 
 
 class BundleCharts(BaseModel):

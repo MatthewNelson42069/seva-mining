@@ -985,3 +985,158 @@ async def test_gate_accepts_single_company_ma():
         client=mock_client,
     )
     assert result is True
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (260419-t78): BundleCharts chart_spec emission tests
+# ---------------------------------------------------------------------------
+
+def _make_sonnet_response(text: str):
+    """Create a mock Anthropic response returning the given text."""
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=text)]
+    return mock_response
+
+
+def _make_valid_bundle_charts_json():
+    """Return a valid BundleCharts JSON string that Sonnet would emit."""
+    import json as _json
+    obj = {
+        "format": "infographic",
+        "rationale": "Data-forward story with 4+ clear stats.",
+        "key_data_points": ["Gold +3.2% WTD"],
+        "draft_content": {
+            "format": "infographic",
+            "twitter_caption": "Gold surges 3.2% on record central bank demand — 1,136 tonnes purchased in Q1.",
+            "charts": [
+                {
+                    "type": "bar",
+                    "title": "Central Bank Gold Purchases by Quarter",
+                    "source": "World Gold Council",
+                    "data": [
+                        {"label": "Q1 2024", "value": 1136.0},
+                        {"label": "Q2 2024", "value": 920.0},
+                        {"label": "Q3 2024", "value": 905.0}
+                    ]
+                }
+            ]
+        }
+    }
+    return _json.dumps(obj)
+
+
+def _make_invalid_bundle_charts_json():
+    """Return JSON where charts is not a valid list — triggers ValidationError."""
+    import json as _json
+    obj = {
+        "format": "infographic",
+        "rationale": "Data story",
+        "key_data_points": [],
+        "draft_content": {
+            "format": "infographic",
+            "twitter_caption": "Test",
+            "charts": "not-a-list"
+        }
+    }
+    return _json.dumps(obj)
+
+
+@pytest.mark.asyncio
+async def test_infographic_prompt_emits_bundle_charts_json():
+    """Mock Sonnet to return valid BundleCharts JSON; _research_and_draft returns draft_content with 'charts' key."""
+    ca = _get_content_agent()
+    from models.chart_spec import BundleCharts
+
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent.anthropic.messages.create = AsyncMock(
+        return_value=_make_sonnet_response(_make_valid_bundle_charts_json())
+    )
+
+    story = {"title": "Gold Hits Record on Central Bank Demand", "source_name": "Reuters"}
+    deep_research = {"article_text": "Gold prices rose...", "corroborating_sources": [], "key_data_points": []}
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    draft_content, _, _ = result
+    assert draft_content.get("format") == "infographic"
+    assert "charts" in draft_content
+    # Confirm BundleCharts validates without raising
+    BundleCharts.model_validate({
+        "charts": draft_content["charts"],
+        "twitter_caption": draft_content.get("twitter_caption", ""),
+    })
+
+
+@pytest.mark.asyncio
+async def test_infographic_twitter_caption_present():
+    """Valid Sonnet response; draft_content['twitter_caption'] is a non-empty string."""
+    ca = _get_content_agent()
+
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent.anthropic.messages.create = AsyncMock(
+        return_value=_make_sonnet_response(_make_valid_bundle_charts_json())
+    )
+
+    story = {"title": "Gold Hits Record", "source_name": "Reuters"}
+    deep_research = {"article_text": "...", "corroborating_sources": [], "key_data_points": []}
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    draft_content, _, _ = result
+    assert draft_content.get("format") == "infographic"
+    caption = draft_content.get("twitter_caption", "")
+    assert isinstance(caption, str)
+    assert len(caption) > 0
+
+
+@pytest.mark.asyncio
+async def test_infographic_validation_failure_downgrades_to_thread():
+    """Mock Sonnet to return invalid chart_spec JSON; _research_and_draft returns draft_content with format='thread'."""
+    ca = _get_content_agent()
+
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent.anthropic.messages.create = AsyncMock(
+        return_value=_make_sonnet_response(_make_invalid_bundle_charts_json())
+    )
+
+    story = {"title": "Gold News", "source_name": "Reuters"}
+    deep_research = {"article_text": "...", "corroborating_sources": [], "key_data_points": []}
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    draft_content, _, _ = result
+    # Invalid chart_spec => downgraded to thread
+    assert draft_content.get("format") == "thread"
+
+
+@pytest.mark.asyncio
+async def test_infographic_invalid_spec_does_not_enqueue_render_job():
+    """Invalid chart_spec from Sonnet downgrades to thread; thread is not in _RENDER_FORMATS so no render job."""
+    ca = _get_content_agent()
+
+    # Verify downgrade to thread, and that thread is excluded from _RENDER_FORMATS
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent.anthropic.messages.create = AsyncMock(
+        return_value=_make_sonnet_response(_make_invalid_bundle_charts_json())
+    )
+
+    story = {"title": "Gold News", "source_name": "Reuters"}
+    deep_research = {"article_text": "...", "corroborating_sources": [], "key_data_points": []}
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    draft_content, _, _ = result
+    assert draft_content["format"] == "thread"
+
+    # thread is not in _RENDER_FORMATS — render job would NOT be enqueued by _enqueue_render_job_if_eligible
+    from agents.content_agent import _RENDER_FORMATS
+    assert "thread" not in _RENDER_FORMATS
+    assert "infographic" in _RENDER_FORMATS  # infographic IS eligible when spec is valid

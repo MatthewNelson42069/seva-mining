@@ -649,15 +649,13 @@ def build_draft_item(content_bundle, rationale: str):
         draft_text = draft.get("post", "")
 
     elif fmt == "infographic":
-        # Infographic has no direct tweet — use caption or headline + data points as copyable brief.
-        caption = draft.get("caption_text", "") or draft.get("instagram_caption", "")
+        # Infographic: use twitter_caption as primary copyable text.
+        # Fall back to first chart title if caption is missing.
+        caption = draft.get("twitter_caption", "")
         if not caption:
-            headline = draft.get("headline", "")
-            data_points = draft.get("data_points", [])
-            if isinstance(data_points, list):
-                caption = headline + ("\n" + "\n".join(f"• {p}" for p in data_points) if data_points else "")
-            else:
-                caption = headline
+            charts = draft.get("charts", [])
+            if charts and isinstance(charts[0], dict):
+                caption = charts[0].get("title", "")
         draft_text = caption
 
     elif fmt == "gold_history":
@@ -757,23 +755,11 @@ def _extract_check_text(draft_content: dict) -> str:
     elif fmt == "long_form":
         parts.append(draft_content.get("post", ""))
     elif fmt == "infographic":
-        parts.append(draft_content.get("headline", ""))
         parts.append(draft_content.get("twitter_caption", ""))
-        parts.append(draft_content.get("caption_text", ""))  # backward compat
-        for stat in draft_content.get("key_stats", []):
-            parts.append(stat.get("stat", "") if isinstance(stat, dict) else str(stat))
-        ig = draft_content.get("instagram_brief")
-        if ig and isinstance(ig, dict):
-            parts.append(ig.get("headline", ""))
-            parts.append(ig.get("caption", ""))
-        hc = draft_content.get("historical_context")
-        if hc and isinstance(hc, dict):
-            parts.extend([
-                hc.get("pattern", ""),
-                hc.get("then", ""),
-                hc.get("now", ""),
-                hc.get("implication", ""),
-            ])
+        for chart in draft_content.get("charts", []):
+            if isinstance(chart, dict):
+                parts.append(chart.get("title", ""))
+                parts.append(chart.get("subtitle", ""))
     elif fmt == "gold_history":
         parts.extend(draft_content.get("tweets", []))
         for slide in draft_content.get("instagram_carousel", []):
@@ -1205,9 +1191,7 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
    - "thread" — for fact-rich stories where a few data points or facts can be strung together into a narrative. Each tweet carries one fact or angle. Use when the story is a collection of data points rather than one sustained argument. Produces BOTH a tweet thread (3-5 tweets, each <=280 chars) AND a long-form X post (<=2200 chars). Default for ambiguous stories.
    - "long_form" — for article-style analysis: a single sustained piece built around one powerful argument or insight, like a short analyst op-ed. Must read like an article, not a long social post — with a clear thesis, supporting evidence, and a sharpened takeaway. Single X post 400-2200 chars. Minimum 400 chars — if you cannot write at least 400 chars of article-quality analyst prose, choose a different format instead.
    - "breaking_news" — for urgency/speed stories ("this just happened, pay attention"): major price moves, major announcements, stories where speed is the value. 1-3 punchy lines, ALL CAPS for key terms, no hashtags. Optional infographic pairing if story also has strong visual data.
-   - "infographic" — for stories with clear comparison, trend, or historical parallel with >=4 stats — better visualized than narrated. Two modes:
-       * "current_data" — key stats from today's story (prices, tonnage, percentages, production figures).
-       * "historical_pattern" — today's story triggers a historical analysis: how current conditions echo a past pattern and what that predicted. Use only when the story naturally supports a compelling historical parallel. Produces full dual-platform output (Twitter caption + Instagram brief).
+   - "infographic" — for stories with clear comparison, trend, or historical parallel with >=4 stats — better visualized than narrated. Choose this when the data is the story. Produces a chart image (1 or 2 charts) + Twitter caption.
    - "quote" — when a strong text quote from a credible named figure is found in the article content. Pull-quote format: quote in quotation marks, attribution, 1-2 lines of analyst context. Produces dual-platform output.
    - "video_clip" — NOT chosen here; produced by direct Twitter search of credible gold sector video accounts. Skip this option.
    - "gold_history" — NOT chosen here; produced by a separate bi-weekly Gold History job. Skip this option.
@@ -1215,13 +1199,12 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
    Default (ambiguous story): "thread"
 
 3. Draft the content in your chosen format.
-4. For formats that produce Instagram content (infographic, quote), follow this design system:
+4. For "quote" format, follow this visual design system for the Instagram post:
    - Aesthetic: Minimalist, data-forward, a16z-inspired clean editorial style
    - Brand colors: Background #F0ECE4 (warm cream), Primary text #0C1B32 (deep navy), Gold accent #D4AF37 (metallic gold, used sparingly for key numbers/highlights)
    - Large bold headline or stat as the visual anchor
-   - Body text max 15 words per slide/post
+   - Body text max 15 words per post
    - Gold accent on 1-2 elements max per visual
-   - Instagram brief fields: headline (large-text anchor), key_stats (same data as main), visual_structure (layout intent), caption (Instagram post caption)
 5. Provide a brief rationale for your format choice (1-2 sentences).
 
 Respond in valid JSON with this structure:
@@ -1241,11 +1224,45 @@ For "long_form" format, draft_content must have:
 For "breaking_news" format, draft_content must have:
 {{"format": "breaking_news", "tweet": "1-3 line breaking news tweet with ALL CAPS key terms, no hashtags", "infographic_brief": null}}
 
-For "infographic" format with mode "current_data", draft_content must have:
-{{"format": "infographic", "mode": "current_data", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "historical_context": null, "visual_structure": "bar chart | timeline | comparison table | stat callouts | map | trend line", "twitter_caption": "1-3 sentences for X in senior analyst voice", "instagram_brief": {{"headline": "large-text anchor stat or headline", "key_stats": [{{"stat": "...", "source": "..."}}], "visual_structure": "layout intent note", "caption": "Instagram post caption"}}}}
+For "infographic" format, draft_content must have:
+{{"format": "infographic", "twitter_caption": "1-3 sentences for X in senior analyst voice", "charts": [<chart_spec_1>, <chart_spec_2_optional>]}}
 
-For "infographic" format with mode "historical_pattern", draft_content must have:
-{{"format": "infographic", "mode": "historical_pattern", "headline": "...", "key_stats": [{{"stat": "...", "source": "...", "source_url": "..."}}], "historical_context": {{"pattern": "description of the historical parallel", "then": "what happened in the past period", "now": "what is happening now", "implication": "what the pattern suggests"}}, "visual_structure": "historical comparison | timeline | trend line", "twitter_caption": "1-3 sentences for X in senior analyst voice", "instagram_brief": {{"headline": "large-text anchor stat or headline", "key_stats": [{{"stat": "...", "source": "..."}}], "visual_structure": "layout intent note", "caption": "Instagram post caption"}}}}
+Each chart_spec object must have:
+{{
+  "type": "one of: bar | horizontal_bar | line | multi_line | area | stacked_area | stat_callouts | comparison_table | timeline",
+  "title": "headline above the chart (left-aligned, bold)",
+  "subtitle": "optional sub-headline",
+  "source": "citation for data source (bottom-right of chart)",
+  "data": [{{"label": "...", "value": 1234.5, "value2": null}}],
+  "stats": [{{"value": "2,400", "label": "Gold $/oz", "source": "WGC"}}],
+  "rows": [{{"label": "Metric", "col1": "...", "col2": "...", "col3": null}}],
+  "events": [{{"date": "Jan 2024", "label": "Fed pivot", "highlight": false}}],
+  "col1_header": "Column A",
+  "col2_header": "Column B",
+  "col3_header": null,
+  "unit": "$/oz",
+  "x_label": null,
+  "y_label": null
+}}
+
+Notes on data fields: populate only the field relevant to the chart type:
+  - "data" for bar, horizontal_bar, line, multi_line, area, stacked_area
+  - "stats" for stat_callouts
+  - "rows" for comparison_table
+  - "events" for timeline
+
+Chart type guidance:
+  - bar / horizontal_bar: 4-12 data points comparing categories. Use horizontal_bar for long category labels.
+  - line: time series with 4-24 data points. Use when trend over time is the story.
+  - multi_line: two competing time series (data[].value and data[].value2). Use for comparisons like gold vs USD.
+  - area: cumulative trend. stacked_area: two stacked series showing composition.
+  - stat_callouts: 2-4 large-number "hero stats" grid. Use when the numbers themselves are the story.
+  - comparison_table: 2-3 column table of metrics. Use for side-by-side entity comparisons.
+  - timeline: event sequence on a horizontal axis. Use for "key events in context" stories.
+
+Carousel rule: emit charts=[spec1, spec2] ONLY when the story genuinely needs two views to convey the full picture (e.g. a time-trend + a category-breakdown of the same phenomenon). Default is a single chart. Two charts must be independently meaningful — never split a single dataset in two.
+
+Visual style guidance: a16z-inspired — minimal, data-forward, clean. Let the data speak. No decorative elements.
 
 For "quote" format, draft_content must have:
 {{"format": "quote", "speaker": "Full Name", "speaker_title": "title/credentials", "quote_text": "\\"the exact quote in quotation marks\\"", "source_url": "...", "twitter_post": "quote + attribution + 1-2 lines analyst context for X", "instagram_post": "same formatted for Instagram (can expand slightly)"}}"""
@@ -1298,24 +1315,30 @@ For "quote" format, draft_content must have:
                 self._skipped_short_longform += 1
                 return None
 
-        # Historical pattern verification: if infographic mode is historical_pattern,
-        # verify the historical claim via SerpAPI. Fall back to current_data if zero
-        # corroborating sources are returned.
-        if (
-            draft_content.get("format") == "infographic"
-            and draft_content.get("mode") == "historical_pattern"
-        ):
-            historical_context = draft_content.get("historical_context") or {}
-            pattern_query = historical_context.get("pattern", "")
-            if pattern_query:
-                corroborating_historical = await self._search_corroborating(pattern_query)
-                if not corroborating_historical:
-                    logger.warning(
-                        "Historical pattern verification failed for '%s', falling back to current_data mode",
-                        pattern_query[:80],
-                    )
-                    draft_content["mode"] = "current_data"
-                    draft_content["historical_context"] = None
+        # BundleCharts validation for infographic format.
+        # Sonnet no longer emits a 'mode' key — new schema uses 'charts' array.
+        # Validation failure → downgrade to thread (never retry with Gemini).
+        if draft_content.get("format") == "infographic":
+            from models.chart_spec import BundleCharts  # noqa: PLC0415
+            from pydantic import ValidationError  # noqa: PLC0415
+            charts_raw = draft_content.get("charts")
+            twitter_caption = draft_content.get("twitter_caption", "")
+            try:
+                BundleCharts.model_validate({"charts": charts_raw, "twitter_caption": twitter_caption})
+            except (ValidationError, Exception) as exc:
+                logger.warning(
+                    "Infographic chart_spec validation failed for '%s' (%s) — downgrading to thread",
+                    story.get("title", "")[:80],
+                    exc,
+                )
+                # Downgrade: replace draft_content with a minimal thread structure.
+                # Caller sets bundle.content_type from draft_content['format'] — thread format
+                # is not eligible for render job enqueueing (D-04), so no image slot is created.
+                draft_content = {
+                    "format": "thread",
+                    "tweets": [story.get("title", "No qualifying content today.")],
+                    "long_form_post": story.get("title", ""),
+                }
 
         # Update deep_research with extracted key data points
         updated_research = dict(deep_research)
