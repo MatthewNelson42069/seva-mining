@@ -2,12 +2,9 @@
 /**
  * BarChart component — handles chart type "bar" (vertical bar chart).
  *
- * Palette (a16z-style with Seva brand):
- *   Background:   #F0ECE4 (Seva cream)
- *   Primary text: #0C1B32 (Seva deep navy)
- *   Bar fill:     #1E3A5F (deeper navy-blue)
- *   Grid lines:   #E2DDD6 (warm light gray)
- *   Axis labels:  #5A6B7A (muted blue-gray)
+ * a16z editorial style (theme.js): Playfair Display serif title, cream bg,
+ * uniform dark-teal bars with value labels at the bar tip, subtle solid
+ * gridlines, source bottom-left, brand wordmark bottom-right.
  *
  * IMPORTANT: Never use ResponsiveContainer — pass explicit width/height props.
  * recharts v2.x SSR requires fixed dimensions (v3.x SSR is broken, issue #5997).
@@ -19,8 +16,9 @@ const {
   XAxis,
   YAxis,
   CartesianGrid,
-  Cell,
+  LabelList,
 } = require('recharts');
+const theme = require('../theme.js');
 
 /**
  * BarChart component.
@@ -37,7 +35,7 @@ function BarChart(props) {
     unit = '',
   } = props;
 
-  const MARGIN = { top: 80, right: 40, bottom: 60, left: 70 };
+  const MARGIN = { top: theme.LAYOUT.HEADER, right: 40, bottom: theme.LAYOUT.FOOTER, left: 70 };
 
   return React.createElement(
     RechartsBarChart,
@@ -49,66 +47,79 @@ function BarChart(props) {
     },
     // Background rect — rendered inside the SVG wrapper Recharts produces
     React.createElement('rect', {
-      width,
-      height,
-      fill: '#F0ECE4',
-      x: 0,
-      y: 0,
+      width, height, fill: theme.COLORS.BG, x: 0, y: 0,
     }),
-    // Title
+    // Display title (serif)
     React.createElement('text', {
-      x: MARGIN.left,
-      y: 38,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 22,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.TITLE_Y,
+      fontFamily: theme.FONTS.TITLE,
+      fontSize: theme.SIZES.TITLE,
       fontWeight: '700',
-      fill: '#0C1B32',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, title),
-    // Subtitle (optional)
+    // Subtitle (sans)
     subtitle && React.createElement('text', {
-      x: MARGIN.left,
-      y: 62,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 13,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.SUBTITLE_Y,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SUBTITLE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, subtitle),
-    // Source citation (bottom-right)
+    // Source (bottom-left)
     source && React.createElement('text', {
-      x: width - 10,
-      y: height - 8,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 10,
+      x: theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      textAnchor: 'end',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, `Source: ${source}`),
-    // Grid
+    // Brand wordmark (bottom-right)
+    React.createElement('text', {
+      x: width - theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      textAnchor: 'end',
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
+      fontWeight: '700',
+      letterSpacing: '0.15em',
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, theme.BRAND),
+    // Grid (horizontal only for vertical bars; subtle solid lines)
     React.createElement(CartesianGrid, {
-      strokeDasharray: '3 3',
-      stroke: '#E2DDD6',
+      stroke: theme.COLORS.GRID,
       vertical: false,
+      strokeDasharray: '0',
     }),
-    // X axis
+    // X axis (categories)
     React.createElement(XAxis, {
       dataKey: 'label',
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
-      axisLine: { stroke: '#E2DDD6' },
+      tick: { fill: theme.COLORS.TEXT_SECONDARY, fontSize: theme.SIZES.AXIS_TICK, fontFamily: theme.FONTS.BODY },
+      axisLine: { stroke: theme.COLORS.DIVIDER },
       tickLine: false,
     }),
-    // Y axis
+    // Y axis (values)
     React.createElement(YAxis, {
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
+      tick: { fill: theme.COLORS.TEXT_SECONDARY, fontSize: theme.SIZES.AXIS_TICK, fontFamily: theme.FONTS.BODY },
       axisLine: false,
       tickLine: false,
       unit: unit,
     }),
-    // Bar
+    // Bar + value labels at top of each bar
     React.createElement(
       Bar,
-      { dataKey: 'value', fill: '#1E3A5F', radius: [2, 2, 0, 0] },
+      { dataKey: 'value', fill: theme.COLORS.BAR_PRIMARY, radius: [2, 2, 0, 0] },
+      React.createElement(LabelList, {
+        dataKey: 'value',
+        position: 'top',
+        fill: theme.COLORS.TEXT_PRIMARY,
+        fontSize: theme.SIZES.VALUE_LABEL,
+        fontWeight: 600,
+        fontFamily: theme.FONTS.BODY,
+        formatter: unit ? (v) => `${v}${unit}` : undefined,
+      })
     )
   );
 }

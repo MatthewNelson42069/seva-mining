@@ -3,18 +3,19 @@
  * Timeline component — handles chart type "timeline".
  * Pure SVG — NO Recharts, NO foreignObject.
  *
- * Renders a horizontal axis with evenly-spaced tick marks and event labels.
- * Alternates labels above/below the axis for dense timelines.
- * Highlighted events (event.highlight=true) use gold tick and label.
+ * a16z editorial style (theme.js): Playfair Display serif title, cream bg,
+ * horizontal navy axis with arrow, alternating above/below event labels,
+ * gold highlight for breakthrough events.
  */
 const React = require('react');
+const theme = require('../theme.js');
 
-const AXIS_COLOR = '#0C1B32';
-const TICK_DEFAULT = '#5A6B7A';
-const TICK_HIGHLIGHT = '#D4AF37';
-const LABEL_DEFAULT = '#0C1B32';
-const LABEL_HIGHLIGHT = '#D4AF37';
-const DATE_COLOR = '#5A6B7A';
+const AXIS_COLOR = theme.COLORS.TEXT_PRIMARY;
+const TICK_DEFAULT = theme.COLORS.TEXT_SECONDARY;
+const TICK_HIGHLIGHT = theme.COLORS.ACCENT_GOLD;
+const LABEL_DEFAULT = theme.COLORS.TEXT_PRIMARY;
+const LABEL_HIGHLIGHT = theme.COLORS.ACCENT_GOLD;
+const DATE_COLOR = theme.COLORS.TEXT_SECONDARY;
 
 /**
  * Timeline component.
@@ -34,23 +35,23 @@ function Timeline(props) {
     return React.createElement(
       'svg',
       { width, height, xmlns: 'http://www.w3.org/2000/svg' },
-      React.createElement('rect', { width, height, fill: '#F0ECE4' }),
+      React.createElement('rect', { width, height, fill: theme.COLORS.BG }),
       React.createElement('text', {
         x: width / 2,
         y: height / 2,
         textAnchor: 'middle',
-        fontFamily: 'Inter, sans-serif',
+        fontFamily: theme.FONTS.BODY,
         fontSize: 18,
-        fill: '#5A6B7A',
+        fill: theme.COLORS.TEXT_SECONDARY,
       }, 'No events provided')
     );
   }
 
   // Layout
-  const TITLE_H = subtitle ? 90 : 65;
+  const TITLE_H = subtitle ? theme.LAYOUT.HEADER : 80;
   const PAD_X = 80;
-  const axisY = height * 0.55;  // Horizontal axis at 55% down
-  const TICK_H = 14;            // Tick mark height
+  const axisY = TITLE_H + (height - TITLE_H - theme.LAYOUT.FOOTER) / 2;
+  const TICK_H = 14;
   const axisLineX1 = PAD_X;
   const axisLineX2 = width - PAD_X;
   const axisW = axisLineX2 - axisLineX1;
@@ -68,42 +69,31 @@ function Timeline(props) {
 
     // Alternate: even index → label above, odd index → label below
     const above = i % 2 === 0;
-    const labelY = above
-      ? axisY - TICK_H - 8    // above axis
-      : axisY + TICK_H + 8;  // below axis
-    const dateLabelY = above
-      ? axisY + TICK_H + 16  // date below tick
-      : axisY - TICK_H - 16; // date above tick
+    const labelY = above ? axisY - TICK_H - 8 : axisY + TICK_H + 8;
+    const dateLabelY = above ? axisY + TICK_H + 16 : axisY - TICK_H - 16;
 
     return React.createElement('g', { key: `event-${i}` },
-      // Tick mark
       React.createElement('line', {
-        x1: x,
-        y1: axisY - TICK_H,
-        x2: x,
-        y2: axisY + TICK_H,
+        x1: x, y1: axisY - TICK_H,
+        x2: x, y2: axisY + TICK_H,
         stroke: tickColor,
         strokeWidth: isHighlight ? 3 : 2,
       }),
-      // Event label (above or below)
       React.createElement('text', {
-        x,
-        y: labelY,
+        x, y: labelY,
         textAnchor: 'middle',
         dominantBaseline: above ? 'auto' : 'hanging',
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 12,
-        fontWeight: isHighlight ? '700' : '400',
+        fontFamily: theme.FONTS.BODY,
+        fontSize: 13,
+        fontWeight: isHighlight ? '700' : '500',
         fill: labelColor,
       }, event.label || ''),
-      // Date label (opposite side from event label)
       React.createElement('text', {
-        x,
-        y: dateLabelY,
+        x, y: dateLabelY,
         textAnchor: 'middle',
         dominantBaseline: above ? 'hanging' : 'auto',
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 10,
+        fontFamily: theme.FONTS.BODY,
+        fontSize: 11,
         fontWeight: '400',
         fill: DATE_COLOR,
       }, event.date || '')
@@ -113,34 +103,29 @@ function Timeline(props) {
   return React.createElement(
     'svg',
     { width, height, xmlns: 'http://www.w3.org/2000/svg' },
-    // Background
-    React.createElement('rect', { width, height, fill: '#F0ECE4' }),
-    // Title
+    React.createElement('rect', { width, height, fill: theme.COLORS.BG }),
+    // Display title (serif)
     React.createElement('text', {
-      x: 40,
-      y: 42,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 22,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.TITLE_Y,
+      fontFamily: theme.FONTS.TITLE,
+      fontSize: theme.SIZES.TITLE,
       fontWeight: '700',
-      fill: '#0C1B32',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, title),
     // Subtitle
     subtitle && React.createElement('text', {
-      x: 40,
-      y: 68,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 13,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.SUBTITLE_Y,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SUBTITLE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, subtitle),
-    // Horizontal axis line
+    // Horizontal axis
     React.createElement('line', {
-      x1: axisLineX1,
-      y1: axisY,
-      x2: axisLineX2,
-      y2: axisY,
+      x1: axisLineX1, y1: axisY,
+      x2: axisLineX2, y2: axisY,
       stroke: AXIS_COLOR,
       strokeWidth: 2,
     }),
@@ -151,16 +136,26 @@ function Timeline(props) {
     }),
     // Events
     ...eventElements,
-    // Source
+    // Source (bottom-left)
     source && React.createElement('text', {
-      x: width - 10,
-      y: height - 8,
-      textAnchor: 'end',
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 10,
+      x: theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-    }, `Source: ${source}`)
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, `Source: ${source}`),
+    // Brand wordmark (bottom-right)
+    React.createElement('text', {
+      x: width - theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      textAnchor: 'end',
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
+      fontWeight: '700',
+      letterSpacing: '0.15em',
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, theme.BRAND)
   );
 }
 

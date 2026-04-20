@@ -3,10 +3,15 @@
  * StatCallouts component — handles chart type "stat_callouts".
  * Pure SVG JSX — NO Recharts, NO foreignObject.
  *
- * Renders a grid of 2-4 large-number "hero stats" with label below.
- * Gold accent (#D4AF37) applied to first stat value (the lead stat).
+ * a16z editorial style (theme.js): Playfair Display serif hero numbers and
+ * title, Inter labels/sources, cream bg. Lead stat (index 0) gets the gold
+ * accent — everything else in deep navy.
+ *
+ * Grid layout: 1-4 stats, max 2 columns. Subtle dividers between cells only
+ * on the interior boundaries (no frame).
  */
 const React = require('react');
+const theme = require('../theme.js');
 
 /**
  * StatCallouts component.
@@ -26,14 +31,14 @@ function StatCallouts(props) {
     return React.createElement(
       'svg',
       { width, height, xmlns: 'http://www.w3.org/2000/svg' },
-      React.createElement('rect', { width, height, fill: '#F0ECE4' }),
+      React.createElement('rect', { width, height, fill: theme.COLORS.BG }),
       React.createElement('text', {
         x: width / 2,
         y: height / 2,
         textAnchor: 'middle',
-        fontFamily: 'Inter, sans-serif',
+        fontFamily: theme.FONTS.BODY,
         fontSize: 18,
-        fill: '#5A6B7A',
+        fill: theme.COLORS.TEXT_SECONDARY,
       }, 'No stats provided')
     );
   }
@@ -42,9 +47,9 @@ function StatCallouts(props) {
   const cols = stats.length <= 2 ? stats.length : Math.min(stats.length, 2);
   const rows = Math.ceil(stats.length / cols);
 
-  // Reserve space for title at top
-  const titleAreaH = subtitle ? 90 : 65;
-  const bottomPad = 30;
+  // Reserve space for title at top (room for Playfair Display 36 + optional subtitle)
+  const titleAreaH = subtitle ? theme.LAYOUT.HEADER : 75;
+  const bottomPad = theme.LAYOUT.FOOTER - 30;
   const gridAreaH = height - titleAreaH - bottomPad;
   const cellW = width / cols;
   const cellH = gridAreaH / rows;
@@ -56,61 +61,62 @@ function StatCallouts(props) {
     const cy = titleAreaH + row * cellH + cellH / 2;
 
     // Gold accent on lead stat (index 0) — Seva brand feature
-    const valueFill = i === 0 ? '#D4AF37' : '#0C1B32';
+    const valueFill = i === 0 ? theme.COLORS.ACCENT_GOLD : theme.COLORS.TEXT_PRIMARY;
 
     const elements = [
-      // Large value
+      // Hero value — Playfair Display for editorial weight
       React.createElement('text', {
         key: `val-${i}`,
         x: cx,
-        y: cy - 12,
+        y: cy - 8,
         textAnchor: 'middle',
-        dominantBaseline: 'bottom',
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 56,
+        dominantBaseline: 'alphabetic',
+        fontFamily: theme.FONTS.TITLE,
+        fontSize: theme.SIZES.STAT_BIG,
         fontWeight: '700',
         fill: valueFill,
       }, stat.value || ''),
-      // Label below
+      // Caption label below (Inter)
       React.createElement('text', {
         key: `label-${i}`,
         x: cx,
-        y: cy + 18,
+        y: cy + 24,
         textAnchor: 'middle',
-        dominantBaseline: 'top',
-        fontFamily: 'Inter, sans-serif',
-        fontSize: 14,
-        fontWeight: '400',
-        fill: '#5A6B7A',
+        dominantBaseline: 'hanging',
+        fontFamily: theme.FONTS.BODY,
+        fontSize: theme.SIZES.STAT_LABEL,
+        fontWeight: '500',
+        fill: theme.COLORS.TEXT_SECONDARY,
       }, stat.label || ''),
     ];
 
-    // Source (small, bottom-right of cell)
+    // Per-stat source (small, below caption)
     if (stat.source) {
       elements.push(
         React.createElement('text', {
           key: `src-${i}`,
-          x: col * cellW + cellW - 10,
-          y: titleAreaH + (row + 1) * cellH - 8,
-          textAnchor: 'end',
-          fontFamily: 'Inter, sans-serif',
-          fontSize: 10,
+          x: cx,
+          y: cy + 48,
+          textAnchor: 'middle',
+          dominantBaseline: 'hanging',
+          fontFamily: theme.FONTS.BODY,
+          fontSize: theme.SIZES.SOURCE,
           fontWeight: '400',
-          fill: '#5A6B7A',
+          fill: theme.COLORS.TEXT_SECONDARY,
         }, stat.source)
       );
     }
 
-    // Divider line between cells (vertical, except rightmost column)
+    // Vertical divider between columns (no frame on outer edges)
     if (col < cols - 1) {
       elements.push(
         React.createElement('line', {
           key: `div-v-${i}`,
           x1: (col + 1) * cellW,
-          y1: titleAreaH + 20,
+          y1: titleAreaH + 30,
           x2: (col + 1) * cellW,
-          y2: height - bottomPad - 10,
-          stroke: '#E2DDD6',
+          y2: height - bottomPad - 20,
+          stroke: theme.COLORS.DIVIDER,
           strokeWidth: 1,
         })
       );
@@ -123,48 +129,56 @@ function StatCallouts(props) {
     'svg',
     { width, height, xmlns: 'http://www.w3.org/2000/svg' },
     // Background
-    React.createElement('rect', { width, height, fill: '#F0ECE4' }),
-    // Title
+    React.createElement('rect', { width, height, fill: theme.COLORS.BG }),
+    // Display title (serif)
     React.createElement('text', {
-      x: 40,
-      y: 42,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 22,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.TITLE_Y,
+      fontFamily: theme.FONTS.TITLE,
+      fontSize: theme.SIZES.TITLE,
       fontWeight: '700',
-      fill: '#0C1B32',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, title),
     // Subtitle
     subtitle && React.createElement('text', {
-      x: 40,
-      y: 68,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 13,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.SUBTITLE_Y,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SUBTITLE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, subtitle),
     // Horizontal divider below title
     React.createElement('line', {
-      x1: 40,
-      y1: titleAreaH - 8,
-      x2: width - 40,
-      y2: titleAreaH - 8,
-      stroke: '#E2DDD6',
+      x1: theme.LAYOUT.PAD_X,
+      y1: titleAreaH - 14,
+      x2: width - theme.LAYOUT.PAD_X,
+      y2: titleAreaH - 14,
+      stroke: theme.COLORS.DIVIDER,
       strokeWidth: 1,
     }),
     // Stats grid
     ...statElements,
-    // Source (bottom-right of entire chart, if no per-stat sources)
+    // Source (bottom-left, only if no per-stat sources)
     source && !stats.some(s => s.source) && React.createElement('text', {
-      x: width - 10,
-      y: height - 8,
-      textAnchor: 'end',
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 10,
+      x: theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-    }, `Source: ${source}`)
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, `Source: ${source}`),
+    // Brand wordmark (bottom-right)
+    React.createElement('text', {
+      x: width - theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      textAnchor: 'end',
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
+      fontWeight: '700',
+      letterSpacing: '0.15em',
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, theme.BRAND)
   );
 }
 

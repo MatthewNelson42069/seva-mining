@@ -2,9 +2,14 @@
 /**
  * LineChart component — handles chart types "line" and "multi_line".
  *
- * For "multi_line": renders two Line components using data[].value and data[].value2.
- * Pass spec.type === "multi_line" via props to enable the second series.
- * series_labels[0] and series_labels[1] set legend labels for the two lines.
+ * a16z editorial style (theme.js): Playfair Display serif title, cream bg,
+ * thick dark-teal primary line, lighter secondary line for multi_line,
+ * subtle horizontal-only gridlines, inline SVG legend top-right.
+ *
+ * NOTE: Recharts' <Legend> component renders to a sibling <div> outside the
+ * main chart <svg>. Our SVG extractor in render-chart.js stops at the chart's
+ * </svg>, so the Recharts legend would be dropped. We render an inline SVG
+ * legend for multi_line instead — stays inside the captured <svg>.
  */
 const React = require('react');
 const {
@@ -14,11 +19,7 @@ const {
   YAxis,
   CartesianGrid,
 } = require('recharts');
-
-// NOTE: Recharts' <Legend> component renders to a sibling <div class="recharts-legend-wrapper">
-// outside the main chart <svg>. Our SVG extractor (non-greedy match in render-chart.js) stops at
-// the chart's </svg>, so the Recharts legend would be dropped. We render an inline SVG legend
-// below for multi_line charts instead — stays inside the captured <svg>.
+const theme = require('../theme.js');
 
 /**
  * LineChart component.
@@ -38,7 +39,7 @@ function LineChart(props) {
   } = props;
 
   const isMultiLine = type === 'multi_line';
-  const MARGIN = { top: 80, right: 40, bottom: 60, left: 70 };
+  const MARGIN = { top: theme.LAYOUT.HEADER, right: 40, bottom: theme.LAYOUT.FOOTER, left: 70 };
   const label1 = (series_labels && series_labels[0]) || 'Series 1';
   const label2 = (series_labels && series_labels[1]) || 'Series 2';
 
@@ -52,58 +53,62 @@ function LineChart(props) {
     },
     // Background
     React.createElement('rect', {
-      width,
-      height,
-      fill: '#F0ECE4',
-      x: 0,
-      y: 0,
+      width, height, fill: theme.COLORS.BG, x: 0, y: 0,
     }),
-    // Title
+    // Display title (serif)
     React.createElement('text', {
-      x: MARGIN.left,
-      y: 38,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 22,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.TITLE_Y,
+      fontFamily: theme.FONTS.TITLE,
+      fontSize: theme.SIZES.TITLE,
       fontWeight: '700',
-      fill: '#0C1B32',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, title),
     // Subtitle
     subtitle && React.createElement('text', {
-      x: MARGIN.left,
-      y: 62,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 13,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.SUBTITLE_Y,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SUBTITLE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, subtitle),
-    // Source
+    // Source (bottom-left)
     source && React.createElement('text', {
-      x: width - 10,
-      y: height - 8,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 10,
+      x: theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      textAnchor: 'end',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, `Source: ${source}`),
-    // Grid
+    // Brand wordmark (bottom-right)
+    React.createElement('text', {
+      x: width - theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      textAnchor: 'end',
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
+      fontWeight: '700',
+      letterSpacing: '0.15em',
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, theme.BRAND),
+    // Grid — horizontal lines only, subtle solid
     React.createElement(CartesianGrid, {
-      strokeDasharray: '3 3',
-      stroke: '#E2DDD6',
+      stroke: theme.COLORS.GRID,
       vertical: false,
+      strokeDasharray: '0',
     }),
     // X axis
     React.createElement(XAxis, {
       dataKey: 'label',
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
-      axisLine: { stroke: '#E2DDD6' },
+      tick: { fill: theme.COLORS.TEXT_SECONDARY, fontSize: theme.SIZES.AXIS_TICK, fontFamily: theme.FONTS.BODY },
+      axisLine: { stroke: theme.COLORS.DIVIDER },
       tickLine: false,
     }),
     // Y axis
     React.createElement(YAxis, {
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
+      tick: { fill: theme.COLORS.TEXT_SECONDARY, fontSize: theme.SIZES.AXIS_TICK, fontFamily: theme.FONTS.BODY },
       axisLine: false,
       tickLine: false,
       unit: unit,
@@ -113,8 +118,8 @@ function LineChart(props) {
       type: 'monotone',
       dataKey: 'value',
       name: label1,
-      stroke: '#1E3A5F',
-      strokeWidth: 2,
+      stroke: theme.COLORS.BAR_PRIMARY,
+      strokeWidth: 2.5,
       dot: false,
       activeDot: false,
     }),
@@ -123,32 +128,35 @@ function LineChart(props) {
       type: 'monotone',
       dataKey: 'value2',
       name: label2,
-      stroke: '#4A7FA5',
-      strokeWidth: 2,
+      stroke: theme.COLORS.BAR_SECONDARY,
+      strokeWidth: 2.5,
       dot: false,
       activeDot: false,
       strokeDasharray: '5 3',
     }),
-    // Inline SVG legend (multi_line only) — rendered inside the chart <svg>, top-right
+    // Inline SVG legend (multi_line only) — kept inside chart <svg> so our non-greedy
+    // extractor captures it. Positioned below the subtitle, left-aligned under the title.
     isMultiLine && React.createElement('rect', {
-      x: width - 260, y: 34, width: 14, height: 14, fill: '#1E3A5F', rx: 2,
+      x: theme.LAYOUT.PAD_X, y: theme.LAYOUT.HEADER - 18, width: 14, height: 14,
+      fill: theme.COLORS.BAR_PRIMARY, rx: 2,
     }),
     isMultiLine && React.createElement('text', {
-      x: width - 242, y: 45,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 12,
-      fontWeight: '500',
-      fill: '#0C1B32',
+      x: theme.LAYOUT.PAD_X + 22, y: theme.LAYOUT.HEADER - 7,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.LEGEND,
+      fontWeight: '600',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, label1),
     isMultiLine && React.createElement('rect', {
-      x: width - 140, y: 34, width: 14, height: 14, fill: '#4A7FA5', rx: 2,
+      x: theme.LAYOUT.PAD_X + 140, y: theme.LAYOUT.HEADER - 18, width: 14, height: 14,
+      fill: theme.COLORS.BAR_SECONDARY, rx: 2,
     }),
     isMultiLine && React.createElement('text', {
-      x: width - 122, y: 45,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 12,
-      fontWeight: '500',
-      fill: '#0C1B32',
+      x: theme.LAYOUT.PAD_X + 162, y: theme.LAYOUT.HEADER - 7,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.LEGEND,
+      fontWeight: '600',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, label2)
   );
 }

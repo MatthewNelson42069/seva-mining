@@ -2,8 +2,13 @@
 /**
  * AreaChart component — handles chart types "area" and "stacked_area".
  *
- * For "stacked_area": two Area components with stackId="1", using value and value2 dataKeys.
- * Fill: #1E3A5F (primary, 0.7 opacity) and #4A7FA5 (secondary, 0.5 opacity).
+ * a16z editorial style (theme.js): Playfair Display serif title, cream bg,
+ * dark-teal primary area (0.7 opacity), lighter teal stacked second series
+ * (0.5 opacity), subtle horizontal-only gridlines.
+ *
+ * NOTE: Recharts' <Legend> renders outside the main chart <svg> — dropped by
+ * our non-greedy SVG extractor. We render an inline SVG legend for
+ * stacked_area inside the chart <svg> instead.
  */
 const React = require('react');
 const {
@@ -13,10 +18,7 @@ const {
   YAxis,
   CartesianGrid,
 } = require('recharts');
-
-// NOTE: Recharts' <Legend> renders outside the main chart <svg> (sibling <div>). Our non-greedy
-// SVG extractor in render-chart.js stops at the chart's </svg>, so the Recharts legend is dropped.
-// We render an inline SVG legend below for stacked_area charts — stays inside the captured <svg>.
+const theme = require('../theme.js');
 
 /**
  * AreaChart component.
@@ -36,7 +38,7 @@ function AreaChart(props) {
   } = props;
 
   const isStacked = type === 'stacked_area';
-  const MARGIN = { top: 80, right: 40, bottom: 60, left: 70 };
+  const MARGIN = { top: theme.LAYOUT.HEADER, right: 40, bottom: theme.LAYOUT.FOOTER, left: 70 };
   const label1 = (series_labels && series_labels[0]) || 'Series 1';
   const label2 = (series_labels && series_labels[1]) || 'Series 2';
 
@@ -50,58 +52,62 @@ function AreaChart(props) {
     },
     // Background
     React.createElement('rect', {
-      width,
-      height,
-      fill: '#F0ECE4',
-      x: 0,
-      y: 0,
+      width, height, fill: theme.COLORS.BG, x: 0, y: 0,
     }),
-    // Title
+    // Display title (serif)
     React.createElement('text', {
-      x: MARGIN.left,
-      y: 38,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 22,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.TITLE_Y,
+      fontFamily: theme.FONTS.TITLE,
+      fontSize: theme.SIZES.TITLE,
       fontWeight: '700',
-      fill: '#0C1B32',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, title),
     // Subtitle
     subtitle && React.createElement('text', {
-      x: MARGIN.left,
-      y: 62,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 13,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.SUBTITLE_Y,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SUBTITLE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, subtitle),
-    // Source
+    // Source (bottom-left)
     source && React.createElement('text', {
-      x: width - 10,
-      y: height - 8,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 10,
+      x: theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      textAnchor: 'end',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, `Source: ${source}`),
-    // Grid
+    // Brand wordmark (bottom-right)
+    React.createElement('text', {
+      x: width - theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      textAnchor: 'end',
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
+      fontWeight: '700',
+      letterSpacing: '0.15em',
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, theme.BRAND),
+    // Grid — horizontal lines only, subtle solid
     React.createElement(CartesianGrid, {
-      strokeDasharray: '3 3',
-      stroke: '#E2DDD6',
+      stroke: theme.COLORS.GRID,
       vertical: false,
+      strokeDasharray: '0',
     }),
     // X axis
     React.createElement(XAxis, {
       dataKey: 'label',
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
-      axisLine: { stroke: '#E2DDD6' },
+      tick: { fill: theme.COLORS.TEXT_SECONDARY, fontSize: theme.SIZES.AXIS_TICK, fontFamily: theme.FONTS.BODY },
+      axisLine: { stroke: theme.COLORS.DIVIDER },
       tickLine: false,
     }),
     // Y axis
     React.createElement(YAxis, {
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
+      tick: { fill: theme.COLORS.TEXT_SECONDARY, fontSize: theme.SIZES.AXIS_TICK, fontFamily: theme.FONTS.BODY },
       axisLine: false,
       tickLine: false,
       unit: unit,
@@ -111,8 +117,8 @@ function AreaChart(props) {
       type: 'monotone',
       dataKey: 'value',
       name: label1,
-      stroke: '#1E3A5F',
-      fill: '#1E3A5F',
+      stroke: theme.COLORS.BAR_PRIMARY,
+      fill: theme.COLORS.BAR_PRIMARY,
       fillOpacity: 0.7,
       stackId: isStacked ? '1' : undefined,
       dot: false,
@@ -123,33 +129,35 @@ function AreaChart(props) {
       type: 'monotone',
       dataKey: 'value2',
       name: label2,
-      stroke: '#4A7FA5',
-      fill: '#4A7FA5',
+      stroke: theme.COLORS.BAR_SECONDARY,
+      fill: theme.COLORS.BAR_SECONDARY,
       fillOpacity: 0.5,
       stackId: '1',
       dot: false,
       activeDot: false,
     }),
-    // Inline SVG legend (stacked_area only) — rendered inside the chart <svg>, top-right
+    // Inline SVG legend (stacked_area only) — kept inside chart <svg>
     isStacked && React.createElement('rect', {
-      x: width - 260, y: 34, width: 14, height: 14, fill: '#1E3A5F', fillOpacity: 0.7, rx: 2,
+      x: theme.LAYOUT.PAD_X, y: theme.LAYOUT.HEADER - 18, width: 14, height: 14,
+      fill: theme.COLORS.BAR_PRIMARY, fillOpacity: 0.7, rx: 2,
     }),
     isStacked && React.createElement('text', {
-      x: width - 242, y: 45,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 12,
-      fontWeight: '500',
-      fill: '#0C1B32',
+      x: theme.LAYOUT.PAD_X + 22, y: theme.LAYOUT.HEADER - 7,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.LEGEND,
+      fontWeight: '600',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, label1),
     isStacked && React.createElement('rect', {
-      x: width - 140, y: 34, width: 14, height: 14, fill: '#4A7FA5', fillOpacity: 0.5, rx: 2,
+      x: theme.LAYOUT.PAD_X + 140, y: theme.LAYOUT.HEADER - 18, width: 14, height: 14,
+      fill: theme.COLORS.BAR_SECONDARY, fillOpacity: 0.5, rx: 2,
     }),
     isStacked && React.createElement('text', {
-      x: width - 122, y: 45,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 12,
-      fontWeight: '500',
-      fill: '#0C1B32',
+      x: theme.LAYOUT.PAD_X + 162, y: theme.LAYOUT.HEADER - 7,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.LEGEND,
+      fontWeight: '600',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, label2)
   );
 }

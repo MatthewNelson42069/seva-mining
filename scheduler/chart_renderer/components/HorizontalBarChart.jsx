@@ -2,8 +2,12 @@
 /**
  * HorizontalBarChart component — handles chart type "horizontal_bar".
  *
- * Identical to BarChart but with layout="horizontal" and swapped XAxis/YAxis types.
- * Use for long category labels where vertical bars would cause label overlap.
+ * Matches the a16z "Where do LLMs find answers?" reference: solid uniform
+ * dark-teal bars, category labels left-aligned, value labels at the bar tip
+ * (right), subtle vertical-only gridlines, cream background.
+ *
+ * Use when category labels are long (domain names, company names) — vertical
+ * bars would truncate or rotate those labels ugly.
  */
 const React = require('react');
 const {
@@ -12,7 +16,9 @@ const {
   XAxis,
   YAxis,
   CartesianGrid,
+  LabelList,
 } = require('recharts');
+const theme = require('../theme.js');
 
 /**
  * HorizontalBarChart component.
@@ -29,7 +35,12 @@ function HorizontalBarChart(props) {
     unit = '',
   } = props;
 
-  const MARGIN = { top: 80, right: 60, bottom: 40, left: 160 };
+  const MARGIN = {
+    top: theme.LAYOUT.HEADER,
+    right: 110, // room for value labels at bar tip
+    bottom: theme.LAYOUT.FOOTER,
+    left: 180,  // wider than vertical-bar variant for long category labels
+  };
 
   return React.createElement(
     RechartsBarChart,
@@ -42,71 +53,83 @@ function HorizontalBarChart(props) {
     },
     // Background
     React.createElement('rect', {
-      width,
-      height,
-      fill: '#F0ECE4',
-      x: 0,
-      y: 0,
+      width, height, fill: theme.COLORS.BG, x: 0, y: 0,
     }),
-    // Title
+    // Display title (serif)
     React.createElement('text', {
-      x: MARGIN.left,
-      y: 38,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 22,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.TITLE_Y,
+      fontFamily: theme.FONTS.TITLE,
+      fontSize: theme.SIZES.TITLE,
       fontWeight: '700',
-      fill: '#0C1B32',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_PRIMARY,
     }, title),
-    // Subtitle
+    // Subtitle (sans)
     subtitle && React.createElement('text', {
-      x: MARGIN.left,
-      y: 62,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 13,
+      x: theme.LAYOUT.PAD_X,
+      y: theme.LAYOUT.SUBTITLE_Y,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SUBTITLE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      dominantBaseline: 'middle',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, subtitle),
-    // Source
+    // Source (bottom-left)
     source && React.createElement('text', {
-      x: width - 10,
-      y: height - 8,
-      fontFamily: 'Inter, sans-serif',
-      fontSize: 10,
+      x: theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
       fontWeight: '400',
-      fill: '#5A6B7A',
-      textAnchor: 'end',
+      fill: theme.COLORS.TEXT_SECONDARY,
     }, `Source: ${source}`),
-    // Grid — vertical lines only (horizontal bar chart shows horizontal bars)
+    // Brand wordmark (bottom-right)
+    React.createElement('text', {
+      x: width - theme.LAYOUT.PAD_X,
+      y: height - theme.LAYOUT.FOOTER_Y_OFFSET,
+      textAnchor: 'end',
+      fontFamily: theme.FONTS.BODY,
+      fontSize: theme.SIZES.SOURCE,
+      fontWeight: '700',
+      letterSpacing: '0.15em',
+      fill: theme.COLORS.TEXT_SECONDARY,
+    }, theme.BRAND),
+    // Grid — vertical lines only for horizontal bars
     React.createElement(CartesianGrid, {
-      strokeDasharray: '3 3',
-      stroke: '#E2DDD6',
+      stroke: theme.COLORS.GRID,
       horizontal: false,
+      strokeDasharray: '0',
     }),
-    // Y axis (categories) for horizontal layout
+    // Y axis (categories) — pushed left, bold navy labels
     React.createElement(YAxis, {
       type: 'category',
       dataKey: 'label',
-      width: 140,
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
-      axisLine: { stroke: '#E2DDD6' },
+      width: 160,
+      tick: { fill: theme.COLORS.TEXT_PRIMARY, fontSize: theme.SIZES.AXIS_TICK + 1, fontFamily: theme.FONTS.BODY, fontWeight: 600 },
+      axisLine: false,
       tickLine: false,
     }),
-    // X axis (values) for horizontal layout
+    // X axis (values) at bottom
     React.createElement(XAxis, {
       type: 'number',
-      tick: { fill: '#5A6B7A', fontSize: 11, fontFamily: 'Inter, sans-serif' },
-      axisLine: false,
+      tick: { fill: theme.COLORS.TEXT_SECONDARY, fontSize: theme.SIZES.AXIS_TICK, fontFamily: theme.FONTS.BODY },
+      axisLine: { stroke: theme.COLORS.DIVIDER },
       tickLine: false,
       unit: unit,
     }),
-    // Bar
-    React.createElement(Bar, {
-      dataKey: 'value',
-      fill: '#1E3A5F',
-      radius: [0, 2, 2, 0],
-    })
+    // Bar with value labels at end
+    React.createElement(
+      Bar,
+      { dataKey: 'value', fill: theme.COLORS.BAR_PRIMARY, radius: [0, 2, 2, 0] },
+      React.createElement(LabelList, {
+        dataKey: 'value',
+        position: 'right',
+        fill: theme.COLORS.TEXT_PRIMARY,
+        fontSize: theme.SIZES.VALUE_LABEL,
+        fontWeight: 600,
+        fontFamily: theme.FONTS.BODY,
+        formatter: unit ? (v) => `${v}${unit}` : undefined,
+      })
+    )
   );
 }
 

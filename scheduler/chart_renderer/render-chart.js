@@ -33,18 +33,40 @@ const ComparisonTable = require('./components/ComparisonTable.jsx');
 const Timeline = require('./components/Timeline.jsx');
 
 // ---------------------------------------------------------------------------
-// Font loading — load at startup, reuse across all renders
+// Font loading — resolve paths at startup, reuse across all renders
 // ---------------------------------------------------------------------------
+// Inter: body/labels/axes. DM Serif Display: editorial titles (theme.js).
+//
+// We pass absolute PATHS (not buffers) to resvg via `fontFiles`. Testing
+// showed that resvg-js 2.6.x's `fontBuffers` path does not register multi-
+// family fonts by their `name`-table family correctly — a 2-font array of
+// Inter + DM Serif Display caused DM Serif lookups to silently fall back
+// to Inter. The `fontFiles` loader goes through fontdb's load_font_file
+// which parses the family name correctly.
+//
+// Missing-font failures are non-fatal — resvg falls back within the registered
+// set, and if everything fails text renders as empty boxes but geometry is
+// still produced. Warn so Railway logs surface the regression.
 
-let fontRegular = null;
-let fontBold = null;
+const fontFileNames = [
+  'Inter-Regular.ttf',
+  'Inter-Bold.ttf',
+  'DMSerifDisplay-Regular.ttf',
+];
+const fontFilePaths = [];
 
-try {
-  fontRegular = new Uint8Array(fs.readFileSync(path.join(__dirname, 'fonts', 'Inter-Regular.ttf')));
-  fontBold = new Uint8Array(fs.readFileSync(path.join(__dirname, 'fonts', 'Inter-Bold.ttf')));
-} catch (err) {
-  process.stderr.write(`[render-chart] WARNING: Could not load Inter fonts: ${err.message}\n`);
-  process.stderr.write('[render-chart] Text rendering may fall back to system fonts.\n');
+for (const name of fontFileNames) {
+  const p = path.join(__dirname, 'fonts', name);
+  try {
+    fs.accessSync(p, fs.constants.R_OK);
+    fontFilePaths.push(p);
+  } catch (err) {
+    process.stderr.write(`[render-chart] WARNING: Could not access ${name}: ${err.message}\n`);
+  }
+}
+
+if (fontFilePaths.length === 0) {
+  process.stderr.write('[render-chart] WARNING: No fonts loaded — text will use system fonts.\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -118,13 +140,10 @@ function renderChart(spec) {
     fitTo: { mode: 'width', value: width },
   };
 
-  // Only attach font config if fonts were loaded successfully
-  if (fontRegular || fontBold) {
-    const fontBuffers = [];
-    if (fontRegular) fontBuffers.push(fontRegular);
-    if (fontBold) fontBuffers.push(fontBold);
+  // Only attach font config if at least one font loaded successfully
+  if (fontFilePaths.length > 0) {
     resvgOpts.font = {
-      fontBuffers,
+      fontFiles: fontFilePaths,
       loadSystemFonts: false,
     };
   }
