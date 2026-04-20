@@ -696,6 +696,7 @@ class ContentAgent:
             wait_on_rate_limit=True,
         )
         self._queued_titles: list[str] = []
+        self._skipped_short_longform: int = 0
 
     async def _search_corroborating(self, headline: str) -> list[dict]:
         """CONT-09: Find 2-3 corroborating sources via SerpAPI Google News.
@@ -1083,8 +1084,8 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
 1. Extract 5-8 key data points from the research (numbers, percentages, dates, production figures).
 2. Decide the best format for this content. Choose from these options:
 
-   - "thread" — for stories with 3+ separable angles each worth a tweet. Produces BOTH a tweet thread (3-5 tweets, each <=280 chars) AND a long-form X post (<=2200 chars). Default for ambiguous stories.
-   - "long_form" — for a single coherent narrative — one powerful argument or insight. Single X post <=2200 chars.
+   - "thread" — for fact-rich stories where a few data points or facts can be strung together into a narrative. Each tweet carries one fact or angle. Use when the story is a collection of data points rather than one sustained argument. Produces BOTH a tweet thread (3-5 tweets, each <=280 chars) AND a long-form X post (<=2200 chars). Default for ambiguous stories.
+   - "long_form" — for article-style analysis: a single sustained piece built around one powerful argument or insight, like a short analyst op-ed. Must read like an article, not a long social post — with a clear thesis, supporting evidence, and a sharpened takeaway. Single X post 400-2200 chars. Minimum 400 chars — if you cannot write at least 400 chars of article-quality analyst prose, choose a different format instead.
    - "breaking_news" — for urgency/speed stories ("this just happened, pay attention"): major price moves, major announcements, stories where speed is the value. 1-3 punchy lines, ALL CAPS for key terms, no hashtags. Optional infographic pairing if story also has strong visual data.
    - "infographic" — for stories with clear comparison, trend, or historical parallel with >=4 stats — better visualized than narrated. Two modes:
        * "current_data" — key stats from today's story (prices, tonnage, percentages, production figures).
@@ -1117,7 +1118,7 @@ For "thread" format, draft_content must have:
 {{"format": "thread", "tweets": ["tweet1 (<=280 chars)", "tweet2", "...up to 5"], "long_form_post": "single X post <=2200 chars"}}
 
 For "long_form" format, draft_content must have:
-{{"format": "long_form", "post": "single X post <=2200 chars"}}
+{{"format": "long_form", "post": "single X post 400-2200 chars (minimum 400 required)"}}
 
 For "breaking_news" format, draft_content must have:
 {{"format": "breaking_news", "tweet": "1-3 line breaking news tweet with ALL CAPS key terms, no hashtags", "infographic_brief": null}}
@@ -1165,6 +1166,19 @@ For "quote" format, draft_content must have:
         draft_content = parsed.get("draft_content", {})
         rationale = parsed.get("rationale", "")
         key_data_points = parsed.get("key_data_points", [])
+
+        # Long-form minimum length enforcement — thin long-form posts feel undersized on the dashboard.
+        # Hard floor at 400 chars; skip the bundle if Claude produced a short one despite prompt instructions.
+        if draft_content.get("format") == "long_form":
+            post_text = draft_content.get("post", "")
+            if len(post_text) < 400:
+                logger.warning(
+                    "Skipping story — long_form post below 400 char minimum (got %d): %s",
+                    len(post_text),
+                    story.get("title", "")[:80],
+                )
+                self._skipped_short_longform += 1
+                return None
 
         # Historical pattern verification: if infographic mode is historical_pattern,
         # verify the historical claim via SerpAPI. Fall back to current_data if zero
@@ -1561,6 +1575,11 @@ For "quote" format, draft_content must have:
 
         if skipped_by_gate:
             logger.info("Gold gate rejected %d stories this run", skipped_by_gate)
+        if self._skipped_short_longform:
+            logger.info(
+                "Content agent run: skipped_short_longform=%d",
+                self._skipped_short_longform,
+            )
 
         # Handle the case where ALL qualifying stories were already covered
         if all_already_covered:
