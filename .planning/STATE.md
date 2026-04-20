@@ -204,6 +204,7 @@ None yet.
 | 260419-n4f | Content agent relevance cleanup — Bloomberg commodities swap, drop Investing.com, sharpen prompt, two-bucket gold gate, restore 7.0 threshold | 2026-04-19 | 502ae3e / 010926d / 2cfc9cb | Verified | [260419-n4f](./quick/260419-n4f-content-agent-relevance-cleanup-swap-blo/) |
 | 260419-r0r | Long_form 400-char minimum floor + sharpen thread vs long_form prompt (thread=fact-rich, long_form=article-style) | 2026-04-20 | f30dd44 / 14caedc | Verified | [260419-r0r](./quick/260419-r0r-enforce-400-char-minimum-floor-on-long-f/) |
 | 260419-rqx | Content agent tuning — 3h cadence, 0.40 recency weight, top-5 Haiku format-first pipeline, listicle rejection in gold gate | 2026-04-20 | 663d6d8 / 7fb5517 / af37d3c | Verified | [260419-rqx](./quick/260419-rqx-content-agent-tuning-pass-cadence-top-5-/) |
+| 260419-si2 | Display Gemini-rendered images inline on content queue cards with role label, Dialog enlarge, and fetch+blob Download | 2026-04-20 | 1ff7f07 / 8a2d991 | Verified | [260419-si2](./quick/260419-si2-display-rendered-images-on-dashboard-app/) |
 
 ### Blockers/Concerns
 
@@ -213,6 +214,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-20T03:30:00.000Z
-Stopped at: Completed quick task 260419-rqx — content agent tuning pass (3h cadence, 0.40 recency weight, top-5 format-first pipeline, listicle rejection in gold gate)
+Last session: 2026-04-20T03:47:00.000Z
+Last activity: 2026-04-20 - Completed quick task 260419-si2: Display rendered_images on dashboard approval card with inline preview, click-to-enlarge modal, and per-image download button
+Stopped at: Completed quick task 260419-si2 — inline rendered-image gallery on ContentSummaryCard with Dialog enlarge and Download
 Resume file: None
