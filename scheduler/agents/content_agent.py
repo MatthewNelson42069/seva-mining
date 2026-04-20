@@ -551,7 +551,19 @@ async def is_gold_relevant_or_systemic_shock(
                 "plausibly move gold prices (major war, sanctions, Strait of Hormuz disruption, "
                 "Fed/USD policy shock, oil supply shock, currency crisis)? "
                 "Generic business news, equity market moves, sector-specific news outside "
-                "gold/commodities → answer no."
+                "gold/commodities → answer no.\n\n"
+                "REJECT (answer no) for:\n"
+                "- Listicles or rankings of gold stocks (e.g. 'Top 5 Gold Stocks', "
+                "'7 Best-Performing Gold Stocks For...', 'Best Gold Stocks to Buy Now', "
+                "'Gold Stocks to Watch').\n"
+                "- Multi-stock analytical picks roundups or recommendation lists across "
+                "several gold companies.\n"
+                "- Generic buying advice or educational content about gold investing.\n\n"
+                "ACCEPT (answer yes) for:\n"
+                "- Specific single-company news: earnings, M&A, production reports, "
+                "executive changes, project milestones — even if stock-adjacent.\n"
+                "- Gold price, supply, or demand macro news.\n"
+                "- Geopolitical/financial systemic shock with plausible gold-price linkage."
             ),
             messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
         )

@@ -901,3 +901,87 @@ def test_select_qualifying_stories_no_max_count_unchanged_behavior():
     assert result[0]["score"] == 9.2
     assert result[1]["score"] == 8.5
     assert result[2]["score"] == 7.8
+
+
+# ---------------------------------------------------------------------------
+# quick-260419-rqx: Gold gate listicle/stock-pick rejection tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_gate_rejects_listicle_top_5_gold_stocks():
+    """Gate returns False for a 'Top 5 Junior Gold Stocks' listicle article."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Top 5 Junior Gold Stocks of 2026",
+        "summary": "Investing News Network rounds up the best junior gold miners to watch this year.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="no")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_gate_rejects_listicle_best_performing():
+    """Gate returns False for a '7 Best-Performing Gold Stocks' listicle."""
+    ca = _get_content_agent()
+    story = {
+        "title": "7 Best-Performing Gold Stocks For Hedging Against Volatility",
+        "summary": "NerdWallet analysts pick their top gold equity recommendations for portfolio hedges.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="no")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_gate_accepts_single_company_earnings():
+    """Gate returns True for single-company earnings news."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Newmont Reports Record Q1 Gold Production",
+        "summary": "Newmont Corporation posts record quarterly production of 1.6M oz Au.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="yes")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_gate_accepts_single_company_ma():
+    """Gate returns True for single-company M&A news."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Barrick Announces $5B Acquisition of X Mining",
+        "summary": "Barrick Gold to acquire X Mining in all-stock deal, expanding Tier 1 asset base.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="yes")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result is True
