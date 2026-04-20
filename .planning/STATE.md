@@ -205,16 +205,18 @@ None yet.
 | 260419-r0r | Long_form 400-char minimum floor + sharpen thread vs long_form prompt (thread=fact-rich, long_form=article-style) | 2026-04-20 | f30dd44 / 14caedc | Verified | [260419-r0r](./quick/260419-r0r-enforce-400-char-minimum-floor-on-long-f/) |
 | 260419-rqx | Content agent tuning — 3h cadence, 0.40 recency weight, top-5 Haiku format-first pipeline, listicle rejection in gold gate | 2026-04-20 | 663d6d8 / 7fb5517 / af37d3c | Verified | [260419-rqx](./quick/260419-rqx-content-agent-tuning-pass-cadence-top-5-/) |
 | 260419-si2 | Display Gemini-rendered images inline on content queue cards with role label, Dialog enlarge, and fetch+blob Download | 2026-04-20 | 1ff7f07 / 8a2d991 | Verified | [260419-si2](./quick/260419-si2-display-rendered-images-on-dashboard-app/) |
+| 260419-t78 | Replace Gemini Imagen infographic rendering with Claude chart_spec + Recharts 2.15.4 (a16z-style) — Pydantic schema, Node renderer (resvg-js), Python ChartRendererClient, infographic branch migrated | 2026-04-20 | 898909b / 8d0ea80 / beba088 / de31622 / be1944c | Needs Review | [260419-t78](./quick/260419-t78-replace-gemini-imagen-infographic-render/) |
 
 ### Blockers/Concerns
 
 - [Phase 1]: Twilio WhatsApp templates must be submitted to Meta during Phase 1 — approval takes 1-7 business days. Confirm whether a WhatsApp Business account already exists for Seva Mining before starting Phase 1 planning.
 - [Phase 1]: Verify Neon free tier connection limit before setting pool_size — may need adjustment from default 5/10.
 - [Phase 7]: SerpAPI plan selection needed before Content Agent — 100 searches/mo on basic plan may be insufficient for daily multi-topic runs.
+- [quick-t78]: Operator TODO before production deploy — pin `scheduler/Dockerfile` base image to sha256 digest (`docker pull nikolaik/python-nodejs:python3.12-nodejs22` + update `FROM` line). Also verify end-to-end chart rendering in Docker (Node + resvg-js + Inter TTF fonts) before first infographic run on Railway.
 
 ## Session Continuity
 
-Last session: 2026-04-20T03:47:00.000Z
-Last activity: 2026-04-20 - Completed quick task 260419-si2: Display rendered_images on dashboard approval card with inline preview, click-to-enlarge modal, and per-image download button
-Stopped at: Completed quick task 260419-si2 — inline rendered-image gallery on ContentSummaryCard with Dialog enlarge and Download
+Last session: 2026-04-20T05:15:00.000Z
+Last activity: 2026-04-20 - Completed quick task 260419-t78: Replace Gemini Imagen infographic rendering with Claude chart_spec + Recharts (a16z-style) — schema + Node renderer + Python client + agent wiring. 145 tests pass, 0 ruff errors. 3 human-verify items (Docker digest pin, live Node render, Railway smoke test).
+Stopped at: Completed quick task 260419-t78 — chart_spec + Recharts infographic pipeline landed on main (6 commits)
 Resume file: None
