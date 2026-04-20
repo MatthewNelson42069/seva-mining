@@ -821,6 +821,232 @@ async def test_gate_accepts_single_company_earnings():
     assert result is True
 
 
+# ---------------------------------------------------------------------------
+# quick-260420-mfy: brand_preamble + three-field infographic/quote tests
+# ---------------------------------------------------------------------------
+
+import json as _json
+
+
+def _make_mfy_infographic_response():
+    """Sonnet response stub: infographic with new three-field shape + image_prompt_direction."""
+    obj = {
+        "format": "infographic",
+        "rationale": "Data-forward central bank story.",
+        "key_data_points": ["1,136 tonnes purchased Q1 2026"],
+        "draft_content": {
+            "format": "infographic",
+            "twitter_caption": "Central banks bought 1,136t of gold in Q1 2026 — a record quarter.",
+            "suggested_headline": "Central Banks Set Q1 Gold Buying Record",
+            "data_facts": ["1,136 tonnes purchased Q1 2026", "Highest quarterly total since 1971"],
+            "image_prompt_direction": "Bar chart comparing Q1 quarterly purchases from 2020–2026.",
+        },
+    }
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps(obj))]
+    return mock_response
+
+
+def _make_mfy_quote_response():
+    """Sonnet response stub: quote with new three-field shape + image_prompt_direction."""
+    obj = {
+        "speaker": "Janet Yellen",
+        "speaker_title": "Former U.S. Treasury Secretary",
+        "quote_text": "\"Gold is the ultimate store of value in uncertain times.\"",
+        "source_url": "https://example.com/yellen-quote",
+        "twitter_post": "Janet Yellen: 'Gold is the ultimate store of value in uncertain times.'",
+        "suggested_headline": "Yellen: Gold Is Ultimate Store of Value",
+        "data_facts": ["Gold up 18% YTD", "Central banks hold record 36,000t"],
+        "image_prompt_direction": "Pull-quote card with Yellen attribution below the quote.",
+    }
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps(obj))]
+    return mock_response
+
+
+# --- Test A: brand_preamble imports and contains all required substrings ---
+
+def test_brand_preamble_loads():
+    """BRAND_PREAMBLE imports from agents.brand_preamble and contains all required substrings."""
+    from agents.brand_preamble import BRAND_PREAMBLE
+    required = [
+        "#F0ECE4", "#0C1B32", "#1E3A5F", "#4A7FA5", "#5A6B7A",
+        "#D4AF37", "#D8D2C8", "DM Serif Display", "Inter",
+        "SEVA MINING", "1200x675", "HTML artifact",
+    ]
+    missing = [s for s in required if s not in BRAND_PREAMBLE]
+    assert not missing, f"BRAND_PREAMBLE missing substrings: {missing}"
+
+
+# --- Test B: BRAND_PREAMBLE length floor ---
+
+def test_brand_preamble_min_length():
+    """BRAND_PREAMBLE must be at least 200 chars."""
+    from agents.brand_preamble import BRAND_PREAMBLE
+    assert len(BRAND_PREAMBLE) >= 200, f"BRAND_PREAMBLE too short: {len(BRAND_PREAMBLE)} chars"
+
+
+# --- Test C: infographic _research_and_draft returns new three-field shape ---
+
+@pytest.mark.asyncio
+async def test_infographic_research_and_draft_returns_three_new_fields():
+    """_research_and_draft for infographic returns suggested_headline, data_facts, image_prompt."""
+    from agents.brand_preamble import BRAND_PREAMBLE
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent.anthropic.messages.create = AsyncMock(return_value=_make_mfy_infographic_response())
+
+    story = {"title": "Central Banks Set Q1 Gold Buying Record", "source_name": "Reuters"}
+    deep_research = {"article_text": "Gold demand...", "corroborating_sources": [], "key_data_points": []}
+
+    result = await agent._research_and_draft(story, deep_research)
+    assert result is not None
+    draft_content, _, _ = result
+
+    assert draft_content.get("format") == "infographic"
+    assert "suggested_headline" in draft_content
+    assert "data_facts" in draft_content
+    assert "image_prompt" in draft_content
+    # image_prompt must start with BRAND_PREAMBLE verbatim
+    assert draft_content["image_prompt"].startswith(BRAND_PREAMBLE), \
+        "image_prompt must start with BRAND_PREAMBLE verbatim"
+
+
+# --- Test D: quote _draft_quote_post returns new three-field shape ---
+
+@pytest.mark.asyncio
+async def test_quote_draft_returns_three_new_fields():
+    """_draft_quote_post returns suggested_headline, data_facts, image_prompt for quote format."""
+    from agents.brand_preamble import BRAND_PREAMBLE
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent.anthropic.messages.create = AsyncMock(return_value=_make_mfy_quote_response())
+
+    quote_tweet = {
+        "author_name": "Janet Yellen",
+        "author_username": "JanetYellen",
+        "text": "Gold is the ultimate store of value.",
+        "tweet_url": "https://x.com/JanetYellen/status/123",
+    }
+    result = await agent._draft_quote_post(quote_tweet)
+    assert result is not None
+    draft_content = result
+
+    assert "suggested_headline" in draft_content
+    assert "data_facts" in draft_content
+    assert "image_prompt" in draft_content
+    assert draft_content["image_prompt"].startswith(BRAND_PREAMBLE), \
+        "quote image_prompt must start with BRAND_PREAMBLE verbatim"
+
+
+# --- Test E: suggested_headline length is soft (not truncated) ---
+
+@pytest.mark.asyncio
+async def test_infographic_long_headline_not_truncated():
+    """A >60-char suggested_headline is preserved as-is (soft hint only, no hard truncation)."""
+    long_headline = "X" * 80  # 80 chars, exceeds the 60-char guidance
+    obj = {
+        "format": "infographic",
+        "rationale": "Test",
+        "key_data_points": [],
+        "draft_content": {
+            "format": "infographic",
+            "twitter_caption": "Caption.",
+            "suggested_headline": long_headline,
+            "data_facts": ["fact 1"],
+            "image_prompt_direction": "A bar chart.",
+        },
+    }
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps(obj))]
+
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent.anthropic.messages.create = AsyncMock(return_value=mock_response)
+
+    story = {"title": "Test", "source_name": "Reuters"}
+    deep_research = {"article_text": "...", "corroborating_sources": [], "key_data_points": []}
+    result = await agent._research_and_draft(story, deep_research)
+    assert result is not None
+    draft_content, _, _ = result
+    # Long headline must be preserved exactly
+    assert draft_content.get("suggested_headline") == long_headline
+
+
+# --- Test F: data_facts clamped to 5 items ---
+
+@pytest.mark.asyncio
+async def test_infographic_data_facts_clamped_to_five():
+    """data_facts with >5 items is silently clamped to 5; never raises."""
+    many_facts = [f"fact {i}" for i in range(10)]
+    obj = {
+        "format": "infographic",
+        "rationale": "Test",
+        "key_data_points": [],
+        "draft_content": {
+            "format": "infographic",
+            "twitter_caption": "Caption.",
+            "suggested_headline": "Short headline",
+            "data_facts": many_facts,
+            "image_prompt_direction": "A bar chart.",
+        },
+    }
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps(obj))]
+
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent.anthropic.messages.create = AsyncMock(return_value=mock_response)
+
+    story = {"title": "Test", "source_name": "Reuters"}
+    deep_research = {"article_text": "...", "corroborating_sources": [], "key_data_points": []}
+    result = await agent._research_and_draft(story, deep_research)
+    assert result is not None
+    draft_content, _, _ = result
+    assert isinstance(draft_content.get("data_facts"), list)
+    assert len(draft_content["data_facts"]) <= 5
+
+
+# --- Test G: long_form 400-char floor still works ---
+# (G is covered by existing tests: test_long_form_accepted_at_minimum,
+#  test_long_form_rejected_below_minimum — no new test needed)
+
+
+# --- Test H: compliance check also screens suggested_headline and data_facts ---
+
+def test_compliance_screens_suggested_headline():
+    """_extract_check_text includes suggested_headline from infographic draft_content."""
+    import agents.content_agent as ca_module
+    dc = {
+        "format": "infographic",
+        "twitter_caption": "Normal tweet.",
+        "suggested_headline": "Seva Mining Announces 50% Dividend Yield Investment",
+        "data_facts": ["Gold up 5%"],
+        "image_prompt": "...",
+    }
+    text = ca_module._extract_check_text(dc)
+    assert "Seva Mining" in text, "_extract_check_text must include suggested_headline"
+
+
+def test_compliance_screens_data_facts():
+    """_extract_check_text includes data_facts strings from infographic draft_content."""
+    import agents.content_agent as ca_module
+    dc = {
+        "format": "infographic",
+        "twitter_caption": "Normal tweet.",
+        "suggested_headline": "Gold Rallies on Safe Haven Demand",
+        "data_facts": ["Buy gold now for guaranteed returns", "50% upside expected"],
+        "image_prompt": "...",
+    }
+    text = ca_module._extract_check_text(dc)
+    assert "guaranteed returns" in text, "_extract_check_text must include data_facts content"
 @pytest.mark.asyncio
 async def test_gate_accepts_single_company_ma():
     """Gate returns True for single-company M&A news."""
