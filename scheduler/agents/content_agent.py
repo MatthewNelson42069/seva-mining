@@ -299,22 +299,128 @@ def select_top_story(stories: list[dict], threshold: float) -> dict | None:
     return max(qualifying, key=lambda s: s.get("score", 0))
 
 
-def select_qualifying_stories(stories: list[dict], threshold: float) -> list[dict]:
-    """Return ALL stories scoring above threshold, sorted descending by score.
+def _is_within_window(
+    published,
+    window_hours: float,
+    now: "datetime | None" = None,
+) -> bool:
+    """Return True if published is within window_hours of now.
 
-    Replaces select_top_story() for multi-story output. The pipeline now surfaces
-    every story that clears the quality bar in a single run.
+    Accepts datetime objects (as stored by RSS/SerpAPI ingest) or ISO strings.
+    Mirrors recency_score() timezone handling.
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if isinstance(published, str):
+        try:
+            published = datetime.fromisoformat(published.replace("Z", "+00:00"))
+        except ValueError:
+            return False
+    if published.tzinfo is None:
+        published = published.replace(tzinfo=timezone.utc)
+    age_hours = (now - published).total_seconds() / 3600
+    return age_hours <= window_hours
+
+
+async def classify_format_lightweight(story: dict, *, client) -> str:
+    """Lightweight Haiku format classifier for slice-priority decision.
+
+    Uses claude-3-5-haiku-latest (cheap) — full Sonnet format+draft call happens
+    later only for the top-N selected stories.
+
+    Returns one of: breaking_news | thread | long_form | infographic | quote.
+    Fail-open: returns "thread" (current ambiguous default) on any error or
+    unexpected output.
+    """
+    valid_formats = {"breaking_news", "thread", "long_form", "infographic", "quote"}
+    try:
+        response = await client.messages.create(
+            model="claude-3-5-haiku-latest",
+            max_tokens=20,
+            system="You are a content format classifier. Reply with one word.",
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Title: {story['title']}\n"
+                    f"Summary: {story.get('summary', '')[:500]}\n"
+                    f"Published: {story.get('published', '')}\n\n"
+                    "Which content format best fits? Choose exactly one: "
+                    "breaking_news | thread | long_form | infographic | quote. "
+                    "Reply with ONLY the format name."
+                ),
+            }],
+        )
+        result = response.content[0].text.strip().lower()
+        if result in valid_formats:
+            return result
+        logger.warning(
+            "classify_format_lightweight returned unexpected value '%s' — defaulting to 'thread'",
+            result,
+        )
+        return "thread"
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "classify_format_lightweight failed (%s) — defaulting to 'thread'",
+            type(exc).__name__,
+        )
+        return "thread"
+
+
+def select_qualifying_stories(
+    stories: list[dict],
+    threshold: float,
+    *,
+    max_count: int | None = None,
+    breaking_window_hours: float | None = None,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Return stories scoring above threshold, optionally capped at max_count.
+
+    When max_count is None: returns ALL qualifying sorted by score desc (unchanged).
+    When max_count is set: breaking_news format and fresh stories (within
+    breaking_window_hours) are prioritized — they fill the front of the slice
+    regardless of score; remaining slots go to highest-score regular stories.
 
     Args:
         stories: List of story dicts, each with a 'score' key (float).
-        threshold: Minimum score to qualify (strictly > threshold).
+                 Format-classified stories have 'predicted_format' set.
+        threshold: Minimum score (strictly >).
+        max_count: Maximum stories to return. None = no cap (backward compat).
+        breaking_window_hours: Stories published within this window are treated
+                               as priority. None = no recency-based priority.
+        now: Reference time for recency check. Defaults to datetime.now(UTC).
+             Inject in tests for determinism.
 
     Returns:
-        All qualifying stories sorted by score descending. Empty list if none qualify.
+        Qualifying stories, priority-first, sorted by score desc within each tier.
+        At most max_count if set.
     """
     qualifying = [s for s in stories if s.get("score", 0) > threshold]
-    qualifying.sort(key=lambda s: s.get("score", 0), reverse=True)
-    return qualifying
+    if not qualifying:
+        return []
+
+    if max_count is None:
+        qualifying.sort(key=lambda s: s.get("score", 0), reverse=True)
+        return qualifying
+
+    # Priority split: breaking_news format OR within recency window
+    _now = now or datetime.now(timezone.utc)
+
+    def _is_priority(s: dict) -> bool:
+        if s.get("predicted_format") == "breaking_news":
+            return True
+        if breaking_window_hours is not None:
+            return _is_within_window(s.get("published"), breaking_window_hours, _now)
+        return False
+
+    priority = [s for s in qualifying if _is_priority(s)]
+    regular = [s for s in qualifying if not _is_priority(s)]
+
+    priority.sort(key=lambda s: s.get("score", 0), reverse=True)
+    regular.sort(key=lambda s: s.get("score", 0), reverse=True)
+
+    combined = priority + regular
+    return combined[:max_count]
 
 
 # ---------------------------------------------------------------------------
@@ -1432,8 +1538,32 @@ For "quote" format, draft_content must have:
             story["score"] = (relevance * rel_weight + rec * rec_weight + cred * cred_weight) * 10
             scored.append(story)
 
-        # 5. Select all qualifying stories (multi-story)
-        qualifying = select_qualifying_stories(scored, threshold=threshold)
+        # 4b. Classify format per story for slice-priority decision (format-first pipeline).
+        # Uses cheap Haiku call — full Sonnet draft happens later only for top-N selected.
+        format_labels = await asyncio.gather(*[
+            classify_format_lightweight(s, client=self.anthropic) for s in scored
+        ])
+        for s, fmt in zip(scored, format_labels):
+            s["predicted_format"] = fmt
+
+        # 5. Select top-N qualifying stories (multi-story, breaking/fresh priority)
+        max_count = int(await self._get_config(session, "content_agent_max_stories_per_run", "5"))
+        breaking_window = float(await self._get_config(session, "content_agent_breaking_window_hours", "3"))
+        qualifying = select_qualifying_stories(
+            scored,
+            threshold=threshold,
+            max_count=max_count,
+            breaking_window_hours=breaking_window,
+        )
+        priority_count = sum(
+            1 for s in qualifying
+            if s.get("predicted_format") == "breaking_news"
+            or _is_within_window(s.get("published"), breaking_window)
+        )
+        logger.info(
+            "Top-%d slice: %d priority (breaking/fresh) + %d regular",
+            len(qualifying), priority_count, len(qualifying) - priority_count,
+        )
 
         if not qualifying:
             best = max(scored, key=lambda s: s["score"])

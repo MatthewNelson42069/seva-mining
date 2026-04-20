@@ -310,6 +310,8 @@ async def upsert_agent_config() -> None:
         "content_quality_threshold": "7.0",    # restored — feed narrowing + gold gate replace this workaround
         "content_agent_interval_hours": "3",   # Railway overwrites live DB on startup
         "content_recency_weight": "0.40",      # bump from 0.30 — favours fresher stories
+        "content_agent_max_stories_per_run": "5",
+        "content_agent_breaking_window_hours": "3",
     }
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:

@@ -37,6 +37,8 @@ CONFIG_DEFAULTS = [
     ("content_credibility_weight",        "0.30"),
     ("content_quality_threshold",         "7.0"),
     ("content_agent_interval_hours",       "3"),
+    ("content_agent_max_stories_per_run",  "5"),
+    ("content_agent_breaking_window_hours", "3"),
     ("morning_digest_schedule_hour",      "15"),
     ("gold_history_hour",                 "9"),
     ("gold_history_used_topics",          "[]"),

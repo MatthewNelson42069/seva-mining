@@ -760,3 +760,144 @@ async def test_long_form_boundary_399_chars():
 
     assert result is None
     assert agent._skipped_short_longform == 1
+
+
+# ---------------------------------------------------------------------------
+# quick-260419-rqx: classify_format_lightweight tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_classify_format_lightweight_returns_valid_format():
+    """classify_format_lightweight returns the format name when Haiku responds correctly."""
+    ca = _get_content_agent()
+    story = {"title": "Fed signals rate cut as inflation cools", "summary": "Breaking macro news.", "published": ""}
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="breaking_news")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.classify_format_lightweight(story, client=mock_client)
+    assert result == "breaking_news"
+
+
+@pytest.mark.asyncio
+async def test_classify_format_lightweight_fails_open_to_thread():
+    """classify_format_lightweight returns 'thread' when Haiku raises."""
+    ca = _get_content_agent()
+    story = {"title": "Gold rally", "summary": "", "published": ""}
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(side_effect=Exception("API down"))
+    result = await ca.classify_format_lightweight(story, client=mock_client)
+    assert result == "thread"
+
+
+@pytest.mark.asyncio
+async def test_classify_format_lightweight_clamps_invalid_output():
+    """classify_format_lightweight returns 'thread' when Haiku returns garbage."""
+    ca = _get_content_agent()
+    story = {"title": "Barrick earnings", "summary": "", "published": ""}
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="garbage response xyz")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.classify_format_lightweight(story, client=mock_client)
+    assert result == "thread"
+
+
+# ---------------------------------------------------------------------------
+# quick-260419-rqx: select_qualifying_stories — top-N + priority tests
+# ---------------------------------------------------------------------------
+
+def test_select_qualifying_stories_respects_max_count():
+    """select_qualifying_stories(max_count=5) returns exactly 5 when >5 qualify."""
+    ca = _get_content_agent()
+    now = datetime(2026, 4, 20, 12, 0, 0, tzinfo=timezone.utc)
+    old = now - timedelta(hours=48)
+    stories = [
+        {"title": f"Story {i}", "score": 7.5 + i * 0.1, "published": old, "predicted_format": "thread"}
+        for i in range(10)
+    ]
+    result = ca.select_qualifying_stories(stories, threshold=7.0, max_count=5, now=now)
+    assert len(result) == 5
+    # Sorted descending by score
+    scores = [s["score"] for s in result]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_select_qualifying_stories_prioritizes_breaking_format():
+    """Breaking_news stories appear before higher-scored regular stories in the slice."""
+    ca = _get_content_agent()
+    now = datetime(2026, 4, 20, 12, 0, 0, tzinfo=timezone.utc)
+    old = now - timedelta(hours=48)
+    breaking = [
+        {"title": f"Breaking {i}", "score": s, "published": old, "predicted_format": "breaking_news"}
+        for i, s in enumerate([7.5, 7.3, 7.1])
+    ]
+    regular = [
+        {"title": f"Regular {i}", "score": s, "published": old, "predicted_format": "thread"}
+        for i, s in enumerate([9.0, 8.9, 8.8, 8.7, 8.6])
+    ]
+    result = ca.select_qualifying_stories(
+        breaking + regular, threshold=7.0, max_count=5, now=now
+    )
+    assert len(result) == 5
+    # All 3 breaking news stories in first 3 slots
+    assert result[0]["predicted_format"] == "breaking_news"
+    assert result[1]["predicted_format"] == "breaking_news"
+    assert result[2]["predicted_format"] == "breaking_news"
+    # Breaking sorted desc by score
+    assert result[0]["score"] == 7.5
+    assert result[1]["score"] == 7.3
+    # Regular stories fill remaining slots, highest score first
+    assert result[3]["score"] == 9.0
+    assert result[4]["score"] == 8.9
+
+
+def test_select_qualifying_stories_prioritizes_fresh_by_recency():
+    """Fresh stories (within breaking_window_hours) appear before older higher-scored ones."""
+    ca = _get_content_agent()
+    now = datetime(2026, 4, 20, 12, 0, 0, tzinfo=timezone.utc)
+    fresh = [
+        {"title": f"Fresh {i}", "score": s, "published": now - timedelta(hours=1), "predicted_format": "thread"}
+        for i, s in enumerate([7.4, 7.2])
+    ]
+    old = [
+        {"title": f"Old {i}", "score": s, "published": now - timedelta(hours=48), "predicted_format": "thread"}
+        for i, s in enumerate([9.0, 8.9, 8.8, 8.7, 8.6, 8.5, 8.4, 8.3, 8.2, 8.1])
+    ]
+    result = ca.select_qualifying_stories(
+        fresh + old, threshold=7.0, max_count=5, breaking_window_hours=3.0, now=now
+    )
+    assert len(result) == 5
+    # Fresh stories occupy first 2 slots
+    fresh_titles = {s["title"] for s in result[:2]}
+    assert "Fresh 0" in fresh_titles
+    assert "Fresh 1" in fresh_titles
+
+
+def test_select_qualifying_stories_fewer_than_cap_returns_all():
+    """When fewer stories than max_count qualify, returns all qualifying."""
+    ca = _get_content_agent()
+    now = datetime(2026, 4, 20, 12, 0, 0, tzinfo=timezone.utc)
+    old = now - timedelta(hours=48)
+    stories = [
+        {"title": f"Story {i}", "score": 7.5 + i * 0.1, "published": old, "predicted_format": "thread"}
+        for i in range(3)
+    ]
+    result = ca.select_qualifying_stories(stories, threshold=7.0, max_count=5, now=now)
+    assert len(result) == 3
+
+
+def test_select_qualifying_stories_no_max_count_unchanged_behavior():
+    """Without max_count, returns all qualifying sorted desc (backward compat)."""
+    ca = _get_content_agent()
+    stories = [
+        {"title": "A", "score": 8.5},
+        {"title": "B", "score": 9.2},
+        {"title": "C", "score": 6.9},  # below threshold
+        {"title": "D", "score": 7.8},
+    ]
+    result = ca.select_qualifying_stories(stories, threshold=7.0)
+    assert len(result) == 3
+    assert result[0]["score"] == 9.2
+    assert result[1]["score"] == 8.5
+    assert result[2]["score"] == 7.8
