@@ -201,6 +201,7 @@ None yet.
 | 260419-ko3 | Fix 8 pre-existing test failures (backend + scheduler + frontend) | 2026-04-19 | 0cd0432 | | [260419-ko3](./quick/260419-ko3-fix-8-pre-existing-test-failures-across-/) |
 | 260419-l5t | Post-v1.0.1 health-check cleanup: env.example hygiene, ruff+eslint lint-zero, JWT_SECRET length assertion | 2026-04-19 | 8bfdfea | Verified | [260419-l5t](./quick/260419-l5t-post-v1-0-1-health-check-cleanup-env-exa/) |
 | 260419-lvy | Full purge Instagram agent + content queue run-grouping (deprecated Phase 6) | 2026-04-19 | b2ff329 / accf735 / 2eb9125 / 4ab94e7 | Verified | [260419-lvy](./quick/260419-lvy-full-purge-instagram-agent-content-queue/) |
+| 260419-n4f | Content agent relevance cleanup — Bloomberg commodities swap, drop Investing.com, sharpen prompt, two-bucket gold gate, restore 7.0 threshold | 2026-04-19 | 502ae3e / 010926d / 2cfc9cb | Verified | [260419-n4f](./quick/260419-n4f-content-agent-relevance-cleanup-swap-blo/) |
 
 ### Blockers/Concerns
 
@@ -210,6 +211,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-19T23:45:00.000Z
-Stopped at: Completed quick task 260419-lvy — full purge Instagram agent + content queue run-grouping (Seva Mining now a three-agent system)
+Last session: 2026-04-19T23:59:00.000Z
+Stopped at: Completed quick task 260419-n4f — content agent relevance cleanup (Bloomberg commodities swap, drop Investing.com RSS, sharpen prompt, two-bucket gold gate, restore 7.0 threshold)
 Resume file: None
