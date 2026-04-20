@@ -18,7 +18,6 @@ from sqlalchemy import text, select
 
 from database import engine  # single shared engine — avoids duplicate connection pools
 from models.config import Config
-from agents.chart_renderer_client import get_chart_renderer_client
 from agents.content_agent import ContentAgent
 from agents.gold_history_agent import GoldHistoryAgent
 from agents.twitter_agent import TwitterAgent
@@ -362,19 +361,6 @@ async def main() -> None:
     # Upsert engagement thresholds (overwrites existing values — code is source of truth)
     await upsert_agent_config()
 
-    # Start chart renderer subprocess (spawned once; persists across all infographic renders)
-    chart_client = get_chart_renderer_client()
-    try:
-        await chart_client.start()
-        logger.info("Chart renderer client started successfully.")
-    except Exception as exc:
-        # Non-fatal: chart renderer failure should not prevent scheduler startup.
-        # Infographic renders will fail with error responses but scheduler continues.
-        logger.error(
-            "Chart renderer client failed to start: %s — infographic renders will be degraded",
-            exc,
-        )
-
     global _scheduler
     _scheduler = await build_scheduler(engine)
     _scheduler.start()
@@ -387,11 +373,6 @@ async def main() -> None:
         logger.info("Scheduler worker shutting down.")
         _scheduler.shutdown()
     finally:
-        # Stop chart renderer subprocess on shutdown
-        try:
-            await get_chart_renderer_client().stop()
-        except Exception as exc:
-            logger.warning("Chart renderer client stop failed: %s", exc)
         await engine.dispose()
 
 

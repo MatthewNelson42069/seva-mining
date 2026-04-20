@@ -1,13 +1,17 @@
 """
-Tests for GET /content-bundles/{id} and POST /content-bundles/{id}/rerender endpoints.
+Tests for GET /content-bundles/{id} endpoint.
 
 Uses mock AsyncSession to avoid PostgreSQL-only type conflicts with SQLite.
-Requirements: CREV-02 (GET detail), CREV-06 (full payload), CREV-09 (rerender 202)
+Requirements: CREV-02 (GET detail), CREV-06 (full payload)
+
+Rerender endpoint and rendered_images surface area removed in quick-260420-mfy.
+The rendered_images DB column stays (operator-locked), but it is not part of
+the API response schema. The make_content_bundle helper still sets rendered_images
+on the mock object for DB-layer compatibility — it is simply not asserted via API.
 """
-import asyncio
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
@@ -37,7 +41,11 @@ def make_content_bundle(
     rendered_images: list | None = None,
     created_at: datetime | None = None,
 ) -> MagicMock:
-    """Create a MagicMock that mimics a ContentBundle ORM object."""
+    """Create a MagicMock that mimics a ContentBundle ORM object.
+
+    rendered_images is preserved on the mock for DB-layer compatibility,
+    but is no longer surfaced in API responses (schema removed in mfy pivot).
+    """
     bundle = MagicMock()
     bundle.id = id or uuid.uuid4()
     bundle.story_headline = story_headline
@@ -50,7 +58,7 @@ def make_content_bundle(
     bundle.deep_research = deep_research or {"key_data_points": ["Central banks bought 1,037t in 2023"]}  # noqa: E501
     bundle.draft_content = draft_content or {"format": "infographic", "headline": "Gold Surge"}
     bundle.compliance_passed = compliance_passed
-    bundle.rendered_images = rendered_images
+    bundle.rendered_images = rendered_images  # DB column stays; not in API response
     bundle.created_at = created_at or datetime(2026, 4, 16, 10, 0, 0, tzinfo=UTC)
     return bundle
 
@@ -71,7 +79,7 @@ def authed_headers() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Task 1 Tests: GET /content-bundles/{id}
+# Tests: GET /content-bundles/{id}
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
@@ -100,10 +108,8 @@ async def test_get_content_bundle_returns_full_bundle():
         data = resp.json()
         assert data["story_headline"] == "African central banks gold accumulation"
         assert data["draft_content"] == {"format": "infographic", "headline": "Gold Surge"}
-        assert "rendered_images" in data
-        assert len(data["rendered_images"]) == 1
-        assert data["rendered_images"][0]["role"] == "twitter_visual"
-        assert data["rendered_images"][0]["url"] == "https://r2.example/x.png"
+        # rendered_images is NOT in the API response (schema removed in mfy pivot)
+        assert "rendered_images" not in data
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -147,8 +153,12 @@ async def test_get_content_bundle_returns_404_for_missing():
 
 
 @pytest.mark.asyncio
-async def test_get_content_bundle_rendered_images_null_returns_null():
-    """GET /content-bundles/{id} with rendered_images=None returns null for the field."""
+async def test_get_content_bundle_rendered_images_not_in_response():
+    """GET /content-bundles/{id} does not include rendered_images in response body.
+
+    The rendered_images column stays in the DB (operator-locked), but the mfy pivot
+    removed it from the API response schema.
+    """
     bundle_id = uuid.uuid4()
     bundle = make_content_bundle(id=bundle_id, rendered_images=None)
     mock_db = make_mock_db(bundle)
@@ -163,138 +173,6 @@ async def test_get_content_bundle_rendered_images_null_returns_null():
 
         assert resp.status_code == 200
         data = resp.json()
-        assert "rendered_images" in data
-        assert data["rendered_images"] is None
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-
-# ---------------------------------------------------------------------------
-# Task 2 Tests: POST /content-bundles/{id}/rerender
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_rerender_returns_202():
-    """POST /content-bundles/{id}/rerender returns 202 with {bundle_id, render_job_id, enqueued_at}."""  # noqa: E501
-    bundle_id = uuid.uuid4()
-    bundle = make_content_bundle(id=bundle_id)
-    mock_db = make_mock_db(bundle)
-
-    async def override_get_db():
-        yield mock_db
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with patch("app.routers.content_bundles._get_render_bundle_job") as mock_get_job:
-            mock_job = AsyncMock()
-            mock_get_job.return_value = mock_job
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())  # noqa: E501
-
-        assert resp.status_code == 202
-        data = resp.json()
-        assert data["bundle_id"] == str(bundle_id)
-        assert "render_job_id" in data
-        assert "enqueued_at" in data
-        assert data["render_job_id"].startswith("rerender_")
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.mark.asyncio
-async def test_rerender_clears_existing_images():
-    """POST /content-bundles/{id}/rerender clears bundle.rendered_images to [] before enqueueing."""  # noqa: E501
-    bundle_id = uuid.uuid4()
-    bundle = make_content_bundle(
-        id=bundle_id,
-        rendered_images=[{
-            "role": "twitter_visual",
-            "url": "https://r2.example/old.png",
-            "generated_at": "2026-04-16T00:00:00+00:00",
-        }],
-    )
-    mock_db = make_mock_db(bundle)
-
-    async def override_get_db():
-        yield mock_db
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with patch("app.routers.content_bundles._get_render_bundle_job") as mock_get_job:
-            mock_job = AsyncMock()
-            mock_get_job.return_value = mock_job
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())  # noqa: E501
-
-        assert resp.status_code == 202
-        # Verify rendered_images was cleared to [] before commit
-        assert bundle.rendered_images == []
-        mock_db.commit.assert_awaited_once()
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.mark.asyncio
-async def test_rerender_404_on_missing_bundle():
-    """POST /content-bundles/{random_uuid}/rerender returns 404."""
-    mock_db = make_mock_db(None)
-
-    async def override_get_db():
-        yield mock_db
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/content-bundles/{uuid.uuid4()}/rerender", headers=authed_headers())  # noqa: E501
-
-        assert resp.status_code == 404
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.mark.asyncio
-async def test_rerender_requires_auth():
-    """POST /content-bundles/{id}/rerender returns 401/403 without token."""
-    bundle_id = uuid.uuid4()
-    mock_db = make_mock_db(make_content_bundle(id=bundle_id))
-
-    async def override_get_db():
-        yield mock_db
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/content-bundles/{bundle_id}/rerender")
-
-        assert resp.status_code in (401, 403)
-    finally:
-        app.dependency_overrides.pop(get_db, None)
-
-
-@pytest.mark.asyncio
-async def test_rerender_enqueues_render_bundle_job():
-    """POST /content-bundles/{id}/rerender fires render_bundle_job via asyncio.create_task."""
-    bundle_id = uuid.uuid4()
-    bundle = make_content_bundle(id=bundle_id)
-    mock_db = make_mock_db(bundle)
-
-    async def override_get_db():
-        yield mock_db
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        with patch("app.routers.content_bundles._get_render_bundle_job") as mock_get_job:
-            mock_job = AsyncMock()
-            mock_get_job.return_value = mock_job
-
-            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.post(f"/content-bundles/{bundle_id}/rerender", headers=authed_headers())  # noqa: E501
-
-            # Let the event loop tick so create_task runs the coroutine
-            await asyncio.sleep(0.05)
-
-        assert resp.status_code == 202
-        mock_get_job.assert_called_once()
-        mock_job.assert_awaited_once_with(str(bundle_id))
+        assert "rendered_images" not in data
     finally:
         app.dependency_overrides.pop(get_db, None)
