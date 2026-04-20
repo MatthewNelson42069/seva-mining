@@ -8,3 +8,7 @@ __pycache__/
 dist/
 build/
 .ruff_cache/
+
+# Chart renderer fonts — downloaded at Docker build time, not committed to repo
+scheduler/chart_renderer/fonts/*.ttf
+scheduler/chart_renderer/node_modules/

@@ -1,0 +1,149 @@
+'use strict';
+/**
+ * render-chart.js — Long-running stdin/stdout chart renderer for Seva Mining.
+ *
+ * Protocol:
+ *   Input  (stdin):  one JSON line per request, matching ChartSpec schema
+ *   Output (stdout): one JSON line per response
+ *     - success: { "png_b64": "<base64-encoded PNG>" }
+ *     - failure: { "error": "<message>" }
+ *
+ * Fonts: Inter-Regular.ttf and Inter-Bold.ttf must exist at ./fonts/ before start.
+ * The download-fonts.sh script fetches them at Docker build time.
+ *
+ * IMPORTANT: use process.stdout.write (NOT console.log) for protocol reliability.
+ * console.log adds no extra buffering but using write makes the newline delimiter explicit.
+ */
+
+const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
+const React = require('react');
+const ReactDOMServer = require('react-dom/server');
+const { Resvg } = require('@resvg/resvg-js');
+
+// Load chart components
+// Note: .jsx extension is required because Node's CJS loader does not auto-resolve .jsx
+const BarChart = require('./components/BarChart.jsx');
+const HorizontalBarChart = require('./components/HorizontalBarChart.jsx');
+const LineChart = require('./components/LineChart.jsx');
+const AreaChart = require('./components/AreaChart.jsx');
+const StatCallouts = require('./components/StatCallouts.jsx');
+const ComparisonTable = require('./components/ComparisonTable.jsx');
+const Timeline = require('./components/Timeline.jsx');
+
+// ---------------------------------------------------------------------------
+// Font loading — load at startup, reuse across all renders
+// ---------------------------------------------------------------------------
+
+let fontRegular = null;
+let fontBold = null;
+
+try {
+  fontRegular = new Uint8Array(fs.readFileSync(path.join(__dirname, 'fonts', 'Inter-Regular.ttf')));
+  fontBold = new Uint8Array(fs.readFileSync(path.join(__dirname, 'fonts', 'Inter-Bold.ttf')));
+} catch (err) {
+  process.stderr.write(`[render-chart] WARNING: Could not load Inter fonts: ${err.message}\n`);
+  process.stderr.write('[render-chart] Text rendering may fall back to system fonts.\n');
+}
+
+// ---------------------------------------------------------------------------
+// Chart type dispatch
+// ---------------------------------------------------------------------------
+
+/**
+ * Select the correct component for a given chart spec type.
+ * Returns null if type is unrecognized (caller handles error response).
+ */
+function getComponent(type) {
+  switch (type) {
+    case 'bar':               return BarChart;
+    case 'horizontal_bar':    return HorizontalBarChart;
+    case 'line':              return LineChart;
+    case 'multi_line':        return LineChart;   // LineChart handles both via props
+    case 'area':              return AreaChart;
+    case 'stacked_area':      return AreaChart;   // AreaChart handles both via props
+    case 'stat_callouts':     return StatCallouts;
+    case 'comparison_table':  return ComparisonTable;
+    case 'timeline':          return Timeline;
+    default:                  return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Render a single ChartSpec to PNG bytes
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a chart spec to a PNG Buffer.
+ *
+ * @param {Object} spec - ChartSpec JSON object
+ * @returns {Buffer} PNG image bytes
+ */
+function renderChart(spec) {
+  const Component = getComponent(spec.type);
+  if (!Component) {
+    throw new Error(`Unknown chart type: ${spec.type}`);
+  }
+
+  const width = spec.width || 1200;
+  const height = spec.height || 675;
+
+  // renderToStaticMarkup requires explicit width/height — NEVER use ResponsiveContainer.
+  // Recharts v2.x SSR works with fixed dimensions; v3.x SSR is broken (issue #5997).
+  const svgString = ReactDOMServer.renderToStaticMarkup(
+    React.createElement(Component, { ...spec, width, height })
+  );
+
+  const resvgOpts = {
+    fitTo: { mode: 'width', value: width },
+  };
+
+  // Only attach font config if fonts were loaded successfully
+  if (fontRegular || fontBold) {
+    const fontBuffers = [];
+    if (fontRegular) fontBuffers.push(fontRegular);
+    if (fontBold) fontBuffers.push(fontBold);
+    resvgOpts.font = {
+      fontBuffers,
+      loadSystemFonts: false,
+    };
+  }
+
+  const resvg = new Resvg(svgString, resvgOpts);
+  return resvg.render().asPng();
+}
+
+// ---------------------------------------------------------------------------
+// stdin/stdout event loop
+// ---------------------------------------------------------------------------
+
+const rl = readline.createInterface({ input: process.stdin });
+
+rl.on('line', (line) => {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+
+  let spec;
+  try {
+    spec = JSON.parse(trimmed);
+  } catch (err) {
+    process.stdout.write(JSON.stringify({ error: `JSON parse error: ${err.message}` }) + '\n');
+    return;
+  }
+
+  try {
+    const pngBuffer = renderChart(spec);
+    const pngB64 = pngBuffer.toString('base64');
+    process.stdout.write(JSON.stringify({ png_b64: pngB64 }) + '\n');
+  } catch (err) {
+    process.stdout.write(JSON.stringify({ error: err.message }) + '\n');
+  }
+});
+
+rl.on('close', () => {
+  // stdin closed — Node process exits naturally
+  process.exit(0);
+});
+
+process.stderr.write('[render-chart] Chart renderer started. Waiting for input...\n');
