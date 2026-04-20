@@ -27,15 +27,14 @@ from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.config import Config
 from models.draft_item import DraftItem
-from models.keyword import Keyword
 from models.watchlist import Watchlist
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Gold-sector keyword list for topic filtering (TWIT-01)
-# Used in _apply_topic_filter() as a fast case-insensitive keyword check
-# before falling back to Claude classification for watchlist tweets.
+# Used in _apply_topic_filter() as a literal case-insensitive keyword check.
+# No LLM fallback — per operator rule quick-260420-lw4.
 # ---------------------------------------------------------------------------
 GOLD_KEYWORDS: list[str] = [
     "gold",
@@ -67,6 +66,15 @@ GOLD_KEYWORDS: list[str] = [
     "gold rally",
     "gold outlook",
 ]
+
+# Watchlist handles that bypass topic + engagement filters entirely.
+# Per operator rule (quick-260420-lw4), every tweet from these accounts
+# reaches the scoring pipeline regardless of gold-keyword match or like
+# count — these are our highest-signal watchlist sources. Compare using
+# `account_handle.lower()` (Twitter usernames are case-insensitive).
+ALWAYS_ENGAGE_HANDLES: frozenset[str] = frozenset({
+    "goldtelegraph_",  # @GoldTelegraph_ — gold sector news and commentary
+})
 
 # X API tweet fields to request in every search/fetch call
 TWEET_FIELDS = ["created_at", "public_metrics", "author_id", "text"]
@@ -357,16 +365,6 @@ class TwitterAgent:
         )
         return list(result.scalars().all())
 
-    async def _load_keywords(self, session: AsyncSession) -> list[Keyword]:
-        """Load active keywords for Twitter (platform='twitter' or platform=NULL)."""
-        result = await session.execute(
-            select(Keyword).where(
-                (Keyword.platform == "twitter") | (Keyword.platform.is_(None)),
-                Keyword.active.is_(True),
-            )
-        )
-        return list(result.scalars().all())
-
     async def _get_last_run_time(self, session: AsyncSession) -> datetime:
         """Return the ended_at time of the most recent completed twitter_agent run.
 
@@ -483,126 +481,6 @@ class TwitterAgent:
 
         return tweets
 
-    async def _fetch_keyword_tweets(
-        self,
-        session: AsyncSession,
-        keywords: list[Keyword],
-        since: datetime,
-    ) -> list[dict]:
-        """Fetch tweets matching gold-sector keywords via search_recent_tweets().
-
-        Builds X API v2 query strings from keyword list, splits at 512-char limit,
-        deduplicates by tweet ID across queries.
-        """
-        if not keywords:
-            return []
-
-        # Build query strings from keywords, respecting 512-char limit
-        queries = self._build_keyword_queries(keywords)
-        seen_ids: set[str] = set()
-        tweets: list[dict] = []
-        total_fetched = 0
-
-        for query in queries:
-            try:
-                response = await self.tweepy_client.search_recent_tweets(
-                    query=query,
-                    max_results=30,
-                    tweet_fields=TWEET_FIELDS,
-                    expansions=["author_id"],
-                    user_fields=USER_FIELDS,
-                    start_time=since,
-                )
-            except Exception as exc:
-                logger.warning("Keyword search failed (query='%s...'): %s", query[:60], exc)
-                continue
-
-            if not response or not response.data:
-                continue
-
-            # Build user map from includes for follower counts
-            user_map: dict[str, any] = {}
-            if response.includes and response.includes.get("users"):
-                for user in response.includes["users"]:
-                    user_map[str(user.id)] = user
-
-            for tweet in response.data:
-                tweet_id = str(tweet.id)
-                if tweet_id in seen_ids:
-                    continue
-                seen_ids.add(tweet_id)
-
-                metrics = tweet.public_metrics or {}
-                author = user_map.get(str(tweet.author_id))
-                follower_count = None
-                if author and author.public_metrics:
-                    follower_count = author.public_metrics.get("followers_count")
-
-                tweet_dict = {
-                    "id": tweet_id,
-                    "text": tweet.text,
-                    "created_at": tweet.created_at,
-                    "author_id": str(tweet.author_id),
-                    "account_handle": author.username if author else None,
-                    "likes": metrics.get("like_count", 0),
-                    "retweets": metrics.get("retweet_count", 0),
-                    "replies": metrics.get("reply_count", 0),
-                    "views": metrics.get("impression_count"),
-                    "is_watchlist": False,
-                    "relationship_value": 1,
-                    "follower_count": follower_count,
-                }
-                tweets.append(tweet_dict)
-                total_fetched += 1
-
-        # Count ALL fetched tweets against quota
-        if total_fetched > 0:
-            await self._increment_quota(session, total_fetched)
-
-        return tweets
-
-    def _build_keyword_queries(self, keywords: list[Keyword]) -> list[str]:
-        """Build X API v2 query strings from keyword list.
-
-        Appends -is:retweet lang:en to every query.
-        Splits into multiple queries if combined query exceeds 512 chars.
-
-        Returns:
-            List of query strings, each <= 512 chars.
-        """
-        suffix = " -is:retweet lang:en"
-        max_len = 512 - len(suffix)
-
-        parts: list[str] = []
-        for kw in keywords:
-            term = kw.term.strip()
-            # Quote multi-word terms; cashtags and hashtags don't need quotes
-            if " " in term and not term.startswith(("$", "#")):
-                parts.append(f'"{term}"')
-            else:
-                parts.append(term)
-
-        # Combine with OR up to the 512-char limit
-        queries: list[str] = []
-        current_parts: list[str] = []
-        current_len = 0
-
-        for part in parts:
-            # +4 for " OR " separator
-            needed = len(part) + (4 if current_parts else 0)
-            if current_len + needed > max_len and current_parts:
-                queries.append(" OR ".join(current_parts) + suffix)
-                current_parts = [part]
-                current_len = len(part)
-            else:
-                current_parts.append(part)
-                current_len += needed
-
-        if current_parts:
-            queries.append(" OR ".join(current_parts) + suffix)
-
-        return queries
-
     # -----------------------------------------------------------------------
     # Topic filtering
     # -----------------------------------------------------------------------
@@ -612,42 +490,16 @@ class TwitterAgent:
         tweet_text: str,
         is_watchlist: bool = False,
     ) -> bool:
-        """Filter tweet for gold-sector relevance.
+        """Filter tweet for gold-sector relevance via literal GOLD_KEYWORDS match.
 
-        Step 1: Case-insensitive keyword check against GOLD_KEYWORDS list.
-        Step 2 (watchlist only): Claude haiku classification fallback for borderline cases.
-
-        Returns:
-            True if tweet is gold-sector relevant, False otherwise.
+        Per operator rule (quick-260420-lw4): literal case-insensitive substring
+        match only. No LLM fallback — if GOLD_KEYWORDS does not contain the topic,
+        we do not want it. `is_watchlist` kept for signature stability but unused.
         """
         text_lower = tweet_text.lower()
         for keyword in GOLD_KEYWORDS:
             if keyword.lower() in text_lower:
                 return True
-
-        # Keyword check failed — for watchlist tweets, use Claude as fallback
-        if is_watchlist:
-            try:
-                message = await self.anthropic.messages.create(
-                    model="claude-sonnet-4-6",
-                    max_tokens=10,
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": (
-                                "Is this tweet substantively about gold, precious metals, "
-                                "or gold mining? Answer only YES or NO.\n\n"
-                                f"Tweet: {tweet_text}"
-                            ),
-                        }
-                    ],
-                )
-                answer = message.content[0].text.strip().upper()
-                return answer == "YES"
-            except Exception as exc:
-                logger.warning("Claude topic filter failed: %s", exc)
-                return False
-
         return False
 
     # -----------------------------------------------------------------------
@@ -1033,64 +885,70 @@ class TwitterAgent:
 
         # Step 3: Load data
         watchlist = await self._load_watchlist(session)
-        keywords = await self._load_keywords(session)
         logger.info(
-            "TwitterAgent: %d watchlist accounts, %d keywords loaded.",
+            "TwitterAgent: %d watchlist accounts loaded (keyword search disabled per operator rule 260420-lw4).",
             len(watchlist),
-            len(keywords),
         )
 
         # Step 4: Get since time
         since = await self._get_last_run_time(session)
 
-        # Step 5: Fetch tweets
+        # Step 5: Fetch tweets (watchlist-only per operator rule quick-260420-lw4)
         watchlist_tweets = await self._fetch_watchlist_tweets(session, watchlist, since)
-        keyword_tweets = await self._fetch_keyword_tweets(session, keywords, since)
-
-        # Deduplicate across both sources by tweet ID.
-        # Watchlist entry wins over keyword entry (preserves is_watchlist=True so the
-        # lower engagement gate and authority score are applied correctly).
-        seen_ids: set[str] = {t["id"] for t in watchlist_tweets}
-        deduped_keyword_tweets = [t for t in keyword_tweets if t["id"] not in seen_ids]
-        duplicates_removed = len(keyword_tweets) - len(deduped_keyword_tweets)
-        all_tweets = watchlist_tweets + deduped_keyword_tweets
+        all_tweets = watchlist_tweets
 
         items_found = len(all_tweets)
         logger.info(
-            "TwitterAgent: fetched %d watchlist tweets, %d keyword tweets "
-            "(%d cross-source duplicates removed, %d total).",
-            len(watchlist_tweets),
-            len(keyword_tweets),
-            duplicates_removed,
+            "TwitterAgent: fetched %d watchlist tweets (watchlist-only ingestion).",
             items_found,
         )
 
-        # Step 6: Topic filter
-        # Keyword tweets already matched by Twitter search — skip filter, always include.
-        # Watchlist tweets are from followed accounts who may post off-topic — filter those.
+        # Step 6: Topic filter — literal GOLD_KEYWORDS match (operator rule 260420-lw4)
+        # Exception: ALWAYS_ENGAGE_HANDLES (Gold Telegraph) bypass this filter
+        # unconditionally — every tweet from those accounts proceeds to the
+        # engagement-gate step regardless of whether it mentions gold.
         topic_filtered: list[dict] = []
+        topic_bypassed = 0
         for tweet in all_tweets:
-            if not tweet["is_watchlist"]:
-                # Keyword search already guarantees relevance
+            handle = (tweet.get("account_handle") or "").lower()
+            if handle in ALWAYS_ENGAGE_HANDLES:
                 topic_filtered.append(tweet)
-            else:
-                relevant = await self._apply_topic_filter(
-                    tweet["text"],
-                    is_watchlist=True,
+                topic_bypassed += 1
+                logger.info(
+                    "TwitterAgent: always-engage bypass — @%s tweet %s skipped topic filter.",
+                    tweet.get("account_handle") or "unknown",
+                    tweet.get("tweet_id") or tweet.get("id") or "unknown",
                 )
-                if relevant:
-                    topic_filtered.append(tweet)
+                continue
+            if await self._apply_topic_filter(
+                tweet["text"],
+                is_watchlist=tweet["is_watchlist"],
+            ):
+                topic_filtered.append(tweet)
 
         items_filtered_by_topic = items_found - len(topic_filtered)
         logger.info(
-            "TwitterAgent: %d tweets after topic filter (%d filtered out).",
+            "TwitterAgent: %d tweets after topic filter (%d filtered out, %d bypassed via ALWAYS_ENGAGE_HANDLES).",
             len(topic_filtered),
             items_filtered_by_topic,
+            topic_bypassed,
         )
 
-        # Step 7: Engagement gate
-        gate_passed: list[dict] = []
+        # Step 7: Engagement gate — min likes (operator rule 260420-lw4)
+        # Exception: ALWAYS_ENGAGE_HANDLES bypass this gate unconditionally.
+        gated: list[dict] = []
+        gate_bypassed = 0
         for tweet in topic_filtered:
+            handle = (tweet.get("account_handle") or "").lower()
+            if handle in ALWAYS_ENGAGE_HANDLES:
+                gated.append(tweet)
+                gate_bypassed += 1
+                logger.info(
+                    "TwitterAgent: always-engage bypass — @%s tweet %s skipped engagement gate.",
+                    tweet.get("account_handle") or "unknown",
+                    tweet.get("tweet_id") or tweet.get("id") or "unknown",
+                )
+                continue
             if passes_engagement_gate(
                 likes=tweet["likes"],
                 views=tweet["views"],
@@ -1100,14 +958,16 @@ class TwitterAgent:
                 min_likes_watchlist=min_likes_watchlist,
                 min_views_watchlist=min_views_watchlist,
             ):
-                gate_passed.append(tweet)
+                gated.append(tweet)
 
+        gate_passed = gated
         items_filtered_by_gate = len(topic_filtered) - len(gate_passed)
         items_filtered = items_filtered_by_topic + items_filtered_by_gate
         logger.info(
-            "TwitterAgent: %d tweets passed engagement gate (%d filtered out).",
+            "TwitterAgent: %d tweets passed engagement gate (%d filtered out, %d bypassed via ALWAYS_ENGAGE_HANDLES).",
             len(gate_passed),
             items_filtered_by_gate,
+            gate_bypassed,
         )
 
         # Step 8: Score with recency decay

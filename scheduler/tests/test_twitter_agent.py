@@ -541,10 +541,8 @@ async def test_twitter_whatsapp_notification_fires_when_items_queued():
          patch.object(agent, "_check_quota", return_value=(True, 0)), \
          patch.object(agent, "_get_config", return_value=MagicMock(value="500")), \
          patch.object(agent, "_load_watchlist", return_value=[]), \
-         patch.object(agent, "_load_keywords", return_value=[]), \
          patch.object(agent, "_get_last_run_time", return_value=datetime.now(timezone.utc)), \
          patch.object(agent, "_fetch_watchlist_tweets", return_value=[]), \
-         patch.object(agent, "_fetch_keyword_tweets", return_value=[]), \
          patch.object(agent, "_process_drafts", return_value=(3, 0, [], ["id1", "id2", "id3"])), \
          patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
 
@@ -575,10 +573,8 @@ async def test_twitter_whatsapp_notification_skipped_when_no_items():
     with patch.object(agent, "_check_quota", return_value=(True, 0)), \
          patch.object(agent, "_get_config", return_value=MagicMock(value="500")), \
          patch.object(agent, "_load_watchlist", return_value=[]), \
-         patch.object(agent, "_load_keywords", return_value=[]), \
          patch.object(agent, "_get_last_run_time", return_value=datetime.now(timezone.utc)), \
          patch.object(agent, "_fetch_watchlist_tweets", return_value=[]), \
-         patch.object(agent, "_fetch_keyword_tweets", return_value=[]), \
          patch.object(agent, "_process_drafts", return_value=(0, 0, [], [])), \
          patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
 
@@ -610,13 +606,119 @@ async def test_twitter_whatsapp_failure_is_non_fatal():
          patch.object(agent, "_check_quota", return_value=(True, 0)), \
          patch.object(agent, "_get_config", return_value=MagicMock(value="500")), \
          patch.object(agent, "_load_watchlist", return_value=[]), \
-         patch.object(agent, "_load_keywords", return_value=[]), \
          patch.object(agent, "_get_last_run_time", return_value=datetime.now(timezone.utc)), \
          patch.object(agent, "_fetch_watchlist_tweets", return_value=[]), \
-         patch.object(agent, "_fetch_keyword_tweets", return_value=[]), \
          patch.object(agent, "_process_drafts", return_value=(2, 0, [], ["id1", "id2"])), \
          patch("services.whatsapp.send_whatsapp_message", side_effect=Exception("Twilio down")):
 
         mock_session.commit = AsyncMock()
         # Must NOT raise
         await agent._run_pipeline(mock_session, mock_agent_run)
+
+
+# ---------------------------------------------------------------------------
+# OP-LW4-04: Gold Telegraph universal bypass
+# ---------------------------------------------------------------------------
+
+def test_always_engage_handles_constant():
+    """ALWAYS_ENGAGE_HANDLES constant exists and contains 'goldtelegraph_'."""
+    from agents.twitter_agent import ALWAYS_ENGAGE_HANDLES
+    assert "goldtelegraph_" in ALWAYS_ENGAGE_HANDLES, (
+        "ALWAYS_ENGAGE_HANDLES must contain 'goldtelegraph_' (lowercased)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_gold_telegraph_bypasses_topic_and_engagement_filters(caplog):
+    """GoldTelegraph_ tweet with 0 likes and no gold keyword reaches scoring.
+
+    A Reuters tweet with the same properties (0 likes, no gold keyword) must NOT
+    reach scoring. Asserts that:
+    - _score_tweet is called exactly once (for GoldTelegraph_).
+    - The bypass log lines appear for GoldTelegraph_ in both Step 6 and Step 7.
+    - The Reuters tweet is silently dropped at the topic-filter step.
+    """
+    import sys
+    import logging
+    from agents.twitter_agent import TwitterAgent
+
+    agent = TwitterAgent.__new__(TwitterAgent)
+
+    # Two fake watchlist tweets — neither mentions gold, neither has likes.
+    gt_tweet = {
+        "id": "gt-tweet-1",
+        "text": "The Fed just printed more money",
+        "created_at": datetime.now(timezone.utc) - timedelta(hours=1),
+        "author_id": "111",
+        "account_handle": "GoldTelegraph_",
+        "likes": 0,
+        "retweets": 0,
+        "replies": 0,
+        "views": None,
+        "is_watchlist": True,
+        "relationship_value": 5,
+        "follower_count": 50000,
+    }
+    reuters_tweet = {
+        "id": "reuters-tweet-1",
+        "text": "Oil prices rise on supply worries",
+        "created_at": datetime.now(timezone.utc) - timedelta(hours=1),
+        "author_id": "222",
+        "account_handle": "Reuters",
+        "likes": 0,
+        "retweets": 0,
+        "replies": 0,
+        "views": None,
+        "is_watchlist": True,
+        "relationship_value": 1,
+        "follower_count": 5000000,
+    }
+
+    mock_session = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_agent_run = MagicMock()
+    mock_agent_run.items_found = 0
+    mock_agent_run.items_filtered = None
+    mock_agent_run.errors = []
+
+    score_tweet_calls: list[dict] = []
+
+    def fake_score_tweet(tweet: dict) -> dict:
+        score_tweet_calls.append(tweet)
+        return {**tweet, "composite_score": 5.0, "engagement_score": 0.0}
+
+    mock_senior = MagicMock()
+    mock_senior.process_new_items = AsyncMock()
+
+    with patch.dict(sys.modules, {"agents.senior_agent": mock_senior}), \
+         patch.object(agent, "_check_quota", return_value=(True, 0)), \
+         patch.object(agent, "_get_config", return_value=MagicMock(value="50")), \
+         patch.object(agent, "_load_watchlist", return_value=[]), \
+         patch.object(agent, "_get_last_run_time", return_value=datetime.now(timezone.utc)), \
+         patch.object(agent, "_fetch_watchlist_tweets", return_value=[gt_tweet, reuters_tweet]), \
+         patch.object(agent, "_score_tweet", side_effect=fake_score_tweet), \
+         patch.object(agent, "_process_drafts", return_value=(1, 0, [], ["gt-tweet-1"])), \
+         patch("services.whatsapp.send_whatsapp_message", new_callable=AsyncMock), \
+         caplog.at_level(logging.INFO, logger="agents.twitter_agent"):
+
+        await agent._run_pipeline(mock_session, mock_agent_run)
+
+    # GoldTelegraph_ must have reached _score_tweet; Reuters must not have.
+    assert len(score_tweet_calls) == 1, (
+        f"Expected exactly 1 tweet to reach scoring (GoldTelegraph_), got {len(score_tweet_calls)}: "
+        f"{[t.get('account_handle') for t in score_tweet_calls]}"
+    )
+    assert score_tweet_calls[0]["account_handle"] == "GoldTelegraph_", (
+        "The tweet that reached scoring must be from GoldTelegraph_"
+    )
+
+    # Both bypass log lines must appear for GoldTelegraph_
+    assert "always-engage bypass" in caplog.text, (
+        "Expected 'always-engage bypass' log line for GoldTelegraph_ tweet"
+    )
+    assert "skipped topic filter" in caplog.text, (
+        "Expected 'skipped topic filter' log entry for GoldTelegraph_"
+    )
+    assert "skipped engagement gate" in caplog.text, (
+        "Expected 'skipped engagement gate' log entry for GoldTelegraph_"
+    )
