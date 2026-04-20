@@ -8,10 +8,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        # Tolerate extra env vars so the backend process can load
-        # scheduler.agents.image_render_agent via importlib without choking on
-        # backend-only vars (jwt_secret, dashboard_password, …) in the shared
-        # .env / Railway project env space. See Plan 11-07 finalization.
+        # Tolerate extra env vars so the backend and scheduler share a single
+        # .env / Railway project env space without choking on each other's vars.
         extra="ignore",
     )
 
@@ -30,13 +28,6 @@ class Settings(BaseSettings):
     digest_whatsapp_to: Optional[str] = None
     frontend_url: str = "http://localhost:5173"
 
-    # Phase 11 — Image rendering (Gemini / Cloudflare R2)
-    gemini_api_key: Optional[str] = None
-    r2_account_id: Optional[str] = None
-    r2_access_key_id: Optional[str] = None
-    r2_secret_access_key: Optional[str] = None
-    r2_bucket: Optional[str] = None
-    r2_public_base_url: Optional[str] = None
 
 
 @lru_cache

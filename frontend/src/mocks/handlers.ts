@@ -271,7 +271,7 @@ export const handlers = [
     })
   }),
 
-  // Phase 11 — content-bundle detail + rerender (Plan 11-05/06 test coverage)
+  // mfy pivot — content-bundle detail (no rerender, no rendered_images)
   http.get('/content-bundles/:id', ({ params }) => {
     return HttpResponse.json({
       id: params.id,
@@ -279,18 +279,7 @@ export const handlers = [
       content_type: 'infographic',
       no_story_flag: false,
       draft_content: {},
-      rendered_images: [],
       created_at: new Date().toISOString(),
     })
-  }),
-  http.post('/content-bundles/:id/rerender', ({ params }) => {
-    return HttpResponse.json(
-      {
-        bundle_id: params.id,
-        render_job_id: `rerender_${params.id}_${Date.now()}`,
-        enqueued_at: new Date().toISOString(),
-      },
-      { status: 202 }
-    )
   }),
 ]

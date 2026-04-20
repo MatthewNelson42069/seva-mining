@@ -10,10 +10,6 @@ import type { DraftItemResponse, ContentBundleDetailResponse } from '@/api/types
 // ---------------------------------------------------------------------------
 vi.mock('@/hooks/useContentBundle', () => ({
   useContentBundle: vi.fn(),
-  useRerenderContentBundle: vi.fn(() => ({
-    mutate: vi.fn(),
-    isPending: false,
-  })),
 }))
 
 import { useContentBundle } from '@/hooks/useContentBundle'
@@ -59,12 +55,10 @@ function makeBundle(overrides: Partial<ContentBundleDetailResponse> = {}): Conte
     no_story_flag: false,
     draft_content: {
       format: 'infographic',
-      headline: 'Gold Reserves Surge',
-      key_stats: [{ stat: '1,037 tonnes', source: 'WGC', source_url: 'https://gold.org' }],
-      visual_structure: 'bar chart',
-      caption_text: 'Central banks reshaping demand.',
+      suggested_headline: 'Gold Reserves Surge',
+      data_facts: ['1,037 tonnes purchased Q1'],
+      image_prompt: 'You are building a Seva Mining asset...',
     },
-    rendered_images: null,
     created_at: new Date().toISOString(),
     ...overrides,
   }
@@ -80,9 +74,13 @@ function renderModal(item: DraftItemResponse = makeItem()) {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-describe('ContentDetailModal format-aware (Plan 11-06)', () => {
+describe('ContentDetailModal format-aware (mfy pivot)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    })
   })
 
   afterEach(() => {
@@ -90,8 +88,8 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
     vi.restoreAllMocks()
   })
 
-  // Test 1 — infographic dispatches to InfographicPreview + RenderedImagesGallery
-  it('renders InfographicPreview when bundle.content_type === "infographic"', () => {
+  // Test 1 — infographic dispatches to InfographicPreview (three-field shape)
+  it('renders InfographicPreview with three text blocks when bundle.content_type === "infographic"', () => {
     const bundle = makeBundle({ content_type: 'infographic' })
     mockUseContentBundle.mockReturnValue({
       data: bundle,
@@ -101,14 +99,35 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
 
     renderModal()
 
-    // InfographicPreview renders the "INFOGRAPHIC BRIEF" label
-    expect(screen.getByText(/INFOGRAPHIC BRIEF/i)).toBeInTheDocument()
-    // headline from bundle
-    expect(screen.getByText('Gold Reserves Surge')).toBeInTheDocument()
+    // InfographicPreview renders "INFOGRAPHIC" label
+    expect(screen.getByText(/INFOGRAPHIC/i)).toBeInTheDocument()
+    // Suggested Headline block
+    expect(screen.getByText(/Suggested Headline/i)).toBeInTheDocument()
+    // Key Facts block
+    expect(screen.getByText(/Key Facts/i)).toBeInTheDocument()
+    // Image Prompt block
+    expect(screen.getByText(/Image Prompt/i)).toBeInTheDocument()
+    // No RenderedImagesGallery / Regenerate images button
+    expect(screen.queryByRole('button', { name: /Regenerate images/i })).not.toBeInTheDocument()
+  })
+
+  // Test C: no RenderedImagesGallery for any format
+  it('does not render RenderedImagesGallery for infographic bundles', () => {
+    const bundle = makeBundle({ content_type: 'infographic' })
+    mockUseContentBundle.mockReturnValue({
+      data: bundle,
+      isError: false,
+      isLoading: false,
+    } as ReturnType<typeof useContentBundle>)
+
+    renderModal()
+
+    expect(screen.queryByText(/Rendered images/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Regenerate images/i })).not.toBeInTheDocument()
   })
 
   // Test 2 — thread format dispatches to ThreadPreview; no gallery
-  it('renders ThreadPreview when bundle.content_type === "thread" and no RenderedImagesGallery', () => {
+  it('renders ThreadPreview when bundle.content_type === "thread"', () => {
     const bundle = makeBundle({
       content_type: 'thread',
       draft_content: {
@@ -125,11 +144,9 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
 
     renderModal()
 
-    // ThreadPreview renders "THREAD" label (multiple matches due to "Copy Thread" button is fine — use getAllByText)
     const threadLabels = screen.getAllByText(/THREAD/i)
     expect(threadLabels.length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Tweet one about gold.')).toBeInTheDocument()
-    // No "Regenerate images" button for text-only formats
     expect(screen.queryByRole('button', { name: /Regenerate images/i })).not.toBeInTheDocument()
   })
 
@@ -150,7 +167,6 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
 
     renderModal()
 
-    // "LONG-FORM POST" appears in header span AND in "Copy Post" button text — use getAllByText
     const labels = screen.getAllByText(/LONG-FORM POST/i)
     expect(labels.length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('A detailed long-form post about gold markets.')).toBeInTheDocument()
@@ -177,18 +193,16 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
     expect(screen.getByText('BREAKING: Gold surpasses $3,000/oz for the first time.')).toBeInTheDocument()
   })
 
-  // Test 5 — quote renders QuotePreview AND RenderedImagesGallery (expectedCount=1)
-  it('renders QuotePreview and RenderedImagesGallery when bundle.content_type === "quote"', () => {
+  // Test 5 — quote renders QuotePreview (no RenderedImagesGallery)
+  it('renders QuotePreview when bundle.content_type === "quote" and no RenderedImagesGallery', () => {
     const bundle = makeBundle({
       content_type: 'quote',
       draft_content: {
         format: 'quote',
         twitter_post: 'Gold never lies.',
-        attributed_to: 'Warren Buffett',
+        speaker: 'Warren Buffett',
         source_url: 'https://berkshire.com',
       },
-      rendered_images: [],
-      // fresh bundle — triggers polling skeleton
       created_at: new Date().toISOString(),
     })
     mockUseContentBundle.mockReturnValue({
@@ -201,8 +215,21 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
 
     expect(screen.getByText(/QUOTE/i)).toBeInTheDocument()
     expect(screen.getByText('Gold never lies.')).toBeInTheDocument()
-    // RenderedImagesGallery appears for quote (expectedCount=1)
-    expect(screen.getByRole('button', { name: /Regenerate images/i })).toBeInTheDocument()
+    // No Regenerate images button — rendering is gone
+    expect(screen.queryByRole('button', { name: /Regenerate images/i })).not.toBeInTheDocument()
+  })
+
+  // Test D: no <img> tags for infographic or quote
+  it('does not render any <img> elements for infographic format', () => {
+    const bundle = makeBundle({ content_type: 'infographic' })
+    mockUseContentBundle.mockReturnValue({
+      data: bundle,
+      isError: false,
+      isLoading: false,
+    } as ReturnType<typeof useContentBundle>)
+
+    const { container } = renderModal()
+    expect(container.querySelector('img')).toBeNull()
   })
 
   // Test 6 — video_clip; no gallery
@@ -225,7 +252,6 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
 
     expect(screen.getByText(/VIDEO CLIP/i)).toBeInTheDocument()
     expect(screen.getByText('Watch the gold market analysis clip.')).toBeInTheDocument()
-    // No gallery for video_clip
     expect(screen.queryByRole('button', { name: /Regenerate images/i })).not.toBeInTheDocument()
   })
 
@@ -240,10 +266,8 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
     const item = makeItem()
     renderModal(item)
 
-    // Should show the flat alternative text
     expect(screen.getByText('Draft text for fallback')).toBeInTheDocument()
-    // Should NOT show any format preview label
-    expect(screen.queryByText(/INFOGRAPHIC BRIEF/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/INFOGRAPHIC/i)).not.toBeInTheDocument()
   })
 
   // Test 8 — fallback for unknown content_type
@@ -260,13 +284,9 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
     expect(screen.getByText('Draft text for fallback')).toBeInTheDocument()
   })
 
-  // Test 9 — skeleton + "Rendering images…" for fresh infographic with no images
-  it('shows skeleton placeholders + "Rendering images…" for fresh infographic with no images', () => {
-    const bundle = makeBundle({
-      content_type: 'infographic',
-      rendered_images: [],
-      created_at: new Date().toISOString(), // fresh — age < 10 min
-    })
+  // Test 9 — headline from bundle.story_headline
+  it('shows bundle.story_headline in dialog title', () => {
+    const bundle = makeBundle({ content_type: 'infographic' })
     mockUseContentBundle.mockReturnValue({
       data: bundle,
       isError: false,
@@ -275,82 +295,6 @@ describe('ContentDetailModal format-aware (Plan 11-06)', () => {
 
     renderModal()
 
-    // RenderedImagesGallery should show "Rendering images…" text
-    expect(screen.getByText(/Rendering images/i)).toBeInTheDocument()
-    // Should show skeleton loading divs
-    const loadingElements = screen.getAllByLabelText('Loading image')
-    expect(loadingElements.length).toBe(1) // infographic = 1 expected (twitter_visual only after IG purge)
-  })
-
-  // Test 10 — hides skeletons after 10 minutes with no images
-  it('hides image slots gracefully when bundle is >10min old and no rendered_images', () => {
-    const oldDate = new Date(Date.now() - 15 * 60 * 1000).toISOString() // 15 min ago
-    const bundle = makeBundle({
-      content_type: 'infographic',
-      rendered_images: [],
-      created_at: oldDate,
-    })
-    mockUseContentBundle.mockReturnValue({
-      data: bundle,
-      isError: false,
-      isLoading: false,
-    } as ReturnType<typeof useContentBundle>)
-
-    renderModal()
-
-    // Should NOT show skeleton placeholders or "Rendering images…"
-    expect(screen.queryByText(/Rendering images/i)).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Loading image')).not.toBeInTheDocument()
-    // But regen button should still be present
-    expect(screen.getByRole('button', { name: /Regenerate images/i })).toBeInTheDocument()
-  })
-
-  // Test 11 — regen button disabled while polling (fresh bundle, no images)
-  it('Regenerate images button is disabled while isPolling is true', () => {
-    const bundle = makeBundle({
-      content_type: 'infographic',
-      rendered_images: [],
-      created_at: new Date().toISOString(), // fresh — triggers polling
-    })
-    mockUseContentBundle.mockReturnValue({
-      data: bundle,
-      isError: false,
-      isLoading: false,
-    } as ReturnType<typeof useContentBundle>)
-
-    renderModal()
-
-    const regenButton = screen.getByRole('button', { name: /Regenerate images/i })
-    // Button should be disabled while polling (isPolling = true for fresh bundle with no images)
-    expect(regenButton).toBeDisabled()
-  })
-
-  // Test 12 — structured brief renders immediately even if images still loading (D-13)
-  it('renders structured brief content immediately alongside skeleton gallery (D-13)', () => {
-    const bundle = makeBundle({
-      content_type: 'infographic',
-      draft_content: {
-        format: 'infographic',
-        headline: 'Gold Accumulation Brief',
-        key_stats: [{ stat: '1,037 tonnes', source: 'WGC', source_url: 'https://gold.org' }],
-        visual_structure: 'bar chart',
-        caption_text: 'Caption text here.',
-      },
-      rendered_images: [],
-      created_at: new Date().toISOString(), // fresh — skeleton state
-    })
-    mockUseContentBundle.mockReturnValue({
-      data: bundle,
-      isError: false,
-      isLoading: false,
-    } as ReturnType<typeof useContentBundle>)
-
-    renderModal()
-
-    // Brief should be visible
-    expect(screen.getByText('Gold Accumulation Brief')).toBeInTheDocument()
-    expect(screen.getByText(/INFOGRAPHIC BRIEF/i)).toBeInTheDocument()
-    // Gallery skeleton should ALSO be visible at the same time
-    expect(screen.getByText(/Rendering images/i)).toBeInTheDocument()
+    expect(screen.getByText('African Central Banks Accumulate Gold')).toBeInTheDocument()
   })
 })

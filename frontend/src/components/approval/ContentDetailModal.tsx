@@ -13,7 +13,6 @@ import { LongFormPreview } from '@/components/content/LongFormPreview'
 import { BreakingNewsPreview } from '@/components/content/BreakingNewsPreview'
 import { QuotePreview } from '@/components/content/QuotePreview'
 import { VideoClipPreview } from '@/components/content/VideoClipPreview'
-import { RenderedImagesGallery } from '@/components/content/RenderedImagesGallery'
 
 interface ContentDetailModalProps {
   item: DraftItemResponse
@@ -86,18 +85,7 @@ export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModal
             showFallback ? (
               <FlatTextFallback item={item} />
             ) : (
-              bundle && (
-                <>
-                  {renderForFormat(contentType, bundle)}
-                  {/* Gallery mounts for infographic/quote; RenderedImagesGallery self-returns null for others */}
-                  <RenderedImagesGallery
-                    bundleId={bundle.id}
-                    contentType={bundle.content_type ?? ''}
-                    renderedImages={bundle.rendered_images ?? []}
-                    bundleCreatedAt={bundle.created_at}
-                  />
-                </>
-              )
+              bundle && renderForFormat(contentType, bundle)
             )
           )}
 
@@ -132,7 +120,7 @@ function renderForFormat(contentType: string, bundle: BundleData) {
   const draft = bundle.draft_content as unknown
   switch (contentType) {
     case 'infographic':
-      return <InfographicPreview draft={draft as Parameters<typeof InfographicPreview>[0]['draft']} images={bundle.rendered_images} />
+      return <InfographicPreview draft={draft} />
     case 'thread':
       return <ThreadPreview draft={draft} />
     case 'long_form':

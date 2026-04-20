@@ -50,12 +50,6 @@ export interface ContentBundleResponse {
   created_at: string
 }
 
-export interface RenderedImage {
-  role: string
-  url: string
-  generated_at: string
-}
-
 export interface ContentBundleDetailResponse {
   id: string
   story_headline: string
@@ -68,14 +62,7 @@ export interface ContentBundleDetailResponse {
   deep_research?: unknown
   draft_content?: unknown
   compliance_passed?: boolean
-  rendered_images?: RenderedImage[] | null
   created_at: string
-}
-
-export interface RerenderResponse {
-  bundle_id: string
-  render_job_id: string
-  enqueued_at: string
 }
 
 export const REJECTION_CATEGORIES = [

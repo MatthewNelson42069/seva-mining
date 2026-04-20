@@ -82,12 +82,9 @@ const infographicBundle: ContentBundleResponse = {
   no_story_flag: false,
   draft_content: {
     format: 'infographic',
-    headline: 'Central Bank Gold Buying Reaches Record',
-    key_stats: [
-      { stat: '1,037 tonnes in 2023', source: 'WGC', source_url: 'https://gold.org' },
-    ],
-    visual_structure: 'bar chart',
-    caption_text: 'Record central bank gold buying caption.',
+    suggested_headline: 'Central Bank Gold Buying Reaches Record',
+    data_facts: ['1,037 tonnes purchased in 2023', 'Highest on record since 1967'],
+    image_prompt: 'BRAND PREAMBLE\n\nHEADLINE FOR THIS VISUAL:\nCentral Bank Gold Buying Reaches Record\n\nKEY FACTS TO FEATURE:\n- 1,037 tonnes purchased in 2023\n- Highest on record since 1967\n\nSTORY-SPECIFIC DIRECTION:\nBar chart showing annual central bank gold purchases.',
   },
   deep_research: { corroborating_sources: [], rationale: 'Strong data story.' },
   quality_score: 9.0,
@@ -141,11 +138,13 @@ describe('ContentPage', () => {
   })
 
   describe('Infographic format', () => {
-    it('renders InfographicPreview component with INFOGRAPHIC BRIEF text', async () => {
+    it('renders InfographicPreview component with INFOGRAPHIC label and three copy blocks', async () => {
       mockGetTodayContent.mockResolvedValue(infographicBundle)
       mockGetQueue.mockResolvedValue(pendingQueue)
       render(<ContentPage />, { wrapper: createWrapper() })
-      await screen.findByText('INFOGRAPHIC BRIEF')
+      await screen.findByText('INFOGRAPHIC')
+      expect(screen.getByText('Suggested Headline')).toBeInTheDocument()
+      expect(screen.getByText('Key Facts')).toBeInTheDocument()
     })
   })
 
