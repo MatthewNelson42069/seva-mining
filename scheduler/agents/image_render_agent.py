@@ -329,58 +329,15 @@ async def _upload_to_r2(image_bytes: bytes, object_key: str) -> str:
 def _build_prompt(role: str, draft_content: dict, story_headline: str) -> str:
     """Build the Imagen 4 prompt for a given role.
 
+    Called only for the `quote` format (see ROLES_BY_FORMAT). Infographic bundles
+    go through _render_infographic_charts() / ChartRendererClient and never reach
+    this function.
+
     D-05: BRAND_PALETTE (which contains all three hex codes verbatim) MUST appear in every prompt.
     Prompt wording is implementer discretion; brand palette is locked.
     Falls back gracefully on missing keys — never raises.
     """
     format_type = (draft_content.get("format") or "").lower()
-
-    # --- Infographic roles ---
-    if role == "twitter_visual" and format_type == "infographic":
-        headline = draft_content.get("headline") or story_headline
-        visual_structure = draft_content.get("visual_structure") or ""
-        key_stats = draft_content.get("key_stats") or []
-        stats_text = ""
-        if key_stats:
-            top_stat = key_stats[0] if isinstance(key_stats[0], dict) else {}
-            stats_text = f" Key stat: {top_stat.get('stat', '')}."
-
-        return (
-            f"Design a horizontal 16:9 hero graphic for a gold sector social media post. "
-            f"Headline in navy on cream background: \"{headline}\".{stats_text} "
-            f"Layout: {visual_structure or 'clean, data-forward infographic layout'}. "
-            f"{BRAND_PALETTE} "
-            f"Typography: bold serif headline in #0C1B32 navy on #F0ECE4 cream. "
-            f"Use #D4AF37 gold for accent lines and data highlights. "
-            f"Professional financial media aesthetic. No watermarks. High resolution."
-        )
-
-    if role in ("instagram_slide_1", "instagram_slide_2", "instagram_slide_3") and format_type == "infographic":
-        slide_index = {"instagram_slide_1": 0, "instagram_slide_2": 1, "instagram_slide_3": 2}[role]
-        instagram_brief = draft_content.get("instagram_brief") or {}
-        carousel_slides = instagram_brief.get("carousel_slides") or []
-
-        if slide_index < len(carousel_slides):
-            slide = carousel_slides[slide_index]
-            if not isinstance(slide, dict):
-                slide = {}
-            slide_headline = slide.get("headline") or story_headline
-            key_stat = slide.get("key_stat") or ""
-        else:
-            # Fallback: use story_headline when carousel slide is missing
-            slide_headline = story_headline
-            key_stat = ""
-
-        stat_clause = f" Feature stat: {key_stat}." if key_stat else ""
-
-        return (
-            f"Design a square 1:1 Instagram carousel slide for a gold sector social media post. "
-            f"Slide headline: \"{slide_headline}\".{stat_clause} "
-            f"{BRAND_PALETTE} "
-            f"Layout: centered text, clean whitespace, #F0ECE4 cream background with #0C1B32 navy text. "
-            f"Use #D4AF37 gold for borders or accent elements. "
-            f"Professional financial media aesthetic. No watermarks. High resolution."
-        )
 
     # --- Quote roles ---
     if role == "twitter_visual" and format_type == "quote":

@@ -1,10 +1,17 @@
 """
-Unit tests for _build_prompt in agents.image_render_agent — Plan 11-02 Task 2.
+Unit tests for _build_prompt in agents.image_render_agent.
+
+Scope (post quick-260419-t78):
+- _build_prompt is called ONLY for the `quote` format (ROLES_BY_FORMAT key).
+- Infographic bundles are routed to _render_infographic_charts() which calls the
+  Node chart renderer; the infographic branches of _build_prompt were removed.
+- The instagram_slide_2/3 roles and infographic branches that previously lived
+  here are also removed (see quick-260419-lvy for Instagram purge rationale).
 
 Tests confirm:
   1. All three brand hex codes appear in every prompt (D-05 enforcement)
-  2. Role-specific content is embedded (slide headlines, attribution, quote text)
-  3. Graceful fallback when draft_content keys are missing
+  2. Role-specific content is embedded (attribution, quote text)
+  3. Graceful fallback when draft_content keys are missing / malformed
 
 These tests import _build_prompt directly and do NOT call Imagen — they are
 pure string-assertion unit tests with no external dependencies.
@@ -30,38 +37,6 @@ from agents.image_render_agent import _build_prompt  # noqa: E402
 # Fixtures / test data
 # ---------------------------------------------------------------------------
 
-INFOGRAPHIC_DRAFT = {
-    "format": "infographic",
-    "headline": "African Central Banks Gold Accumulation Hits 7-Year High",
-    "key_stats": [
-        {"stat": "7 tonnes net purchase Q1 2026", "source": "WGC"},
-        {"stat": "3 consecutive quarters of buying", "source": "IMF"},
-    ],
-    "visual_structure": "bar chart with country breakdown",
-    "caption_text": "Central banks are net gold buyers again.",
-    "instagram_brief": {
-        "headline": "Central Banks Are Buying Gold Again",
-        "carousel_slides": [
-            {
-                "slide_number": 1,
-                "headline": "7 Tonnes Purchased Q1 2026",
-                "key_stat": "7T net purchase",
-            },
-            {
-                "slide_number": 2,
-                "headline": "Three Consecutive Quarters of Buying",
-                "key_stat": "3 quarters",
-            },
-            {
-                "slide_number": 3,
-                "headline": "Africa Leads Global Central Bank Gold Buying",
-                "key_stat": "55% share",
-            },
-        ],
-        "caption": "Follow for daily gold market insights.",
-    },
-}
-
 QUOTE_DRAFT = {
     "format": "quote",
     "twitter_post": "Gold is the only true global currency without a counterparty.",
@@ -69,8 +44,6 @@ QUOTE_DRAFT = {
     "attributed_to": "Ray Dalio",
     "source_url": "https://example.com/dalio",
 }
-
-HEADLINE = "African Central Banks Gold Accumulation"
 
 
 # ---------------------------------------------------------------------------
@@ -84,48 +57,6 @@ def _assert_brand_palette(prompt: str):
     """Assert all three brand hex codes appear in the prompt."""
     for hex_code in BRAND_HEX_CODES:
         assert hex_code in prompt, f"Expected brand hex code {hex_code!r} in prompt: {prompt[:200]}..."
-
-
-# ---------------------------------------------------------------------------
-# Tests: infographic prompts
-# ---------------------------------------------------------------------------
-
-
-def test_prompt_infographic_twitter_visual_contains_brand_hex():
-    """_build_prompt for twitter_visual/infographic must contain all three brand hex codes (D-05)."""
-    prompt = _build_prompt("twitter_visual", INFOGRAPHIC_DRAFT, HEADLINE)
-    _assert_brand_palette(prompt)
-    assert len(prompt) > 0
-
-
-def test_prompt_infographic_slide_1_references_slide_headline():
-    """_build_prompt for instagram_slide_1/infographic must contain slide 1 headline text."""
-    prompt = _build_prompt("instagram_slide_1", INFOGRAPHIC_DRAFT, HEADLINE)
-    _assert_brand_palette(prompt)
-    slide_1_headline = INFOGRAPHIC_DRAFT["instagram_brief"]["carousel_slides"][0]["headline"]
-    assert slide_1_headline in prompt, (
-        f"Expected slide 1 headline {slide_1_headline!r} in prompt: {prompt[:200]}..."
-    )
-
-
-def test_prompt_infographic_slide_2_references_slide_headline():
-    """_build_prompt for instagram_slide_2/infographic must contain slide 2 headline text."""
-    prompt = _build_prompt("instagram_slide_2", INFOGRAPHIC_DRAFT, HEADLINE)
-    _assert_brand_palette(prompt)
-    slide_2_headline = INFOGRAPHIC_DRAFT["instagram_brief"]["carousel_slides"][1]["headline"]
-    assert slide_2_headline in prompt, (
-        f"Expected slide 2 headline {slide_2_headline!r} in prompt: {prompt[:200]}..."
-    )
-
-
-def test_prompt_infographic_slide_3_references_slide_headline():
-    """_build_prompt for instagram_slide_3/infographic must contain slide 3 headline text."""
-    prompt = _build_prompt("instagram_slide_3", INFOGRAPHIC_DRAFT, HEADLINE)
-    _assert_brand_palette(prompt)
-    slide_3_headline = INFOGRAPHIC_DRAFT["instagram_brief"]["carousel_slides"][2]["headline"]
-    assert slide_3_headline in prompt, (
-        f"Expected slide 3 headline {slide_3_headline!r} in prompt: {prompt[:200]}..."
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -160,26 +91,9 @@ def test_prompt_quote_instagram_slide_1_contains_quote_text():
 # ---------------------------------------------------------------------------
 
 
-def test_prompt_missing_slide_falls_back_to_headline():
-    """_build_prompt for instagram_slide_3 with draft missing carousel slides falls back to story_headline."""
-    draft_without_carousel = {
-        "format": "infographic",
-        "headline": "Gold hits $3500",
-        # No instagram_brief
-    }
-    # Must not raise
-    prompt = _build_prompt("instagram_slide_3", draft_without_carousel, HEADLINE)
-    _assert_brand_palette(prompt)
-    # Should contain the story headline as fallback
-    assert HEADLINE in prompt, (
-        f"Expected story_headline {HEADLINE!r} as fallback in prompt: {prompt[:200]}..."
-    )
-    assert len(prompt) > 0
-
-
 def test_prompt_never_raises_on_malformed_draft_content():
     """_build_prompt must return a valid non-empty string even when draft_content is empty dict."""
-    # Should never raise regardless of input
+    # Should never raise regardless of input — hits the fallback branch.
     prompt = _build_prompt("twitter_visual", {}, "Story headline")
     _assert_brand_palette(prompt)
     assert isinstance(prompt, str)
