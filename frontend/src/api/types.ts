@@ -51,7 +51,7 @@ export interface ContentBundleResponse {
 }
 
 export interface RenderedImage {
-  role: 'twitter_visual'
+  role: string
   url: string
   generated_at: string
 }

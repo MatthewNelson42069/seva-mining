@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { ExternalLink, Download } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useApprove } from '@/hooks/useApprove'
@@ -10,10 +10,16 @@ import { Button } from '@/components/ui/button'
 import { ScoreBadge } from '@/components/shared/ScoreBadge'
 import { RejectPanel } from './RejectPanel'
 import { ContentDetailModal } from './ContentDetailModal'
-import type { DraftItemResponse, RejectionCategory } from '@/api/types'
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog'
+import { useContentBundle } from '@/hooks/useContentBundle'
+import type { DraftItemResponse, RejectionCategory, RenderedImage } from '@/api/types'
 
 interface ContentSummaryCardProps {
   item: DraftItemResponse
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  twitter_visual: 'Twitter / X',
 }
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -50,6 +56,14 @@ export function ContentSummaryCard({ item }: ContentSummaryCardProps) {
 
   const isRejectionOpen = rejectionPanelCardId === item.id
   const isFading = fadingCardIds.has(item.id)
+
+  // Extract bundle ID for rendered images
+  const bundleId =
+    (item.engagement_snapshot as Record<string, unknown> | undefined)
+      ?.content_bundle_id as string | undefined
+
+  const { data: bundle } = useContentBundle(bundleId ?? null)
+  const renderedImages = bundle?.rendered_images ?? []
 
   // Extract headline from first line of source_text
   const headline = item.source_text?.split('\n')[0] ?? 'Content item'
@@ -95,6 +109,27 @@ export function ContentSummaryCard({ item }: ContentSummaryCardProps) {
       },
       duration: 5000,
     })
+  }
+
+  async function handleDownload(img: RenderedImage, e: React.MouseEvent) {
+    e.stopPropagation()
+    try {
+      const response = await fetch(img.url)
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = `${bundleId ?? 'image'}-${img.role}.png`
+      anchor.click()
+      URL.revokeObjectURL(objectUrl)
+    } catch {
+      // CORS fallback: direct anchor download
+      const anchor = document.createElement('a')
+      anchor.href = img.url
+      anchor.download = `${bundleId ?? 'image'}-${img.role}.png`
+      anchor.target = '_blank'
+      anchor.click()
+    }
   }
 
   return (
@@ -157,6 +192,15 @@ export function ContentSummaryCard({ item }: ContentSummaryCardProps) {
             </p>
           )}
 
+          {/* Inline rendered images gallery */}
+          {renderedImages.length > 0 && (
+            <InlineImagesGallery
+              images={renderedImages}
+              bundleId={bundleId ?? ''}
+              onDownload={handleDownload}
+            />
+          )}
+
           {/* Action buttons */}
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <Button
@@ -193,5 +237,58 @@ export function ContentSummaryCard({ item }: ContentSummaryCardProps) {
         onClose={() => setIsModalOpen(false)}
       />
     </>
+  )
+}
+
+interface InlineImagesGalleryProps {
+  images: RenderedImage[]
+  bundleId: string
+  onDownload: (img: RenderedImage, e: React.MouseEvent) => void
+}
+
+function InlineImagesGallery({ images, bundleId: _bundleId, onDownload }: InlineImagesGalleryProps) {
+  if (images.length === 0) return null
+  return (
+    <div className="flex flex-wrap gap-3 pt-1" onClick={(e) => e.stopPropagation()}>
+      {images.map((img) => (
+        <div key={img.role} className="flex flex-col items-center gap-1">
+          <p className="text-xs text-muted-foreground">
+            {ROLE_LABELS[img.role] ?? img.role}
+          </p>
+          <Dialog>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="block rounded border overflow-hidden hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2"
+                aria-label={`Preview ${ROLE_LABELS[img.role] ?? img.role} image`}
+              >
+                <img
+                  src={img.url}
+                  alt={ROLE_LABELS[img.role] ?? img.role}
+                  className="max-w-[180px] h-auto object-contain"
+                  loading="lazy"
+                />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-2xl p-2">
+              <img
+                src={img.url}
+                alt={ROLE_LABELS[img.role] ?? img.role}
+                className="w-full h-auto rounded"
+              />
+            </DialogContent>
+          </Dialog>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 px-2 text-xs"
+            onClick={(e) => onDownload(img, e)}
+          >
+            <Download className="size-3 mr-1" />
+            Download
+          </Button>
+        </div>
+      ))}
+    </div>
   )
 }
