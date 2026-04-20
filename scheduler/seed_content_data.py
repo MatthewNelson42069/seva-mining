@@ -40,6 +40,8 @@ CONFIG_DEFAULTS = [
     ("morning_digest_schedule_hour",      "15"),
     ("gold_history_hour",                 "9"),
     ("gold_history_used_topics",          "[]"),
+    ("content_gold_gate_enabled",            "true"),
+    ("content_gold_gate_model",              "claude-3-5-haiku-latest"),
 ]
 
 

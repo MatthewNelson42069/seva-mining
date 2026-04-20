@@ -402,6 +402,63 @@ async def check_compliance(text: str, anthropic_client=None) -> bool:
         return False
 
 
+async def is_gold_relevant_or_systemic_shock(
+    story: dict,
+    config: dict,
+    client: "AsyncAnthropic | None" = None,
+) -> bool:
+    """Two-bucket gold relevance gate (Haiku). Returns True = keep, False = skip.
+
+    Bucket A: Directly about gold/precious metals/gold mining → keep.
+    Bucket B: Systemic financial/geopolitical shock plausibly moving gold → keep.
+    Everything else → reject.
+
+    Fail-open: API errors return True so infra blips never silence real gold stories.
+    Bypassed when config key content_gold_gate_enabled is False.
+
+    Args:
+        story: Story dict with 'title' and 'summary' keys.
+        config: Dict of config key→value strings (content_gold_gate_enabled,
+                content_gold_gate_model).
+        client: Optional AsyncAnthropic instance. If None, creates one.
+
+    Returns:
+        True if story passes the gate (keep for drafting), False if rejected.
+    """
+    # Bypass when gate is disabled
+    enabled_str = config.get("content_gold_gate_enabled", "true")
+    if str(enabled_str).lower() in ("false", "0", "no"):
+        return True
+
+    title = story.get("title", "")
+    summary = story.get("summary", "")
+    model = config.get("content_gold_gate_model", "claude-3-5-haiku-latest")
+
+    anthropic_client = client or AsyncAnthropic()
+    try:
+        response = await anthropic_client.messages.create(
+            model=model,
+            max_tokens=5,
+            system=(
+                "Answer yes or no. Is this news story directly about gold, precious metals, "
+                "gold mining, OR about a systemic financial/geopolitical event that would "
+                "plausibly move gold prices (major war, sanctions, Strait of Hormuz disruption, "
+                "Fed/USD policy shock, oil supply shock, currency crisis)? "
+                "Generic business news, equity market moves, sector-specific news outside "
+                "gold/commodities → answer no."
+            ),
+            messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
+        )
+        answer = response.content[0].text.strip().lower()
+        return answer.startswith("yes")
+    except Exception as exc:  # noqa: BLE001 — fail-open on infra blip
+        logger.warning(
+            "Gold gate API failed for '%s' (%s) — fail-open (keeping story)",
+            title[:50], type(exc).__name__,
+        )
+        return True
+
+
 # ---------------------------------------------------------------------------
 # No-story flag and ContentBundle builder (CONT-07)
 # ---------------------------------------------------------------------------
@@ -1319,6 +1376,12 @@ For "quote" format, draft_content must have:
         rel_weight = float(await self._get_config(session, "content_relevance_weight", "0.40"))
         rec_weight = float(await self._get_config(session, "content_recency_weight", "0.30"))
         cred_weight = float(await self._get_config(session, "content_credibility_weight", "0.30"))
+        gate_enabled = await self._get_config(session, "content_gold_gate_enabled", "true")
+        gate_model = await self._get_config(session, "content_gold_gate_model", "claude-3-5-haiku-latest")
+        gate_config = {
+            "content_gold_gate_enabled": gate_enabled,
+            "content_gold_gate_model": gate_model,
+        }
 
         # 2. Ingest RSS + SerpAPI concurrently
         rss_stories, serpapi_stories = await asyncio.gather(
@@ -1376,6 +1439,7 @@ For "quote" format, draft_content must have:
         items_queued = 0
         all_already_covered = True
         story_notes = []
+        skipped_by_gate = 0
 
         for story in qualifying:
             try:
@@ -1390,6 +1454,18 @@ For "quote" format, draft_content must have:
                     continue
 
                 all_already_covered = False
+
+                # Gold relevance gate: hard-reject non-gold articles that passed threshold
+                gate_pass = await is_gold_relevant_or_systemic_shock(
+                    story, gate_config, client=self.anthropic
+                )
+                if not gate_pass:
+                    skipped_by_gate += 1
+                    logger.info(
+                        "Gold gate rejected (skipped_by_gate=%d): '%s'",
+                        skipped_by_gate, story["title"][:60],
+                    )
+                    continue
 
                 # Deep research
                 article_text, fetch_ok = await fetch_article(
@@ -1482,6 +1558,9 @@ For "quote" format, draft_content must have:
                     exc_info=True,
                 )
                 # Per-story error isolation — continue with remaining stories
+
+        if skipped_by_gate:
+            logger.info("Gold gate rejected %d stories this run", skipped_by_gate)
 
         # Handle the case where ALL qualifying stories were already covered
         if all_already_covered:

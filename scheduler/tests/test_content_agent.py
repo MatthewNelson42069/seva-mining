@@ -40,9 +40,9 @@ def _get_content_agent():
 
 def test_rss_feed_parsing():
     """_fetch_all_rss returns story dicts from feedparser entries."""
-    # This is an integration method — verify RSS_FEEDS constant exists and has 8 feeds (expanded in 07-07)
+    # Feed count dropped from 8 to 7 in quick-260419-n4f (dropped Investing.com)
     ca = _get_content_agent()
-    assert len(ca.RSS_FEEDS) == 8
+    assert len(ca.RSS_FEEDS) == 7
     assert any("kitco" in url for url, _ in ca.RSS_FEEDS)
 
 
@@ -504,6 +504,98 @@ def test_commit_breaking_news_does_not_enqueue():
         ca._enqueue_render_job_if_eligible(bundle)
 
     mock_scheduler.add_job.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# quick-260419-n4f: Gold relevance gate tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_gate_accepts_direct_gold_story():
+    """Gate returns True for a direct gold story when LLM answers 'yes'."""
+    ca = _get_content_agent()
+    story = {"title": "Barrick Gold Q3 earnings beat estimates", "summary": "Production up 12%."}
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="yes")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+    )
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_gate_accepts_systemic_shock_strait_of_hormuz():
+    """Gate returns True for a Strait of Hormuz disruption story when LLM answers 'yes'."""
+    ca = _get_content_agent()
+    story = {"title": "Iran threatens to close Strait of Hormuz after tanker attack", "summary": "Oil supply at risk."}
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="yes")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+    )
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_gate_rejects_generic_option_traders():
+    """Gate returns False for a generic options story when LLM answers 'no'."""
+    ca = _get_content_agent()
+    story = {"title": "Option Traders Chasing Torrid Stock Rally Turn Focus to Earnings", "summary": "Equity options volume rises."}
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="no")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+    )
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_gate_rejects_private_credit():
+    """Gate returns False for a private credit story when LLM answers 'no'."""
+    ca = _get_content_agent()
+    story = {"title": "Why Private Credit Is Not a Financial Crisis Threat", "summary": "Asset managers weigh in."}
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="no")]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+    )
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_gate_fails_open_on_api_error():
+    """Gate returns True (fail-open) when Anthropic raises an exception."""
+    ca = _get_content_agent()
+    story = {"title": "Gold surges on Fed pivot", "summary": "Spot gold up 2%."}
+    mock_client = AsyncMock()
+    # APIError requires request= param — use a generic Exception to simulate infra blip
+    mock_client.messages.create = AsyncMock(side_effect=Exception("API unavailable"))
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+    )
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_gate_bypassed_when_disabled():
+    """Gate returns True without any LLM call when content_gold_gate_enabled=False."""
+    ca = _get_content_agent()
+    story = {"title": "Anything at all", "summary": "Does not matter."}
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock()
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story, {"content_gold_gate_enabled": "false"}, client=mock_client
+    )
+    assert result is True
+    mock_client.messages.create.assert_not_called()
 
 
 def test_commit_video_clip_does_not_enqueue():

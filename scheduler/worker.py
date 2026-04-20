@@ -307,7 +307,7 @@ async def upsert_agent_config() -> None:
         # Content quality threshold
         # Anthropic relevance scoring fallback is 0.5 — lower threshold so more stories pass.
         # With 0.5 relevance: (0.5*0.4 + recency*0.3 + cred*0.3)*10 = min 4.0 for old/unknown sources
-        "content_quality_threshold": "5.5",    # was 7.0 — allows more stories through relevance fallback
+        "content_quality_threshold": "7.0",    # restored — feed narrowing + gold gate replace this workaround
     }
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
