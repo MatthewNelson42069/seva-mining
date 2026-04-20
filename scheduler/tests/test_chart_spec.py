@@ -29,10 +29,8 @@ from models.chart_spec import (
     BundleCharts,
     ChartSpec,
     ChartType,
-    DataPoint,
     StatCallout,
     TableRow,
-    TimelineEvent,
 )
 
 

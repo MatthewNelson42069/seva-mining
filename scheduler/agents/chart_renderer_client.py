@@ -90,7 +90,6 @@ class ChartRendererClient:
             bytes (PNG) for a chart that rendered successfully.
         """
         # Lazy import to avoid circular imports at module load time
-        from models.chart_spec import BundleCharts  # noqa: PLC0415
 
         # Ensure process is alive; restart if crashed
         if self._proc is None or self._proc.returncode is not None:
