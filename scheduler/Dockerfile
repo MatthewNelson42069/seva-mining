@@ -19,20 +19,21 @@ COPY uv.lock* .
 RUN uv sync --no-dev
 
 # Install chart renderer Node dependencies + download fonts
-# Railway build context is the repo root — COPY paths are relative to repo root.
-COPY scheduler/chart_renderer/ ./chart_renderer/
+# Railway build context is the `scheduler/` directory (set via the scheduler
+# service's Root Directory in Railway) — COPY paths are relative to scheduler/.
+COPY chart_renderer/ ./chart_renderer/
 WORKDIR /app/chart_renderer
 RUN npm ci --production
 RUN sh download-fonts.sh
 WORKDIR /app
 
 # Copy scheduler source files
-COPY scheduler/worker.py .
-COPY scheduler/config.py .
-COPY scheduler/database.py .
-COPY scheduler/agents/ ./agents/
-COPY scheduler/models/ ./models/
-COPY scheduler/services/ ./services/
+COPY worker.py .
+COPY config.py .
+COPY database.py .
+COPY agents/ ./agents/
+COPY models/ ./models/
+COPY services/ ./services/
 
 # No EXPOSE — scheduler worker has no HTTP port
 
