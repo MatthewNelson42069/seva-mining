@@ -202,6 +202,7 @@ None yet.
 | 260419-l5t | Post-v1.0.1 health-check cleanup: env.example hygiene, ruff+eslint lint-zero, JWT_SECRET length assertion | 2026-04-19 | 8bfdfea | Verified | [260419-l5t](./quick/260419-l5t-post-v1-0-1-health-check-cleanup-env-exa/) |
 | 260419-lvy | Full purge Instagram agent + content queue run-grouping (deprecated Phase 6) | 2026-04-19 | b2ff329 / accf735 / 2eb9125 / 4ab94e7 | Verified | [260419-lvy](./quick/260419-lvy-full-purge-instagram-agent-content-queue/) |
 | 260419-n4f | Content agent relevance cleanup — Bloomberg commodities swap, drop Investing.com, sharpen prompt, two-bucket gold gate, restore 7.0 threshold | 2026-04-19 | 502ae3e / 010926d / 2cfc9cb | Verified | [260419-n4f](./quick/260419-n4f-content-agent-relevance-cleanup-swap-blo/) |
+| 260419-r0r | Long_form 400-char minimum floor + sharpen thread vs long_form prompt (thread=fact-rich, long_form=article-style) | 2026-04-20 | f30dd44 / 14caedc | Verified | [260419-r0r](./quick/260419-r0r-enforce-400-char-minimum-floor-on-long-f/) |
 
 ### Blockers/Concerns
 
@@ -211,6 +212,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-19T23:59:00.000Z
-Stopped at: Completed quick task 260419-n4f — content agent relevance cleanup (Bloomberg commodities swap, drop Investing.com RSS, sharpen prompt, two-bucket gold gate, restore 7.0 threshold)
+Last session: 2026-04-20T02:50:00.000Z
+Stopped at: Completed quick task 260419-r0r — long_form 400-char minimum floor + sharpen thread vs long_form prompt distinction
 Resume file: None
