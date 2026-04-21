@@ -285,6 +285,11 @@ async def upsert_agent_config() -> None:
     quick-260421-eoe: removed the old content_agent interval override —
     sub-agents run on a fixed 2h cadence. The DB row may remain for manual
     cleanup but is no longer authoritative.
+
+    quick-260421-k9z: removed the content_agent_max_stories_per_run and
+    content_agent_breaking_window_hours overrides — both were writes-only
+    after eoe (post-split fetch_stories() takes no params and doesn't
+    consult config); zero readers, so the startup upsert was zombie work.
     """
     overrides = {
         # Content quality threshold
@@ -292,8 +297,6 @@ async def upsert_agent_config() -> None:
         # With 0.5 relevance: (0.5*0.4 + recency*0.3 + cred*0.3)*10 = min 4.0 for old/unknown sources
         "content_quality_threshold": "7.0",    # restored — feed narrowing + gold gate replace this workaround
         "content_recency_weight": "0.40",      # bump from 0.30 — favours fresher stories
-        "content_agent_max_stories_per_run": "5",
-        "content_agent_breaking_window_hours": "3",
     }
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
