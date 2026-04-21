@@ -81,14 +81,6 @@ VIDEO_ACCOUNTS = [
     "Newaborngold",
 ]
 
-QUOTE_ACCOUNTS = [
-    "PeterSchiff",
-    "jimrickards",
-    "JimRickards",
-    "RealJimRogers",
-    "RobertKiyosaki",
-]
-
 # ---------------------------------------------------------------------------
 # Credibility tier lookup — module-level constant (CONT-05)
 # ---------------------------------------------------------------------------
@@ -941,86 +933,6 @@ class ContentAgent:
             logger.warning("Video clip Twitter search failed: %s", exc)
             return []
 
-    async def _search_quote_tweets(self, session: AsyncSession) -> list[dict]:
-        """Search Twitter for gold sector text quote posts from credible figures.
-
-        Uses -has:media operator to find text-only tweets (no media attachments).
-        Filters to minimum 10 likes (low bar for curated accounts).
-        Respects monthly quota — returns empty list if quota is near cap.
-
-        Returns:
-            List of dicts with keys: tweet_id, text, author_username, author_name,
-            tweet_url, public_metrics, created_at.
-        """
-        # Quota check — within 500 of 10,000 cap → skip
-        current_count_str = await self._get_config(session, "twitter_monthly_tweet_count", "0")
-        quota_limit_str = await self._get_config(session, "twitter_monthly_quota_limit", "10000")
-        current_count = int(current_count_str)
-        quota_limit = int(quota_limit_str)
-        if quota_limit - current_count < 500:
-            logger.info(
-                "Twitter quota near cap (%d/%d) — skipping quote tweet search",
-                current_count, quota_limit,
-            )
-            return []
-
-        # Build query using QUOTE_ACCOUNTS
-        accounts_clause = " OR ".join(f"from:{acct}" for acct in QUOTE_ACCOUNTS)
-        query = f"({accounts_clause}) gold -has:media -is:retweet"
-
-        try:
-            response = await self.tweepy_client.search_recent_tweets(
-                query=query,
-                max_results=10,
-                tweet_fields=["created_at", "public_metrics", "author_id", "text"],
-                expansions=["author_id"],
-                user_fields=["username", "public_metrics"],
-            )
-
-            if not response.data:
-                return []
-
-            # Build user map
-            users_data = (response.includes or {}).get("users") or []
-            user_map = {str(u.id): u for u in users_data}
-
-            results = []
-            for tweet in response.data:
-                # Filter: minimum 10 likes
-                metrics = tweet.public_metrics or {}
-                if metrics.get("like_count", 0) < 10:
-                    continue
-
-                user = user_map.get(str(tweet.author_id))
-                username = user.username if user else "unknown"
-                author_name = user.name if user else "unknown"
-                tweet_url = f"https://twitter.com/{username}/status/{tweet.id}"
-
-                results.append({
-                    "tweet_id": str(tweet.id),
-                    "text": tweet.text,
-                    "author_username": username,
-                    "author_name": author_name,
-                    "tweet_url": tweet_url,
-                    "public_metrics": metrics,
-                    "created_at": tweet.created_at,
-                })
-
-            # Increment quota by number of tweets returned by API (not filtered)
-            total_returned = len(response.data)
-            new_count = current_count + total_returned
-            await self._set_config_str(session, "twitter_monthly_tweet_count", str(new_count))
-
-            logger.info(
-                "Quote tweet search returned %d tweets (%d passed like filter)",
-                total_returned, len(results),
-            )
-            return results
-
-        except Exception as exc:
-            logger.warning("Quote tweet Twitter search failed: %s", exc)
-            return []
-
     async def _set_config_str(self, session: AsyncSession, key: str, value: str) -> None:
         """Upsert a config key with a string value."""
         result = await session.execute(select(Config).where(Config.key == key))
@@ -1237,7 +1149,7 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
    - "long_form" — for article-style analysis: a single sustained piece built around one powerful argument or insight, like a short analyst op-ed. Must read like an article, not a long social post — with a clear thesis, supporting evidence, and a sharpened takeaway. Single X post 400-2200 chars. Minimum 400 chars — if you cannot write at least 400 chars of article-quality analyst prose, choose a different format instead.
    - "breaking_news" — for urgency/speed stories ("this just happened, pay attention"): major price moves, major announcements, stories where speed is the value. 1-3 punchy lines, ALL CAPS for key terms, no hashtags. Optional infographic pairing if story also has strong visual data.
    - "infographic" — for stories with clear comparison, trend, or historical parallel with >=4 stats — better visualized than narrated. Choose this when the data is the story. Produces a tweet caption PLUS three fields (suggested_headline, data_facts, image_prompt) the operator will paste into claude.ai to render the visual.
-   - "quote" — when a strong text quote from a credible named figure is found in the article content. Pull-quote format: quote in quotation marks, attribution, 1-2 lines of analyst context. Produces a tweet post plus three fields (suggested_headline, data_facts, image_prompt) for the operator to render in claude.ai.
+   - "quote" — when a strong text quote from a credible named figure is found in the article content. Pull-quote format: quote in quotation marks, attribution, 1-2 lines of analyst context. Produces a tweet post plus three fields (suggested_headline, data_facts, image_prompt) for the operator to render in claude.ai. Prefer "quote" format when the article contains a verbatim, attributed statement from a credible named figure (bank analyst, central bank official, WGC, IMF, Fed speaker, etc.) that stands on its own as the story's headline.
    - "video_clip" — NOT chosen here; produced by direct Twitter search of credible gold sector video accounts. Skip this option.
    - "gold_history" — NOT chosen here; produced by a separate bi-weekly Gold History job. Skip this option.
 
@@ -1786,13 +1698,13 @@ For "quote" format, draft_content must have:
         agent_run.items_queued = items_queued
         agent_run.notes = json.dumps({"stories": story_notes})
 
-        # 11. Twitter video clip + quote search (runs after main RSS/SerpAPI story loop)
+        # 11. Twitter video clip search (runs after main RSS/SerpAPI story loop)
         await self._run_twitter_content_search(session, agent_run)
 
     async def _run_twitter_content_search(
         self, session: AsyncSession, agent_run: AgentRun
     ) -> None:
-        """Search Twitter for video clips and quotes; draft, comply, and persist each.
+        """Search Twitter for video clips; draft, comply, and persist each.
 
         Called at the end of _run_pipeline() after the main RSS/SerpAPI story loop.
         Each item is wrapped in try/except for error isolation — individual failures
@@ -1859,66 +1771,6 @@ For "quote" format, draft_content must have:
 
             except Exception as exc:
                 logger.error("Video clip processing error for %s: %s", clip.get("tweet_url", "?"), exc)
-
-        # --- Quote tweets ---
-        quote_tweets = await self._search_quote_tweets(session)
-        for qt in quote_tweets:
-            try:
-                tweet_url = qt["tweet_url"]
-                # Cross-run dedup
-                today_utc = datetime.now(timezone.utc).date()
-                from sqlalchemy import func as sqlfunc  # noqa: PLC0415
-                existing = await session.execute(
-                    select(ContentBundle).where(
-                        sqlfunc.date(ContentBundle.created_at) == today_utc,
-                        ContentBundle.story_url == tweet_url,
-                        ContentBundle.no_story_flag.is_(False),
-                    )
-                )
-                if existing.scalar_one_or_none() is not None:
-                    logger.info("Quote tweet already covered today: %s", tweet_url)
-                    continue
-
-                speaker_title = "Author, macro investor"  # Default; Claude will improve
-                draft_content = await self._draft_quote_post(
-                    quote_text=qt["text"],
-                    speaker=qt["author_name"],
-                    speaker_title=speaker_title,
-                    source_url=tweet_url,
-                )
-                if draft_content is None:
-                    logger.warning("Quote post draft failed for %s", tweet_url)
-                    continue
-
-                check_text = _extract_check_text(draft_content)
-                compliance_ok = await check_compliance(check_text, self.anthropic)
-
-                q_bundle = ContentBundle(
-                    story_headline=qt["text"][:200],
-                    story_url=tweet_url,
-                    source_name=qt["author_username"],
-                    content_type="quote",
-                    score=7.5,  # Fixed score for Twitter-sourced content
-                    draft_content=draft_content,
-                    compliance_passed=compliance_ok,
-                )
-                session.add(q_bundle)
-                await session.flush()
-
-                if compliance_ok:
-                    rationale = f"Quote from {qt['author_name']} on gold sector"
-                    q_item = build_draft_item(q_bundle, rationale)
-                    session.add(q_item)
-                    await session.flush()
-                    await process_new_items([q_item.id])
-                    agent_run.items_queued = (agent_run.items_queued or 0) + 1
-                    self._queued_titles.append(f"Quote: {qt['author_name']}")
-                    logger.info("Quote tweet queued from %s", qt["author_name"])
-                else:
-                    logger.warning("Quote tweet compliance failed for %s", tweet_url)
-
-            except Exception as exc:
-                logger.error("Quote tweet processing error for %s: %s", qt.get("tweet_url", "?"), exc)
 
     async def run(self) -> None:
         """Entry point called by APScheduler. Runs the full pipeline."""
