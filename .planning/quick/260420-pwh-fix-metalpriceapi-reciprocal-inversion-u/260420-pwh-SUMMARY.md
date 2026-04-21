@@ -21,11 +21,12 @@ decisions:
   - "metalpriceapi USDXAU/USDXAG with base=USD are direct USD/oz prices — the original oa1 docstring claiming reciprocal trap was incorrect; live response USDXAU=4816.39 confirmed this"
   - "claude-haiku-4-5 used as model alias (not the dated SKU) — live probe confirmed alias resolves correctly to claude-haiku-4-5-20251001"
 metrics:
-  duration: "~10 minutes"
+  duration: "~45 minutes (incl. Bug 3 surfacing + fix)"
   completed: "2026-04-20"
-  tasks_completed: 2
+  tasks_completed: 3
   tasks_total: 3
   files_modified: 5
+  commits: 3
 ---
 
 # Quick Task 260420-pwh: Fix metalpriceapi reciprocal inversion + Haiku model deprecation
@@ -94,48 +95,54 @@ OK: claude-haiku-4-5-20251001 | Hey! How's it going? What can I
 
 ---
 
-### Task 3: Prod DB UPDATE of configs.content_gold_gate_model — PENDING HUMAN
+### Task 3: Prod DB UPDATE of config.content_gold_gate_model — RESOLVED (no-op)
 
-**Status: CHECKPOINT — awaiting orchestrator execution**
+**Resolution:** Checked prod `config` table (not `configs`) via `railway run` — no row exists for `content_gold_gate_model`. Scheduler falls back to the in-code default, which was already swapped in Task 2 commit `50720f1`. No DB UPDATE required.
 
-Task 3 is a `checkpoint:human-verify` gate. The production `configs` table still holds:
-```sql
-key = 'content_gold_gate_model', value = 'claude-3-5-haiku-latest'
-```
-
-The seed change (Task 2) is NOT retroactive — the seed only sets defaults when the key is absent. The runtime code reads this DB row at pipeline start (content_agent.py line 1535), so the scheduler will continue failing with `NotFoundError` until the DB is updated.
-
-**Command for orchestrator to run (from `/Users/matthewnelson/seva-mining/scheduler/`):**
-
+**Live verification command executed:**
 ```bash
-npx @railway/cli run uv run python -c "
+npx @railway/cli run -- uv run python -c "
 import asyncio
 from sqlalchemy import text
 from database import engine
 async def main():
     async with engine.begin() as conn:
-        result = await conn.execute(
-            text(\"UPDATE configs SET value = :v WHERE key = 'content_gold_gate_model'\"),
-            {'v': 'claude-haiku-4-5'}
-        )
-        print(f'UPDATE rowcount: {result.rowcount}')
-        check = await conn.execute(text(\"SELECT value FROM configs WHERE key = 'content_gold_gate_model'\"))
-        print(f'Post-update value: {check.scalar_one()}')
+        result = await conn.execute(text(\"SELECT key, value FROM config WHERE key = 'content_gold_gate_model'\"))
+        row = result.fetchone()
+        print('Row:', row)
 asyncio.run(main())
 "
 ```
+Output: `Row: None` — no override row, code default (`claude-haiku-4-5`) is authoritative.
 
-**Expected output:**
-```
-UPDATE rowcount: 1
-Post-update value: claude-haiku-4-5
-```
+---
 
-**Post-update content_agent verification (trigger a run and check logs):**
-- Zero `classify_format_lightweight failed (NotFoundError)` lines
-- Zero `Gold gate API failed ... (NotFoundError)` lines
-- One or more `ContentAgent: market snapshot fetched (status=ok)` entries
-- Latest `market_snapshots` row: `gold_usd_per_oz` in $4,000–$5,500 range; `silver_usd_per_oz` in $60–$100 range
+### Bug 3 (in-flight discovery): Haiku 4.5 wraps JSON in markdown fences
+
+**Commit:** `3525c47` — `fix(content-agent): strip markdown fences from gold gate JSON response`
+
+**Problem surfaced during Task 2 verification:** After the model swap, a fresh `content_agent` run showed zero `NotFoundError` (confirming Bug 2 was fixed) — but gold gate was *still* fail-opening on every call. Root cause: Haiku 4.5 wraps JSON in ```` ```json ... ``` ```` code fences even when the prompt asks for a bare JSON object. `json.loads()` fails → gate fail-opens → specific-miner rejection path (from nnh) silently disabled.
+
+**Why included in pwh scope:** Bug 2's stated validation criterion — *"at least one `rejected story — primary subject is specific miner` line IF any stories happen to match"* — requires the gate to parse responses, not fail-open. Bug 2 is not fully delivered without fence handling.
+
+**Fix applied:**
+- `scheduler/agents/content_agent.py:558-566`: Added fence-stripping preprocess to `is_gold_relevant_or_systemic_shock` before `json.loads(raw)`. Strips leading ```` ```json ```` or bare ```` ``` ```` and trailing ```` ``` ````. Mirrors the fence-stripping pattern already used in 3 other locations in the same file (classify_format_lightweight etc).
+- `scheduler/tests/test_content_agent.py`: 3 new tests:
+  - `test_gate_parses_fenced_json_keep` — fenced keep response
+  - `test_gate_parses_fenced_json_specific_miner_reject` — fenced reject (Barrick M&A) → `primary_subject_is_specific_miner`
+  - `test_gate_parses_bare_fenced_json_keep` — bare ```` ``` ```` without language tag
+
+**Live verification (`/tmp/content_run_post_fence_fix.log`):**
+- Zero `NotFoundError`, zero `JSONDecodeError`, zero `Gold gate returned non-JSON` lines
+- 80+ Anthropic POST calls all returned `HTTP/1.1 200 OK`
+- `INFO agents.content_agent Gold gate rejected (skipped_by_gate=1): 'Kalgoorlie Gold Mining outlines exploration focus in Austral'` — **specific-miner rejection firing in prod, exactly as pwh's validation criterion required**
+- `INFO agents.content_agent Gold gate rejected (skipped_by_gate=2): 'Gold prices news'` — generic not-gold-relevant reject
+- `INFO agents.content_agent Gold gate rejected 2 stories this run`
+- Latest `market_snapshots` row: `gold_usd_per_oz: 4808.86`, `silver_usd_per_oz: 79.34` — matches live metalpriceapi within normal intraday spread
+
+**Verify outputs:**
+- `uv run pytest tests/test_content_agent.py tests/test_market_snapshot.py -q` → `85 passed in 2.72s`
+- `uv run ruff check agents/content_agent.py tests/test_content_agent.py` → `All checks passed!`
 
 ---
 
@@ -168,7 +175,14 @@ None — all changes are literal string replacements or arithmetic removals. No 
 **Checking commits exist:**
 - [x] `87878e1` — Task 1 (metalpriceapi fix)
 - [x] `50720f1` — Task 2 (Haiku model swap)
+- [x] `3525c47` — Bug 3 (fence-strip) + 3 new tests
 
-Both pushed to `origin/main` (verified: `baffc28..50720f1 HEAD -> main`).
+All pushed to `origin/main` (verified: `baffc28..3525c47 HEAD -> main`).
+
+## Verification
+
+- `gsd-verifier` verdict: **PASSED** — see `VERIFICATION.md`
+- Live prod DB: gold/silver values match metalpriceapi within spread
+- Live prod log: zero Haiku NotFoundError, specific-miner gate rejection fires
 
 ## Self-Check: PASSED
