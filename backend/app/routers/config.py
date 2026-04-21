@@ -40,20 +40,6 @@ async def update_config(key: str, body: ConfigUpdate, db: AsyncSession = Depends
     return {"key": entry.key, "value": entry.value}
 
 
-@router.get("/quota")
-async def get_quota(db: AsyncSession = Depends(get_db)):
-    """Return current Twitter API quota consumption and safety margin from the config table."""
-    keys = [
-        "twitter_monthly_tweet_count",
-        "twitter_quota_safety_margin",
-        "twitter_monthly_reset_date",
-    ]
-    result = await db.execute(select(Config).where(Config.key.in_(keys)))
-    rows = {row.key: row.value for row in result.scalars().all()}
-
-    return {
-        "monthly_tweet_count": int(rows.get("twitter_monthly_tweet_count", 0)),
-        "quota_safety_margin": int(rows.get("twitter_quota_safety_margin", 1500)),
-        "monthly_cap": 10000,
-        "reset_date": rows.get("twitter_monthly_reset_date"),
-    }
+# /quota endpoint removed in quick-260420-sn9 (Twitter agent fully purged).
+# The endpoint previously surfaced X API Basic tier monthly tweet quota; with
+# the Twitter agent gone there is no consumer and no analog for content_agent.

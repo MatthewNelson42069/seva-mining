@@ -171,7 +171,7 @@ async def test_list_watchlists_empty(authed_db_client):
 async def test_create_watchlist(authed_db_client):
     """POST /watchlists with valid body returns 201 and created entry."""
     payload = {
-        "platform": "twitter",
+        "platform": "content",
         "account_handle": "@goldanalyst",
         "relationship_value": 4,
         "active": True,
@@ -179,7 +179,7 @@ async def test_create_watchlist(authed_db_client):
     response = await authed_db_client.post("/watchlists", json=payload)
     assert response.status_code == 201
     data = response.json()
-    assert data["platform"] == "twitter"
+    assert data["platform"] == "content"
     assert data["account_handle"] == "@goldanalyst"
     assert data["relationship_value"] == 4
     assert "id" in data
@@ -187,23 +187,27 @@ async def test_create_watchlist(authed_db_client):
 
 @pytest.mark.asyncio
 async def test_list_watchlists_with_platform_filter(authed_db_client):
-    """GET /watchlists?platform=twitter filters by platform."""
-    # Create two entries
-    await authed_db_client.post("/watchlists", json={"platform": "twitter", "account_handle": "@tw1"})  # noqa: E501
-    await authed_db_client.post("/watchlists", json={"platform": "instagram", "account_handle": "@ig1"})  # noqa: E501
+    """GET /watchlists?platform=content filters by platform.
 
-    response = await authed_db_client.get("/watchlists?platform=twitter")
+    Updated in quick-260420-sn9: platform fixtures switched from twitter/instagram
+    to content + a generic 'other' value (column stays permissive String(20)).
+    """
+    # Create two entries with different platform values
+    await authed_db_client.post("/watchlists", json={"platform": "content", "account_handle": "@c1"})  # noqa: E501
+    await authed_db_client.post("/watchlists", json={"platform": "other", "account_handle": "@o1"})  # noqa: E501
+
+    response = await authed_db_client.get("/watchlists?platform=content")
     assert response.status_code == 200
     items = response.json()
     assert len(items) == 1
-    assert items[0]["platform"] == "twitter"
+    assert items[0]["platform"] == "content"
 
 
 @pytest.mark.asyncio
 async def test_update_watchlist(authed_db_client):
     """PATCH /watchlists/{id} partially updates the entry."""
     create_resp = await authed_db_client.post(
-        "/watchlists", json={"platform": "twitter", "account_handle": "@update_me"}
+        "/watchlists", json={"platform": "content", "account_handle": "@update_me"}
     )
     watchlist_id = create_resp.json()["id"]
 
@@ -221,7 +225,7 @@ async def test_update_watchlist(authed_db_client):
 async def test_delete_watchlist(authed_db_client):
     """DELETE /watchlists/{id} returns 204 and entry is gone."""
     create_resp = await authed_db_client.post(
-        "/watchlists", json={"platform": "instagram", "account_handle": "@delete_me"}
+        "/watchlists", json={"platform": "content", "account_handle": "@delete_me"}
     )
     watchlist_id = create_resp.json()["id"]
 
@@ -249,12 +253,12 @@ async def test_list_keywords_empty(authed_db_client):
 @pytest.mark.asyncio
 async def test_create_keyword(authed_db_client):
     """POST /keywords with valid body returns 201 and created entry."""
-    payload = {"term": "gold mining", "platform": "twitter", "weight": 1.5, "active": True}
+    payload = {"term": "gold mining", "platform": "content", "weight": 1.5, "active": True}
     response = await authed_db_client.post("/keywords", json=payload)
     assert response.status_code == 201
     data = response.json()
     assert data["term"] == "gold mining"
-    assert data["platform"] == "twitter"
+    assert data["platform"] == "content"
     assert "id" in data
 
 
@@ -315,39 +319,42 @@ async def test_list_agent_runs_empty(authed_db_client):
 @pytest.mark.asyncio
 async def test_agent_runs_filter_by_name(authed_db_client):
     """
-    GET /agent-runs?agent_name=twitter_agent returns only runs for that agent.
+    GET /agent-runs?agent_name=content_agent returns only runs for that agent.
     EXEC-01: agent-runs endpoint filterable by agent_name.
+
+    Updated in quick-260420-sn9: twitter_agent no longer exists; test rewritten
+    to use content_agent + gold_history_agent (the two intake agents).
     """
     # Directly insert agent run records via the override session
     override_fn = app.dependency_overrides.get(get_db)
     async for db in override_fn():
         now = datetime.now(UTC)
-        run_twitter = _AgentRun(
-            agent_name="twitter_agent",
+        run_content = _AgentRun(
+            agent_name="content_agent",
             started_at=now,
             status="completed",
             items_found=5,
             items_queued=3,
             items_filtered=2,
         )
-        run_insta = _AgentRun(
-            agent_name="instagram_agent",
+        run_gold = _AgentRun(
+            agent_name="gold_history_agent",
             started_at=now,
             status="completed",
             items_found=2,
             items_queued=1,
             items_filtered=1,
         )
-        db.add(run_twitter)
-        db.add(run_insta)
+        db.add(run_content)
+        db.add(run_gold)
         await db.commit()
         break
 
-    response = await authed_db_client.get("/agent-runs?agent_name=twitter_agent&days=1")
+    response = await authed_db_client.get("/agent-runs?agent_name=content_agent&days=1")
     assert response.status_code == 200
     items = response.json()
     assert len(items) == 1
-    assert items[0]["agent_name"] == "twitter_agent"
+    assert items[0]["agent_name"] == "content_agent"
 
 
 # ---------------------------------------------------------------------------

@@ -11,12 +11,13 @@ class Watchlist(Base):
     __tablename__ = "watchlists"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    platform = Column(String(20), nullable=False)     # twitter
+    # content (historical: twitter/instagram purged)
+    platform = Column(String(20), nullable=False)
     account_handle = Column(String(255), nullable=False)
-    # Twitter numeric user ID, resolved lazily by agent
+    # Platform-native numeric user ID (legacy: Twitter user ID resolution); no longer populated
     platform_user_id = Column(String(50), nullable=True)
-    relationship_value = Column(Integer)              # 1-5 for Twitter (SETT-01)
-    follower_threshold = Column(Integer)              # for Instagram (SETT-02)
+    relationship_value = Column(Integer)              # 1-5 relationship score (legacy SETT-01)
+    follower_threshold = Column(Integer)              # legacy SETT-02 (Instagram purged 2026-04-19)
     notes = Column(Text)
     active = Column(Boolean, nullable=False, server_default="true")
     created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)

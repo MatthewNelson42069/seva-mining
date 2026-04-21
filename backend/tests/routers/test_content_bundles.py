@@ -89,7 +89,7 @@ async def test_get_content_bundle_returns_full_bundle():
     bundle = make_content_bundle(
         id=bundle_id,
         rendered_images=[{
-            "role": "twitter_visual",
+            "role": "content_visual",
             "url": "https://r2.example/x.png",
             "generated_at": "2026-04-16T00:00:00+00:00",
         }],

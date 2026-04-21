@@ -5,10 +5,10 @@ from pydantic import BaseModel, ConfigDict
 
 
 class WatchlistCreate(BaseModel):
-    platform: str   # twitter
+    platform: str   # content (twitter/instagram purged; column stays permissive)
     account_handle: str
-    relationship_value: int | None = None  # 1-5 for Twitter
-    follower_threshold: int | None = None  # for Instagram
+    relationship_value: int | None = None  # 1-5 relationship score (legacy Twitter field)
+    follower_threshold: int | None = None  # legacy Instagram field (unused post-purge)
     notes: str | None = None
     active: bool = True
 

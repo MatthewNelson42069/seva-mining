@@ -28,7 +28,8 @@ class DraftItem(Base):
     __tablename__ = "draft_items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    platform = Column(String(20), nullable=False)          # twitter, content
+    # content (twitter/instagram purged); column stays permissive String(20)
+    platform = Column(String(20), nullable=False)
     status = Column(draft_status_enum, nullable=False, server_default="pending")
     source_url = Column(Text)
     source_text = Column(Text)

@@ -13,7 +13,7 @@ class DailyDigest(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     digest_date = Column(Date, nullable=False, unique=True)
     top_stories = Column(JSONB)             # list of {headline, source, score}
-    queue_snapshot = Column(JSONB)          # {twitter: N, instagram: N, content: N}
+    queue_snapshot = Column(JSONB)          # {content: N, total: N} (twitter/instagram purged)
     yesterday_approved = Column(JSONB)      # count + top items
     yesterday_rejected = Column(JSONB)      # count
     yesterday_expired = Column(JSONB)       # count

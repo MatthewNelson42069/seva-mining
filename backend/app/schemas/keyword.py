@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 class KeywordCreate(BaseModel):
     term: str
-    platform: str | None = None  # twitter, content, or null=all
+    platform: str | None = None  # content, or null=all (twitter/instagram purged)
     weight: float = 1.0
     active: bool = True
 

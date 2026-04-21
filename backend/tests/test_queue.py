@@ -25,7 +25,7 @@ def make_draft_item(
     *,
     id: UUID | None = None,
     status: str = "pending",
-    platform: str = "twitter",
+    platform: str = "content",
     alternatives: list | None = None,
 ) -> MagicMock:
     """Create a MagicMock that mimics a DraftItem ORM object."""
