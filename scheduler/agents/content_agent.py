@@ -31,6 +31,7 @@ from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.config import Config
+from services.market_snapshot import fetch_market_snapshot, render_snapshot_block
 
 logger = logging.getLogger(__name__)
 
@@ -815,6 +816,7 @@ class ContentAgent:
         )
         self._queued_titles: list[str] = []
         self._skipped_short_longform: int = 0
+        self._market_snapshot: dict | None = None
 
     async def _search_corroborating(self, headline: str) -> list[dict]:
         """CONT-09: Find 2-3 corroborating sources via SerpAPI Google News.
@@ -1044,7 +1046,9 @@ class ContentAgent:
             draft_content dict with format=video_clip, twitter_caption, instagram_caption.
             Returns None on JSON parse failure.
         """
+        snapshot_block = render_snapshot_block(self._market_snapshot) if getattr(self, "_market_snapshot", None) else ""
         system_prompt = (
+            f"{snapshot_block}\n\n"
             "You are a senior gold market analyst. You write quote-tweet style captions "
             "for video clips from gold sector figures. Write 1-3 sentences: who said it, "
             "what the key claim is, why it matters to gold investors. Lead with the data "
@@ -1112,7 +1116,9 @@ Respond in valid JSON:
             source_url, twitter_post, instagram_post.
             Returns None on JSON parse failure.
         """
+        snapshot_block = render_snapshot_block(self._market_snapshot) if getattr(self, "_market_snapshot", None) else ""
         system_prompt = (
+            f"{snapshot_block}\n\n"
             "You are a senior gold market analyst. You draft pull-quote posts about "
             "notable statements from gold sector figures. Format: quote in quotation "
             "marks, attribution line, then 1-2 lines of analyst context explaining why "
@@ -1266,7 +1272,9 @@ For "quote" format, draft_content must have:
   "image_prompt_direction": "2-4 sentences describing what the quote card should look like: how to present the pull-quote, attribution placement, any context stats to feature. Focus on STORY-SPECIFIC visual direction only."
 }}"""
 
+        snapshot_block = render_snapshot_block(self._market_snapshot) if getattr(self, "_market_snapshot", None) else ""
         system_prompt = (
+            f"{snapshot_block}\n\n"
             "You are a senior gold market analyst. Authoritative, inside-the-room perspective. "
             "Tone: Precise + punchy. Data-forward. Every sentence earns its place. "
             "Opening rule: First line is always the most impactful data point or fact. Lead with the number. "
@@ -1920,6 +1928,31 @@ For "quote" format, draft_content must have:
             )
             session.add(agent_run)
             await session.commit()
+
+            # Real-time market snapshot for drafter grounding (quick-260420-oa1).
+            # Fetched once per run BEFORE the pipeline. Fail-open — a failure logs
+            # WARNING and builds a fallback snapshot so the drafter runs in qualitative mode.
+            try:
+                self._market_snapshot = await fetch_market_snapshot(session=session)
+            except Exception as exc:
+                logger.warning(
+                    "ContentAgent: market snapshot fetch — pipeline catch (%s: %s) — "
+                    "using full-fallback snapshot",
+                    type(exc).__name__, str(exc)[:120],
+                )
+                self._market_snapshot = {
+                    "fetched_at": datetime.now(timezone.utc),
+                    "status": "failed",
+                    "gold_usd_per_oz": None,
+                    "silver_usd_per_oz": None,
+                    "ust_10y_nominal": None,
+                    "ust_10y_real": None,
+                    "fed_funds": None,
+                    "cpi_yoy": None,
+                    "cpi_observation_date": None,
+                    "errors": {"pipeline": f"{type(exc).__name__}: {str(exc)[:120]}"},
+                }
+
             try:
                 await self._run_pipeline(session, agent_run)
                 agent_run.status = "completed"

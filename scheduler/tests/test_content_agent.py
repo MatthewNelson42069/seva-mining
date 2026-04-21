@@ -7,6 +7,7 @@ All 15 tests skip immediately (before any lazy import) so they are
 collectable and show as SKIPPED (not ERROR) until implementation.
 """
 import json as _json
+import logging
 import os
 import sys
 import pytest
@@ -1353,3 +1354,404 @@ async def test_gate_fails_open_on_malformed_json():
     assert result["reject_reason"] is None
     assert result["company"] is None
 
+
+
+# ---------------------------------------------------------------------------
+# quick-260420-oa1: Market snapshot integration tests (Task 2)
+# ---------------------------------------------------------------------------
+
+def _make_canned_snapshot():
+    """A populated MarketSnapshot dict for use in pipeline tests."""
+    from datetime import datetime, timezone
+    return {
+        "fetched_at": datetime(2026, 4, 21, 0, 30, 0, tzinfo=timezone.utc),
+        "status": "ok",
+        "gold_usd_per_oz": 2345.67,
+        "silver_usd_per_oz": 27.89,
+        "ust_10y_nominal": 4.12,
+        "ust_10y_real": 1.87,
+        "fed_funds": 5.33,
+        "cpi_yoy": 3.2,
+        "cpi_observation_date": "2026-03-01",
+        "errors": {},
+    }
+
+
+def _make_fallback_snapshot():
+    """An all-None fallback MarketSnapshot (status failed)."""
+    from datetime import datetime, timezone
+    return {
+        "fetched_at": datetime(2026, 4, 21, 0, 30, 0, tzinfo=timezone.utc),
+        "status": "failed",
+        "gold_usd_per_oz": None,
+        "silver_usd_per_oz": None,
+        "ust_10y_nominal": None,
+        "ust_10y_real": None,
+        "fed_funds": None,
+        "cpi_yoy": None,
+        "cpi_observation_date": None,
+        "errors": {"pipeline": "RuntimeError: network down"},
+    }
+
+
+# --- OA1-1: fetch_market_snapshot called exactly once per run ---
+
+@pytest.mark.asyncio
+async def test_run_fetches_snapshot_once_per_invocation():
+    """fetch_market_snapshot is called exactly once per ContentAgent.run() invocation."""
+    ca = _get_content_agent()
+
+    canned_snap = _make_canned_snapshot()
+    mock_fetch = AsyncMock(return_value=canned_snap)
+
+    mock_session = AsyncMock()
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+    mock_session.add = MagicMock()
+    mock_session.flush = AsyncMock()
+    mock_session.commit = AsyncMock()
+
+    with patch("agents.content_agent.AsyncSessionLocal", return_value=mock_session), \
+         patch("agents.content_agent.fetch_market_snapshot", mock_fetch):
+        agent = ca.ContentAgent.__new__(ca.ContentAgent)
+        agent.anthropic = AsyncMock()
+        agent.serpapi_client = None
+        agent.tweepy_client = AsyncMock()
+        agent._queued_titles = []
+        agent._skipped_short_longform = 0
+        agent._market_snapshot = None
+
+        async def _noop_pipeline(session, agent_run):
+            pass
+        agent._run_pipeline = _noop_pipeline
+
+        await agent.run()
+
+    assert mock_fetch.call_count == 1, \
+        f"Expected fetch_market_snapshot called once, got {mock_fetch.call_count}"
+
+
+# --- OA1-2: _research_and_draft system prompt contains snapshot block ---
+
+@pytest.mark.asyncio
+async def test_research_and_draft_system_prompt_contains_snapshot_block():
+    """Captured system prompt for _research_and_draft contains snapshot block BEFORE analyst line."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent._market_snapshot = _make_canned_snapshot()
+
+    captured_system: list[str] = []
+
+    thread_response = {
+        "format": "thread",
+        "rationale": "test",
+        "key_data_points": [],
+        "draft_content": {
+            "format": "thread",
+            "tweets": ["Tweet 1."],
+            "long_form_post": "A" * 400,
+        },
+    }
+    mock_resp = MagicMock()
+    mock_resp.content = [MagicMock(text=_json.dumps(thread_response))]
+
+    async def _capture_create(*args, **kwargs):
+        captured_system.append(kwargs.get("system", ""))
+        return mock_resp
+
+    agent.anthropic.messages.create = AsyncMock(side_effect=_capture_create)
+
+    story = {"title": "Gold surges on safe-haven demand", "link": "https://example.com", "source_name": "Reuters"}
+    deep_research = {"article_text": "Gold hit record highs...", "corroborating_sources": [], "key_data_points": []}
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    assert len(captured_system) >= 1
+    system_prompt = captured_system[0]
+
+    assert "CURRENT MARKET SNAPSHOT" in system_prompt
+    assert "$2,345.67/oz" in system_prompt
+    assert "Do not cite any specific dollar figures, percentages, yields, or rates \u2014 current or historical \u2014" \
+        in system_prompt
+    snap_pos = system_prompt.find("CURRENT MARKET SNAPSHOT")
+    analyst_pos = system_prompt.find("You are a senior gold market analyst")
+    assert snap_pos < analyst_pos, \
+        f"Snapshot block (pos {snap_pos}) must appear before analyst line (pos {analyst_pos})"
+
+
+# --- OA1-3: _draft_video_caption system prompt contains snapshot block ---
+
+@pytest.mark.asyncio
+async def test_draft_video_caption_system_prompt_contains_snapshot_block():
+    """Captured system prompt for _draft_video_caption contains snapshot block BEFORE analyst line."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._market_snapshot = _make_canned_snapshot()
+
+    captured_system: list[str] = []
+
+    caption_response = {
+        "twitter_caption": "Senior analyst test caption.",
+        "instagram_caption": "IG caption.",
+    }
+    mock_resp = MagicMock()
+    mock_resp.content = [MagicMock(text=_json.dumps(caption_response))]
+
+    async def _capture_create(*args, **kwargs):
+        captured_system.append(kwargs.get("system", ""))
+        return mock_resp
+
+    agent.anthropic.messages.create = AsyncMock(side_effect=_capture_create)
+
+    result = await agent._draft_video_caption(
+        tweet_text="Gold could hit $3,000 says analyst.",
+        author_username="KitcoNews",
+        author_name="Kitco News",
+        tweet_url="https://x.com/KitcoNews/status/123",
+    )
+
+    assert result is not None
+    assert len(captured_system) >= 1
+    system_prompt = captured_system[0]
+
+    assert "CURRENT MARKET SNAPSHOT" in system_prompt
+    assert "$2,345.67/oz" in system_prompt
+    assert "Do not cite any specific dollar figures, percentages, yields, or rates \u2014 current or historical \u2014" \
+        in system_prompt
+    snap_pos = system_prompt.find("CURRENT MARKET SNAPSHOT")
+    analyst_pos = system_prompt.find("You are a senior gold market analyst")
+    assert snap_pos < analyst_pos, \
+        f"Snapshot block (pos {snap_pos}) must appear before analyst line (pos {analyst_pos})"
+
+
+# --- OA1-4: _draft_quote_post system prompt contains snapshot block ---
+
+@pytest.mark.asyncio
+async def test_draft_quote_post_system_prompt_contains_snapshot_block():
+    """Captured system prompt for _draft_quote_post contains snapshot block BEFORE analyst line."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._market_snapshot = _make_canned_snapshot()
+
+    captured_system: list[str] = []
+
+    quote_response = {
+        "twitter_post": "Test quote post.",
+        "suggested_headline": "Test Headline",
+        "data_facts": ["Gold up 5%"],
+        "image_prompt_direction": "Pull-quote card.",
+    }
+    mock_resp = MagicMock()
+    mock_resp.content = [MagicMock(text=_json.dumps(quote_response))]
+
+    async def _capture_create(*args, **kwargs):
+        captured_system.append(kwargs.get("system", ""))
+        return mock_resp
+
+    agent.anthropic.messages.create = AsyncMock(side_effect=_capture_create)
+
+    result = await agent._draft_quote_post(
+        quote_text="Gold is the ultimate store of value.",
+        speaker="Janet Yellen",
+        speaker_title="Former Treasury Secretary",
+        source_url="https://x.com/JanetYellen/status/123",
+    )
+
+    assert result is not None
+    assert len(captured_system) >= 1
+    system_prompt = captured_system[0]
+
+    assert "CURRENT MARKET SNAPSHOT" in system_prompt
+    assert "$2,345.67/oz" in system_prompt
+    assert "Do not cite any specific dollar figures, percentages, yields, or rates \u2014 current or historical \u2014" \
+        in system_prompt
+    snap_pos = system_prompt.find("CURRENT MARKET SNAPSHOT")
+    analyst_pos = system_prompt.find("You are a senior gold market analyst")
+    assert snap_pos < analyst_pos, \
+        f"Snapshot block (pos {snap_pos}) must appear before analyst line (pos {analyst_pos})"
+
+
+# --- OA1-5: Fallback snapshot still injects hard instruction ---
+
+@pytest.mark.asyncio
+async def test_fallback_snapshot_still_injects_hard_instruction():
+    """All-None fallback snapshot still produces CURRENT MARKET SNAPSHOT + [UNAVAILABLE] + hard instruction."""
+    ca = _get_content_agent()
+    agent = ca.ContentAgent.__new__(ca.ContentAgent)
+    agent.anthropic = AsyncMock()
+    agent._skipped_short_longform = 0
+    agent._market_snapshot = _make_fallback_snapshot()
+
+    captured_system: list[str] = []
+
+    thread_response = {
+        "format": "thread",
+        "rationale": "test",
+        "key_data_points": [],
+        "draft_content": {
+            "format": "thread",
+            "tweets": ["Tweet 1."],
+            "long_form_post": "A" * 400,
+        },
+    }
+    mock_resp = MagicMock()
+    mock_resp.content = [MagicMock(text=_json.dumps(thread_response))]
+
+    async def _capture_create(*args, **kwargs):
+        captured_system.append(kwargs.get("system", ""))
+        return mock_resp
+
+    agent.anthropic.messages.create = AsyncMock(side_effect=_capture_create)
+
+    story = {"title": "Gold surges", "link": "https://example.com", "source_name": "Reuters"}
+    deep_research = {"article_text": "...", "corroborating_sources": [], "key_data_points": []}
+
+    result = await agent._research_and_draft(story, deep_research)
+
+    assert result is not None
+    system_prompt = captured_system[0]
+
+    assert "CURRENT MARKET SNAPSHOT" in system_prompt
+    unavailable_count = system_prompt.count("[UNAVAILABLE]")
+    assert unavailable_count >= 5, \
+        f"Expected >=5 [UNAVAILABLE] in system prompt, got {unavailable_count}"
+    assert "Do not cite any specific dollar figures, percentages, yields, or rates \u2014 current or historical \u2014" \
+        in system_prompt
+
+
+# --- OA1-6: Snapshot fetch failure does not abort run ---
+
+@pytest.mark.asyncio
+async def test_snapshot_fetch_failure_does_not_abort_run(caplog):
+    """fetch_market_snapshot raising RuntimeError does not abort the run; fallback snapshot used."""
+    ca = _get_content_agent()
+
+    mock_fetch = AsyncMock(side_effect=RuntimeError("network down"))
+
+    mock_session = AsyncMock()
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    mock_session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None)))
+    mock_session.add = MagicMock()
+    mock_session.flush = AsyncMock()
+    mock_session.commit = AsyncMock()
+
+    drafter_called = []
+
+    async def _noop_pipeline_tracking(session, agent_run):
+        drafter_called.append(True)
+
+    with patch("agents.content_agent.AsyncSessionLocal", return_value=mock_session), \
+         patch("agents.content_agent.fetch_market_snapshot", mock_fetch):
+        agent = ca.ContentAgent.__new__(ca.ContentAgent)
+        agent.anthropic = AsyncMock()
+        agent.serpapi_client = None
+        agent.tweepy_client = AsyncMock()
+        agent._queued_titles = []
+        agent._skipped_short_longform = 0
+        agent._market_snapshot = None
+
+        agent._run_pipeline = _noop_pipeline_tracking
+
+        with caplog.at_level(logging.WARNING):
+            await agent.run()
+
+    assert agent._market_snapshot is not None
+    assert agent._market_snapshot["status"] == "failed"
+    assert agent._market_snapshot["gold_usd_per_oz"] is None
+    assert drafter_called, "Pipeline must still be called after fetch failure"
+    assert any("pipeline" in r.message.lower() or "market snapshot" in r.message.lower()
+               for r in caplog.records)
+
+
+# --- OA1-7: DB write failure still returns in-memory snapshot ---
+
+@pytest.mark.asyncio
+async def test_snapshot_db_write_failure_still_drafts():
+    """DB insert failure in fetch_market_snapshot does not propagate; in-memory snapshot returned."""
+    import importlib
+    ms = importlib.import_module("services.market_snapshot")
+    import httpx
+
+    metals_response = {
+        "rates": {"USDXAU": 0.000426, "USDXAG": 0.035842},
+        "timestamp": 1745280000,
+    }
+
+    def _mock_resp(status_code, json_body=None):
+        mock = MagicMock()
+        mock.status_code = status_code
+        if json_body is not None:
+            mock.json.return_value = json_body
+        if status_code >= 400:
+            mock.raise_for_status.side_effect = httpx.HTTPStatusError(
+                f"HTTP {status_code}", request=MagicMock(), response=mock
+            )
+        else:
+            mock.raise_for_status.return_value = None
+        return mock
+
+    async def _get_side_effect(url, **kwargs):
+        if "metalpriceapi" in url:
+            return _mock_resp(200, metals_response)
+        return _mock_resp(500)
+
+    with patch.dict(os.environ, {"FRED_API_KEY": "test-key", "METALPRICEAPI_API_KEY": "test-metals"}):
+        import config as cfg
+        cfg.get_settings.cache_clear()
+        try:
+            with patch("httpx.AsyncClient") as mock_client_cls:
+                mock_client = AsyncMock()
+                mock_client.get = AsyncMock(side_effect=_get_side_effect)
+                mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                mock_client.__aexit__ = AsyncMock(return_value=None)
+                mock_client_cls.return_value = mock_client
+
+                mock_session = AsyncMock()
+                from sqlalchemy.exc import IntegrityError
+                mock_session.flush = AsyncMock(side_effect=IntegrityError("dup", {}, Exception()))
+                mock_session.add = MagicMock()
+
+                snap = await ms.fetch_market_snapshot(session=mock_session)
+        finally:
+            cfg.get_settings.cache_clear()
+
+    assert snap is not None
+    assert snap["gold_usd_per_oz"] is not None
+
+
+# --- OA1-8: Gold gate dict contract unchanged (nnh regression guard) ---
+
+@pytest.mark.asyncio
+async def test_gold_gate_dict_contract_unchanged():
+    """Regression: is_gold_relevant_or_systemic_shock still returns {keep, reject_reason, company} dict."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Gold hits record $3,200 on safe-haven demand",
+        "summary": "Spot gold surged to all-time highs amid global uncertainty.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(
+        text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None})
+    )]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert isinstance(result, dict)
+    assert "keep" in result
+    assert "reject_reason" in result
+    assert "company" in result
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
