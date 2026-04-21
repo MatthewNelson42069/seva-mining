@@ -21,9 +21,7 @@ export default function App() {
                 Unknown slug → redirect back to /agents/breaking-news. */}
             <Route path="/agents/:slug" element={<PerAgentQueuePage />} />
 
-            {/* Other pages. /content-review + ContentPage were orphaned after
-                quick-260421-eoe (no Sidebar link, no internal linkage); route
-                removed. ContentPage.tsx retained pending a follow-up quick task. */}
+            {/* Other pages. */}
             <Route path="/digest" element={<DigestPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

@@ -205,45 +205,6 @@ def deduplicate_stories(stories: list[dict]) -> list[dict]:
     return kept
 
 
-# ---------------------------------------------------------------------------
-# Top story selection (CONT-06, CONT-07)
-# ---------------------------------------------------------------------------
-
-def select_top_story(stories: list[dict], threshold: float) -> dict | None:
-    """CONT-06/07: Return single highest-scoring story above threshold, or None.
-
-    Kept for backward compatibility — prefer select_qualifying_stories() for
-    multi-story output.
-    """
-    qualifying = [s for s in stories if s.get("score", 0) > threshold]
-    if not qualifying:
-        return None
-    return max(qualifying, key=lambda s: s.get("score", 0))
-
-
-def _is_within_window(
-    published,
-    window_hours: float,
-    now: "datetime | None" = None,
-) -> bool:
-    """Return True if published is within window_hours of now.
-
-    Accepts datetime objects (as stored by RSS/SerpAPI ingest) or ISO strings.
-    Mirrors recency_score() timezone handling.
-    """
-    if now is None:
-        now = datetime.now(timezone.utc)
-    if isinstance(published, str):
-        try:
-            published = datetime.fromisoformat(published.replace("Z", "+00:00"))
-        except ValueError:
-            return False
-    if published.tzinfo is None:
-        published = published.replace(tzinfo=timezone.utc)
-    age_hours = (now - published).total_seconds() / 3600
-    return age_hours <= window_hours
-
-
 async def classify_format_lightweight(story: dict, *, client) -> str:
     """Lightweight Haiku format classifier for slice-priority decision.
 
@@ -286,48 +247,6 @@ async def classify_format_lightweight(story: dict, *, client) -> str:
             type(exc).__name__,
         )
         return "thread"
-
-
-def select_qualifying_stories(
-    stories: list[dict],
-    threshold: float,
-    *,
-    max_count: int | None = None,
-    breaking_window_hours: float | None = None,
-    now: datetime | None = None,
-) -> list[dict]:
-    """Return stories scoring above threshold, optionally capped at max_count.
-
-    When max_count is None: returns ALL qualifying sorted by score desc (unchanged).
-    When max_count is set: breaking_news format and fresh stories (within
-    breaking_window_hours) are prioritized — they fill the front of the slice
-    regardless of score; remaining slots go to highest-score regular stories.
-    """
-    qualifying = [s for s in stories if s.get("score", 0) > threshold]
-    if not qualifying:
-        return []
-
-    if max_count is None:
-        qualifying.sort(key=lambda s: s.get("score", 0), reverse=True)
-        return qualifying
-
-    _now = now or datetime.now(timezone.utc)
-
-    def _is_priority(s: dict) -> bool:
-        if s.get("predicted_format") == "breaking_news":
-            return True
-        if breaking_window_hours is not None:
-            return _is_within_window(s.get("published"), breaking_window_hours, _now)
-        return False
-
-    priority = [s for s in qualifying if _is_priority(s)]
-    regular = [s for s in qualifying if not _is_priority(s)]
-
-    priority.sort(key=lambda s: s.get("score", 0), reverse=True)
-    regular.sort(key=lambda s: s.get("score", 0), reverse=True)
-
-    combined = priority + regular
-    return combined[:max_count]
 
 
 # ---------------------------------------------------------------------------

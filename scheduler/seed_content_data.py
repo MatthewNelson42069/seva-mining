@@ -14,11 +14,15 @@ Idempotent: existing records are skipped, not overwritten.
 -- Remove old content agent cron config keys (retired by quick-260421-eoe:
 -- content_agent is no longer a scheduled job; gold_history folded into the
 -- 7-sub-agent pattern on a fixed 2h cadence).
+-- (K9Z follow-up: max_stories_per_run and breaking_window_hours were
+-- writes-only after eoe; never read again.)
 DELETE FROM config WHERE key IN (
     'content_agent_schedule_hour',
     'content_agent_midday_hour',
     'content_agent_interval_hours',
-    'gold_history_hour'
+    'gold_history_hour',
+    'content_agent_max_stories_per_run',
+    'content_agent_breaking_window_hours'
 );
 -- ---------------------------------------------------------------------------
 """
@@ -39,8 +43,6 @@ CONFIG_DEFAULTS = [
     ("content_recency_weight",            "0.40"),
     ("content_credibility_weight",        "0.30"),
     ("content_quality_threshold",         "7.0"),
-    ("content_agent_max_stories_per_run",  "5"),
-    ("content_agent_breaking_window_hours", "3"),
     ("morning_digest_schedule_hour",      "15"),
     ("gold_history_used_topics",          "[]"),
     ("content_gold_gate_enabled",            "true"),
