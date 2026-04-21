@@ -3,12 +3,12 @@ import { toast } from 'sonner'
 
 interface LongFormDraft {
   format: 'long_form'
-  post_text?: string
+  post?: string
 }
 
 export function LongFormPreview({ draft }: { draft: unknown }) {
   const d = (draft ?? {}) as LongFormDraft
-  const postText = typeof d.post_text === 'string' ? d.post_text : ''
+  const postText = typeof d.post === 'string' ? d.post : ''
 
   if (!postText) {
     return (

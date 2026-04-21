@@ -156,7 +156,7 @@ describe('ContentDetailModal format-aware (mfy pivot)', () => {
       content_type: 'long_form',
       draft_content: {
         format: 'long_form',
-        post_text: 'A detailed long-form post about gold markets.',
+        post: 'A detailed long-form post about gold markets.',
       },
     })
     mockUseContentBundle.mockReturnValue({
