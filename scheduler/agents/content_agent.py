@@ -460,15 +460,26 @@ async def is_gold_relevant_or_systemic_shock(
     story: dict,
     config: dict,
     client: "AsyncAnthropic | None" = None,
-) -> bool:
-    """Two-bucket gold relevance gate (Haiku). Returns True = keep, False = skip.
+) -> dict:
+    """Two-bucket gold relevance gate (Haiku). Returns structured decision dict.
 
-    Bucket A: Directly about gold/precious metals/gold mining → keep.
+    Bucket A: Directly about gold/precious metals/gold mining macro/sector → keep.
     Bucket B: Systemic financial/geopolitical shock plausibly moving gold → keep.
-    Everything else → reject.
+    Bucket C: Primary subject is a specific gold/mining company → reject (nnh rule).
+    Everything else (off-topic, listicles, stock picks) → reject.
 
-    Fail-open: API errors return True so infra blips never silence real gold stories.
+    Return shape:
+        {"keep": bool, "reject_reason": str | None, "company": str | None}
+        - Keep:          {"keep": True, "reject_reason": None, "company": None}
+        - Not gold:      {"keep": False, "reject_reason": "not_gold_relevant", "company": None}
+        - Specific miner: {"keep": False, "reject_reason": "primary_subject_is_specific_miner",
+                           "company": "<name>"}
+
+    Fail-open: API errors or malformed JSON return {"keep": True, ...} so infra
+    blips never silence real gold stories.
     Bypassed when config key content_gold_gate_enabled is False.
+
+    Requirements: NNH-01, NNH-02, NNH-03, NNH-04, NNH-05.
 
     Args:
         story: Story dict with 'title' and 'summary' keys.
@@ -477,12 +488,14 @@ async def is_gold_relevant_or_systemic_shock(
         client: Optional AsyncAnthropic instance. If None, creates one.
 
     Returns:
-        True if story passes the gate (keep for drafting), False if rejected.
+        dict with keys: keep (bool), reject_reason (str|None), company (str|None).
     """
+    _KEEP = {"keep": True, "reject_reason": None, "company": None}
+
     # Bypass when gate is disabled
     enabled_str = config.get("content_gold_gate_enabled", "true")
     if str(enabled_str).lower() in ("false", "0", "no"):
-        return True
+        return _KEEP
 
     title = story.get("title", "")
     summary = story.get("summary", "")
@@ -492,37 +505,89 @@ async def is_gold_relevant_or_systemic_shock(
     try:
         response = await anthropic_client.messages.create(
             model=model,
-            max_tokens=5,
+            max_tokens=100,
             system=(
-                "Answer yes or no. Is this news story directly about gold, precious metals, "
-                "gold mining, OR about a systemic financial/geopolitical event that would "
-                "plausibly move gold prices (major war, sanctions, Strait of Hormuz disruption, "
-                "Fed/USD policy shock, oil supply shock, currency crisis)? "
-                "Generic business news, equity market moves, sector-specific news outside "
-                "gold/commodities → answer no.\n\n"
-                "REJECT (answer no) for:\n"
-                "- Listicles or rankings of gold stocks (e.g. 'Top 5 Gold Stocks', "
-                "'7 Best-Performing Gold Stocks For...', 'Best Gold Stocks to Buy Now', "
-                "'Gold Stocks to Watch').\n"
-                "- Multi-stock analytical picks roundups or recommendation lists across "
-                "several gold companies.\n"
-                "- Generic buying advice or educational content about gold investing.\n\n"
-                "ACCEPT (answer yes) for:\n"
-                "- Specific single-company news: earnings, M&A, production reports, "
-                "executive changes, project milestones — even if stock-adjacent.\n"
-                "- Gold price, supply, or demand macro news.\n"
-                "- Geopolitical/financial systemic shock with plausible gold-price linkage."
+                "You are a content filter for a gold-sector social media account. "
+                "Evaluate whether this news story should be kept (drafted into content) "
+                "or rejected, based on the rules below.\n\n"
+                "KEEP (is_gold_relevant=true) if the story is:\n"
+                "- Macro/sector gold or precious metals news: gold price moves, "
+                "central bank buying, gold supply/demand, gold ETF flows, miners-index moves.\n"
+                "- A systemic financial/geopolitical shock plausibly moving gold prices "
+                "(major war, sanctions, Strait of Hormuz disruption, Fed/USD policy shock, "
+                "oil supply shock, currency crisis, rare-earth restrictions).\n"
+                "- A story that CITES a financial institution (Goldman Sachs, BlackRock, "
+                "JPMorgan, Morgan Stanley, World Gold Council, IMF, Federal Reserve, "
+                "central banks) as a SOURCE providing a forecast, data, or analysis — "
+                "these are sources, not subjects. Their presence does NOT trigger rejection.\n\n"
+                "REJECT — primary_subject_is_specific_miner "
+                "(is_gold_relevant=true but primary_subject_is_specific_miner=true) if the story "
+                "is primarily about a single gold/mining company's own news: drilling results, "
+                "production updates, earnings/guidance, M&A where a specific miner is buyer or "
+                "target, executive changes, project milestones, financing/raises, resource "
+                "estimates. This applies even if gold price is mentioned incidentally.\n"
+                "Examples of REJECT (specific miner): "
+                "'B2Gold expects lower Q2 output from Goose mine' (B2Gold), "
+                "'McLaren Completes Drone MAG Program at Blue Quartz Gold Property' (McLaren), "
+                "'Barrick acquires Kinross in $8B deal' (Barrick+Kinross), "
+                "'Newmont posts record Q2, raises guidance' (Newmont), "
+                "'Seva Mining hits 12g/t gold at Timmins drill hole 42' (Seva Mining).\n\n"
+                "REJECT — not_gold_relevant "
+                "(is_gold_relevant=false) for:\n"
+                "- Listicles or rankings of gold stocks "
+                "('Top 5 Gold Stocks', '7 Best-Performing Gold Stocks For...', "
+                "'Best Gold Stocks to Buy Now', 'Gold Stocks to Watch').\n"
+                "- Multi-stock analytical picks roundups or recommendation lists.\n"
+                "- Generic buying advice or educational content about gold investing.\n"
+                "- Unrelated business/financial news with no gold/metals/systemic-shock angle.\n\n"
+                "Examples of KEEP (macro/sector/source): "
+                "'Gold hits record $3,200 as Goldman forecasts $4K by year-end' (Goldman is a source), "
+                "'Central banks added 800t of gold in Q1, says World Gold Council' (WGC is a source), "
+                "'Gold miners index hits new high' (sector-wide), "
+                "'ETF flows into gold miners surge' (sector flow), "
+                "'US CPI at 2.1%; gold rallies on Fed cut odds' (macro), "
+                "'China imposes new rare-earth export restrictions' (geopolitics/systemic shock).\n\n"
+                "Respond with ONLY a compact JSON object, no other text:\n"
+                '{"is_gold_relevant": true|false, '
+                '"primary_subject_is_specific_miner": true|false, '
+                '"company": null|"<company name if primary_subject_is_specific_miner is true>"}'
             ),
             messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
         )
-        answer = response.content[0].text.strip().lower()
-        return answer.startswith("yes")
+        raw = response.content[0].text.strip()
+        try:
+            parsed = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(
+                "Gold gate returned non-JSON for '%s' — fail-open (keeping story): %r",
+                title[:50], raw[:80],
+            )
+            return _KEEP
+
+        # Sanitize parsed fields
+        is_gold = bool(parsed.get("is_gold_relevant", True))
+        is_specific_miner = bool(parsed.get("primary_subject_is_specific_miner", False))
+        company_raw = parsed.get("company")
+        company = str(company_raw).strip() if company_raw else None
+        if not company:
+            company = None
+
+        if not is_gold:
+            return {"keep": False, "reject_reason": "not_gold_relevant", "company": None}
+        if is_specific_miner:
+            return {
+                "keep": False,
+                "reject_reason": "primary_subject_is_specific_miner",
+                "company": company,
+            }
+        return _KEEP
+
     except Exception as exc:  # noqa: BLE001 — fail-open on infra blip
         logger.warning(
             "Gold gate API failed for '%s' (%s) — fail-open (keeping story)",
             title[:50], type(exc).__name__,
         )
-        return True
+        return _KEEP
 
 
 # ---------------------------------------------------------------------------
@@ -1562,15 +1627,30 @@ For "quote" format, draft_content must have:
                 all_already_covered = False
 
                 # Gold relevance gate: hard-reject non-gold articles that passed threshold
-                gate_pass = await is_gold_relevant_or_systemic_shock(
+                gate_decision = await is_gold_relevant_or_systemic_shock(
                     story, gate_config, client=self.anthropic
                 )
-                if not gate_pass:
+                if not gate_decision["keep"]:
                     skipped_by_gate += 1
-                    logger.info(
-                        "Gold gate rejected (skipped_by_gate=%d): '%s'",
-                        skipped_by_gate, story["title"][:60],
-                    )
+                    reason = gate_decision.get("reject_reason")
+                    company = gate_decision.get("company")
+                    if reason == "primary_subject_is_specific_miner":
+                        if company:
+                            logger.info(
+                                "ContentAgent: rejected story %r — primary subject is specific miner (%s).",
+                                story["title"][:120], company,
+                            )
+                        else:
+                            logger.info(
+                                "ContentAgent: rejected story %r — primary subject is specific miner.",
+                                story["title"][:120],
+                            )
+                    else:
+                        # Preserve existing log shape for non-gold / listicle / systemic rejects
+                        logger.info(
+                            "Gold gate rejected (skipped_by_gate=%d): %r",
+                            skipped_by_gate, story["title"][:60],
+                        )
                     continue
 
                 # Deep research
