@@ -1638,14 +1638,11 @@ For "quote" format, draft_content must have:
                     })
                     continue
 
-                # Create DraftItem + call Senior Agent
+                # Create DraftItem (Senior intake pipeline removed in quick-260420-sn9 —
+                # stories land in DB directly; morning_digest aggregates them at 8am UTC).
                 item = build_draft_item(bundle, rationale)
                 session.add(item)
                 await session.flush()  # Get item.id
-
-                # Lazy import to avoid circular deps
-                from agents.senior_agent import process_new_items  # noqa: PLC0415
-                await process_new_items([item.id])
 
                 items_queued += 1
                 self._queued_titles.append(story["title"][:80])
@@ -1711,7 +1708,6 @@ For "quote" format, draft_content must have:
         do not abort remaining items.
         """
         from models.content_bundle import ContentBundle  # noqa: PLC0415
-        from agents.senior_agent import process_new_items  # noqa: PLC0415
 
         # --- Video clips ---
         video_clips = await self._search_video_clips(session)
@@ -1762,7 +1758,7 @@ For "quote" format, draft_content must have:
                     vc_item = build_draft_item(vc_bundle, rationale)
                     session.add(vc_item)
                     await session.flush()
-                    await process_new_items([vc_item.id])
+                    # Senior intake removed in quick-260420-sn9 — item lands in DB directly.
                     agent_run.items_queued = (agent_run.items_queued or 0) + 1
                     self._queued_titles.append(f"Video: @{clip['author_username']}")
                     logger.info("Video clip queued from @%s", clip["author_username"])

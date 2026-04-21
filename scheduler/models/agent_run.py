@@ -9,7 +9,7 @@ class AgentRun(Base):
     __tablename__ = "agent_runs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    agent_name = Column(String(50), nullable=False)   # twitter_agent, content_agent, etc.
+    agent_name = Column(String(50), nullable=False)   # content_agent, morning_digest, gold_history_agent
     started_at = Column(DateTime(timezone=True), nullable=False)
     ended_at = Column(DateTime(timezone=True))
     items_found = Column(Integer, server_default="0")

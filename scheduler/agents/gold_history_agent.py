@@ -283,11 +283,11 @@ class GoldHistoryAgent:
         5. Run compliance check.
         6. Persist ContentBundle.
         7. Track used slug in Config.
-        8. If compliance passed: build DraftItem, call process_new_items().
+        8. If compliance passed: build DraftItem (Senior intake removed in quick-260420-sn9;
+           items land in DB directly, aggregated into the morning digest at 8am UTC).
         """
         from models.content_bundle import ContentBundle  # noqa: PLC0415
         from agents.content_agent import check_compliance, build_draft_item  # noqa: PLC0415
-        from agents.senior_agent import process_new_items  # noqa: PLC0415
 
         # 1. Read used topics
         used_topics = await self._get_used_topics(session)
@@ -376,7 +376,8 @@ class GoldHistoryAgent:
             })
             return
 
-        # 8. Build DraftItem and push to Senior Agent
+        # 8. Build DraftItem (Senior intake pipeline removed in quick-260420-sn9 —
+        #    item lands in DB directly; morning_digest aggregates it at 8am UTC).
         rationale = (
             f"Gold History: {story_title}. "
             f"{verified_count}/{len(verified_facts)} claims verified via SerpAPI."
@@ -384,8 +385,6 @@ class GoldHistoryAgent:
         item = build_draft_item(bundle, rationale)
         session.add(item)
         await session.flush()  # Get item.id
-
-        await process_new_items([item.id])
 
         agent_run.items_found = 1
         agent_run.items_queued = 1

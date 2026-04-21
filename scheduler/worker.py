@@ -2,12 +2,13 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-It starts AsyncIOScheduler with 4 jobs and uses PostgreSQL advisory locks
+It starts AsyncIOScheduler with 3 jobs and uses PostgreSQL advisory locks
 to prevent duplicate execution during Railway zero-downtime deploys.
 
-Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04, TWIT-01, SENR-01, SENR-09
+Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04, SENR-01, SENR-09
 Decisions: D-12 (APScheduler 3.11.2), D-13 (advisory lock), D-14 (placeholder jobs)
-Phase 5 (SENR): expiry_sweep and morning_digest jobs wired to SeniorAgent.
+Phase 5 (SENR): morning_digest job wired to SeniorAgent; expiry_sweep removed in
+Phase 10; dedup/alerts/queue-cap/engagement surfaces removed in quick-260420-sn9.
 """
 import asyncio
 import logging
@@ -20,7 +21,6 @@ from database import engine  # single shared engine — avoids duplicate connect
 from models.config import Config
 from agents.content_agent import ContentAgent
 from agents.gold_history_agent import GoldHistoryAgent
-from agents.twitter_agent import TwitterAgent
 from agents.senior_agent import SeniorAgent, seed_senior_config
 
 logging.basicConfig(
@@ -49,7 +49,6 @@ def get_scheduler() -> AsyncIOScheduler:
 # NEVER reuse an ID across different jobs — advisory locks are process-global.
 # These IDs are stable for the lifetime of the project.
 JOB_LOCK_IDS: dict[str, int] = {
-    "twitter_agent": 1001,
     "content_agent": 1003,
     "morning_digest": 1005,
     "gold_history_agent": 1009,
@@ -135,24 +134,17 @@ def _make_job(job_name: str, engine):
     Create a job callback for APScheduler that wraps the appropriate agent
     or placeholder with the advisory lock.
 
-    - twitter_agent: TwitterAgent().run()
+    - content_agent: ContentAgent().run()
     - morning_digest: SeniorAgent().run_morning_digest() [Phase 5 — SENR-01]
-    - All other jobs use placeholder_job until their phases are built.
+    - gold_history_agent: GoldHistoryAgent().run()
 
-    Note: expiry_sweep was removed in Phase 10. run_expiry_sweep() is preserved
-    in senior_agent.py but no longer scheduled.
+    Note: expiry_sweep was removed in Phase 10 and run_expiry_sweep() was
+    deleted in quick-260420-sn9 along with all other Senior non-digest surfaces.
+    Twitter agent was purged in quick-260420-sn9.
     """
     async def job():
         async with engine.connect() as conn:
-            if job_name == "twitter_agent":
-                agent = TwitterAgent()
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    agent.run,
-                )
-            elif job_name == "morning_digest":
+            if job_name == "morning_digest":
                 agent = SeniorAgent()
                 await with_advisory_lock(
                     conn,
@@ -193,7 +185,6 @@ async def _read_schedule_config(engine) -> dict[str, str]:
     Falls back to hardcoded defaults if DB is unreachable or keys are missing.
     """
     defaults = {
-        "twitter_interval_hours": "2",
         "content_agent_interval_hours": "3",
         "morning_digest_schedule_hour": "8",
         "gold_history_hour": "9",
@@ -226,21 +217,20 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     Falls back to hardcoded defaults if config keys are missing.
 
     Config keys:
-    - twitter_interval_hours (default: 2)
-    - content_agent_interval_hours (default: 2)
+    - content_agent_interval_hours (default: 3)
     - morning_digest_schedule_hour (default: 8)
+    - gold_history_hour (default: 9)
     """
     cfg = await _read_schedule_config(engine)
 
-    twitter_hours = int(cfg["twitter_interval_hours"])
     content_hours = int(cfg["content_agent_interval_hours"])
     digest_hour = int(cfg["morning_digest_schedule_hour"])
     gold_history_hour = int(cfg["gold_history_hour"])
 
     logger.info(
-        "Schedule config: twitter=%dh, content=%dh, "
+        "Schedule config: content=%dh, "
         "digest=cron(%d:00 UTC), gold_history=cron(%d:00 bi-weekly Sun)",
-        twitter_hours, content_hours,
+        content_hours,
         digest_hour, gold_history_hour,
     )
 
@@ -252,13 +242,6 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         hours=content_hours,
         id="content_agent",
         name=f"Content Agent — every {content_hours} hours",
-    )
-    scheduler.add_job(
-        _make_job("twitter_agent", engine),
-        trigger="interval",
-        hours=twitter_hours,
-        id="twitter_agent",
-        name=f"Twitter Agent — every {twitter_hours} hours",
     )
     scheduler.add_job(
         _make_job("morning_digest", engine),
@@ -293,17 +276,6 @@ async def upsert_agent_config() -> None:
     code-level config changes take effect without manual DB edits.
     """
     overrides = {
-        # Twitter engagement gate
-        # Operator rule (260420-lw4): must have ≥50 likes.
-        "twitter_min_likes_general": "50",
-        "twitter_min_views_general": "0",       # Basic tier never returns impression_count
-        # Operator rule (260420-lw4): ≥50 likes applies even to watchlist accounts — quality over recency.
-        "twitter_min_likes_watchlist": "50",
-        "twitter_min_views_watchlist": "0",     # Basic tier never returns impression_count
-        # Instagram engagement gate
-        # Relaxed: 3-day lookback window + 72h age filter lets posts accumulate engagement
-        "instagram_min_likes": "50",            # was 100/200 — 50 is adequate for gold sector posts
-        "instagram_max_post_age_hours": "72",   # was 8 — hashtag top posts are often 1-3 days old
         # Content quality threshold
         # Anthropic relevance scoring fallback is 0.5 — lower threshold so more stories pass.
         # With 0.5 relevance: (0.5*0.4 + recency*0.3 + cred*0.3)*10 = min 4.0 for old/unknown sources
