@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
+import { Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import type { Platform, DraftItemResponse } from '@/api/types'
+import type { DraftItemResponse } from '@/api/types'
 import { ContentSummaryCard } from '@/components/approval/ContentSummaryCard'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useQueue } from '@/hooks/useQueue'
@@ -9,20 +10,7 @@ import { useAppStore } from '@/stores/index'
 import { Button } from '@/components/ui/button'
 import { getAgentRuns } from '@/api/settings'
 import type { AgentRunResponse } from '@/api/types'
-
-// Single-agent (content only) post quick-260420-sn9.
-const PLATFORM_LABELS: Record<Platform, string> = {
-  content: 'Content',
-}
-
-// Agent name used in the agent_runs table for each platform
-const AGENT_NAMES: Partial<Record<Platform, string>> = {
-  content: 'content_agent',
-}
-
-interface PlatformQueuePageProps {
-  platform: Platform
-}
+import { findTabBySlug, CONTENT_AGENT_TABS } from '@/config/agentTabs'
 
 /** Group items under the agent run that produced them.
  *  Each item is assigned to the most recent run whose started_at <= item.created_at.
@@ -32,18 +20,15 @@ function groupByRun(
   items: DraftItemResponse[],
   runs: AgentRunResponse[],
 ): Array<{ run: AgentRunResponse | null; items: DraftItemResponse[] }> {
-  // Runs sorted newest-first (already from API, but sort defensively)
   const sorted = [...runs].sort(
     (a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()
   )
 
-  // Map item → run
   const groups = new Map<string, { run: AgentRunResponse | null; items: DraftItemResponse[] }>()
   const NO_RUN_KEY = '__no_run__'
 
   for (const item of items) {
     const itemTime = new Date(item.created_at).getTime()
-    // Find the most recent run that started before (or at) this item's creation time
     const matchedRun = sorted.find(
       (r) => new Date(r.started_at).getTime() <= itemTime
     ) ?? null
@@ -55,7 +40,6 @@ function groupByRun(
     groups.get(key)!.items.push(item)
   }
 
-  // Return groups in order: newest run first, no-run group last
   const result: Array<{ run: AgentRunResponse | null; items: DraftItemResponse[] }> = []
   for (const run of sorted) {
     const key = run.id.toString()
@@ -85,35 +69,53 @@ function RunHeader({ run }: { run: AgentRunResponse | null }) {
   )
 }
 
-export function PlatformQueuePage({ platform }: PlatformQueuePageProps) {
-  const queue = useQueue(platform)
+/**
+ * Per-sub-agent queue page (quick-260421-eoe).
+ *
+ * Single dynamic route `/agents/:slug` renders one of the 7 sub-agents'
+ * queues based on `CONTENT_AGENT_TABS`. Unknown slug redirects to
+ * `/agents/breaking-news` (priority-1 default).
+ */
+export function PerAgentQueuePage() {
+  const { slug } = useParams<{ slug: string }>()
+  const tab = findTabBySlug(slug)
+
+  // Unknown slug → redirect to priority-1 agent (breaking news).
+  // Hooks below MUST still be declared unconditionally; to do that cleanly
+  // we return early BEFORE any hook is called only in the unreachable-tab
+  // case. Return a separate component render path instead.
+  if (!tab) {
+    return <Navigate to={`/agents/${CONTENT_AGENT_TABS[0].slug}`} replace />
+  }
+
+  return <PerAgentQueueBody tab={tab} />
+}
+
+function PerAgentQueueBody({ tab }: { tab: ReturnType<typeof findTabBySlug> & object }) {
+  const queue = useQueue('content', tab.contentType)
   const items = queue.data?.pages.flatMap((p) => p.items) ?? []
   const isLoading = queue.isLoading
 
-  // Fetch agent runs only for platforms that have them mapped
-  const agentName = AGENT_NAMES[platform]
   const runsQuery = useQuery({
-    queryKey: ['agent-runs', agentName],
-    queryFn: () => getAgentRuns(agentName, 7),
-    enabled: !!agentName,
+    queryKey: ['agent-runs', tab.agentName],
+    queryFn: () => getAgentRuns(tab.agentName, 7),
+    enabled: !!tab.agentName,
     staleTime: 60_000,
   })
   const runs = runsQuery.data ?? []
 
-  // Clear pending timeouts on unmount
   useEffect(() => {
     return () => {
       useAppStore.getState().clearAllPending()
     }
   }, [])
 
-  const showRunGroups = platform === 'content' && runs.length > 0
+  const showRunGroups = runs.length > 0
 
   return (
     <div className="flex flex-col h-full">
-      {/* Page header */}
       <div className="px-6 py-4 border-b border-border bg-card">
-        <h1 className="text-base font-semibold">{PLATFORM_LABELS[platform]} Queue</h1>
+        <h1 className="text-base font-semibold">{tab.label} Queue</h1>
         {!isLoading && (
           <p className="text-xs text-muted-foreground mt-0.5">
             {items.length}{queue.hasNextPage ? '+' : ''} pending
@@ -121,7 +123,6 @@ export function PlatformQueuePage({ platform }: PlatformQueuePageProps) {
         )}
       </div>
 
-      {/* Content */}
       <div className="flex-1 p-6 overflow-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
@@ -130,7 +131,6 @@ export function PlatformQueuePage({ platform }: PlatformQueuePageProps) {
         ) : items.length === 0 ? (
           <EmptyState />
         ) : showRunGroups ? (
-          // Content: grouped by agent run (single-agent system post quick-260420-sn9)
           <div className="max-w-2xl space-y-6">
             {groupByRun(items, runs).map((group, gi) => (
               <div key={gi} className="space-y-3">
@@ -155,7 +155,6 @@ export function PlatformQueuePage({ platform }: PlatformQueuePageProps) {
             )}
           </div>
         ) : (
-          // Flat list fallback (no runs fetched yet)
           <div className="max-w-2xl space-y-4">
             {items.map((item) => (
               <ContentSummaryCard key={item.id} item={item} />
