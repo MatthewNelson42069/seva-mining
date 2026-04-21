@@ -13,3 +13,7 @@ task should run `uv run ruff check . --fix` across backend alembic/versions to c
 
 **Impact:** `ruff check .` returns 1 error on this file regardless of sn9 changes.
 Backend tests pass. No functional regression.
+
+**RESOLVED 2026-04-21:** Fixed via `uv run ruff check . --fix` — one-line change
+(blank line between third-party and first-party imports). Backend `ruff check .`
+now clean; `pytest -q` → 66 passed, 5 skipped.

@@ -6,6 +6,7 @@ Create Date: 2026-04-21
 """
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
 from alembic import op
 
 revision = "0007"
