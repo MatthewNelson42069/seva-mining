@@ -22,6 +22,7 @@ key_decisions:
   - "Preserved datetime/timezone import at content_agent.py:34 (~18 live call sites remain after orphan island removal)."
   - "Preserved classify_format_lightweight at content_agent.py:208 (live, nested between the two orphan blocks in pre-edit layout)."
   - "Production DB cleanup left as operator-driven — seed_content_data.py docstring DELETE clause extended to 6 keys (was 4), matches eoe-era pattern (047ef1d)."
+  - "Prod DB migration executed 2026-04-21 (after initial cleanup completion): transaction-wrapped DELETE via local .env DATABASE_URL + asyncpg. Pre-counts: 4 of 6 keys present (content_agent_interval_hours, gold_history_hour, content_agent_max_stories_per_run, content_agent_breaking_window_hours — all 1 row each); the other 2 (content_agent_schedule_hour, content_agent_midday_hour) already absent. Post-counts: all 6 keys at 0. 4 rows deleted. No reinsert path remains in live code (k9z commit b8aec6e + eoe commit 047ef1d removed both write sites)."
 metrics:
   duration_minutes: 12
   completed_date: "2026-04-21"
