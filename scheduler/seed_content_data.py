@@ -11,12 +11,15 @@ requires all env vars to be set).
 Idempotent: existing records are skipped, not overwritten.
 
 -- DB migration — run once against production DB to remove old keys ----------
--- Remove old content agent cron config keys
-DELETE FROM config WHERE key IN ('content_agent_schedule_hour', 'content_agent_midday_hour');
-
--- Insert new interval config key (skip if already seeded by updated seed script)
-INSERT INTO config (key, value) VALUES ('content_agent_interval_hours', '2')
-ON CONFLICT (key) DO NOTHING;
+-- Remove old content agent cron config keys (retired by quick-260421-eoe:
+-- content_agent is no longer a scheduled job; gold_history folded into the
+-- 7-sub-agent pattern on a fixed 2h cadence).
+DELETE FROM config WHERE key IN (
+    'content_agent_schedule_hour',
+    'content_agent_midday_hour',
+    'content_agent_interval_hours',
+    'gold_history_hour'
+);
 -- ---------------------------------------------------------------------------
 """
 import asyncio
@@ -36,11 +39,9 @@ CONFIG_DEFAULTS = [
     ("content_recency_weight",            "0.40"),
     ("content_credibility_weight",        "0.30"),
     ("content_quality_threshold",         "7.0"),
-    ("content_agent_interval_hours",       "3"),
     ("content_agent_max_stories_per_run",  "5"),
     ("content_agent_breaking_window_hours", "3"),
     ("morning_digest_schedule_hour",      "15"),
-    ("gold_history_hour",                 "9"),
     ("gold_history_used_topics",          "[]"),
     ("content_gold_gate_enabled",            "true"),
     ("content_gold_gate_model",              "claude-haiku-4-5"),
