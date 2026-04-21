@@ -8,6 +8,7 @@ from app.models.content_bundle import ContentBundle
 from app.models.daily_digest import DailyDigest
 from app.models.draft_item import DraftItem, DraftStatus
 from app.models.keyword import Keyword
+from app.models.market_snapshot import MarketSnapshot
 from app.models.watchlist import Watchlist
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "Watchlist",
     "Keyword",
     "Config",
+    "MarketSnapshot",
 ]

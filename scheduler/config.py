@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     digest_whatsapp_to: Optional[str] = None
     frontend_url: str = "http://localhost:5173"
 
+    # Market snapshot grounding (quick-260420-oa1)
+    fred_api_key: Optional[str] = None
+    metalpriceapi_api_key: Optional[str] = None
+
 
 
 @lru_cache

@@ -5,5 +5,15 @@ from models.watchlist import Watchlist
 from models.keyword import Keyword
 from models.config import Config
 from models.content_bundle import ContentBundle
+from models.market_snapshot import MarketSnapshot
 
-__all__ = ["Base", "DraftItem", "AgentRun", "Watchlist", "Keyword", "Config", "ContentBundle"]
+__all__ = [
+    "Base",
+    "DraftItem",
+    "AgentRun",
+    "Watchlist",
+    "Keyword",
+    "Config",
+    "ContentBundle",
+    "MarketSnapshot",
+]
