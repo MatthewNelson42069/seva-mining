@@ -85,7 +85,7 @@ def test_sub_agent_staggering():
 
 def test_sub_agent_lock_ids():
     """Lock IDs cover 1010-1016 (inclusive) mapped to the sub_* job IDs."""
-    sub_entries = {job_id: lock_id for job_id, _, _, lock_id, _ in CONTENT_SUB_AGENTS}
+    sub_entries = {job_id: lock_id for job_id, _, _, lock_id, _, _ in CONTENT_SUB_AGENTS}
     assert sub_entries == {
         "sub_breaking_news": 1010,
         "sub_threads":       1011,

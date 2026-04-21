@@ -5,8 +5,9 @@ This module is the entry point for Railway service 2 (scheduler worker).
 Post quick-260421-eoe, it starts AsyncIOScheduler with 8 jobs:
 
 - morning_digest (daily cron, 08:00 UTC)
-- 7 content sub-agents, each on a 2h IntervalTrigger staggered across the
-  2h window with offsets [0, 17, 34, 51, 68, 85, 102] minutes.
+- 7 content sub-agents on IntervalTrigger — sub_breaking_news every 1h,
+  the other 6 every 2h — staggered across the 2h window with offsets
+  [0, 17, 34, 51, 68, 85, 102] minutes.
 
 PostgreSQL advisory locks prevent duplicate execution during Railway
 zero-downtime deploys.
@@ -79,17 +80,17 @@ JOB_LOCK_IDS: dict[str, int] = {
 
 
 # Content sub-agent registration table (quick-260421-eoe).
-# Tuple shape: (job_id, run_fn, name, lock_id, offset_minutes).
+# Tuple shape: (job_id, run_fn, name, lock_id, offset_minutes, interval_hours).
 # Stagger offsets spread 7 sub-agents across the 2h interval to avoid thundering herds
 # on SerpAPI + Anthropic. Offsets selected per RESEARCH stagger analysis.
-CONTENT_SUB_AGENTS: list[tuple[str, object, str, int, int]] = [
-    ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0),
-    ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17),
-    ("sub_long_form",     long_form.run_draft_cycle,      "Long-form",      1012,  34),
-    ("sub_quotes",        quotes.run_draft_cycle,         "Quotes",         1013,  51),
-    ("sub_infographics",  infographics.run_draft_cycle,   "Infographics",   1014,  68),
-    ("sub_video_clip",    video_clip.run_draft_cycle,     "Gold Media",     1015,  85),
-    ("sub_gold_history",  gold_history.run_draft_cycle,   "Gold History",   1016, 102),
+CONTENT_SUB_AGENTS: list[tuple[str, object, str, int, int, int]] = [
+    ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0, 1),
+    ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17, 2),
+    ("sub_long_form",     long_form.run_draft_cycle,      "Long-form",      1012,  34, 2),
+    ("sub_quotes",        quotes.run_draft_cycle,         "Quotes",         1013,  51, 2),
+    ("sub_infographics",  infographics.run_draft_cycle,   "Infographics",   1014,  68, 2),
+    ("sub_video_clip",    video_clip.run_draft_cycle,     "Gold Media",     1015,  85, 2),
+    ("sub_gold_history",  gold_history.run_draft_cycle,   "Gold History",   1016, 102, 2),
 ]
 
 
@@ -230,8 +231,8 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     """Build the APScheduler instance with 8 jobs registered.
 
     - morning_digest: cron at morning_digest_schedule_hour (default 08:00 UTC).
-    - 7 content sub-agents: IntervalTrigger(hours=2) with staggered start_date
-      offsets [0, 17, 34, 51, 68, 85, 102] minutes.
+    - 7 content sub-agents: IntervalTrigger with per-agent hours (sub_breaking_news=1,
+      others=2) and staggered start_date offsets [0, 17, 34, 51, 68, 85, 102] minutes.
 
     Config keys:
     - morning_digest_schedule_hour (default: 8)
@@ -241,7 +242,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     digest_hour = int(cfg["morning_digest_schedule_hour"])
 
     logger.info(
-        "Schedule config: digest=cron(%d:00 UTC), content_sub_agents=%d jobs on 2h interval",
+        "Schedule config: digest=cron(%d:00 UTC), content_sub_agents=%d jobs (sub_breaking_news=1h, others=2h)",
         digest_hour, len(CONTENT_SUB_AGENTS),
     )
 
@@ -264,13 +265,15 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     )
 
     now = datetime.now(timezone.utc)
-    for job_id, run_fn, name, lock_id, offset in CONTENT_SUB_AGENTS:
-        start_date = now + timedelta(minutes=offset)
+    for job_id, run_fn, name, lock_id, offset, interval_hours in CONTENT_SUB_AGENTS:
+        # +10s buffer ensures start_date > scheduler.start() wall clock for offset=0
+        # (APScheduler IntervalTrigger skips first fire if start_date <= now).
+        start_date = now + timedelta(minutes=offset) + timedelta(seconds=10)
         scheduler.add_job(
             _make_sub_agent_job(job_id, lock_id, run_fn, engine),
-            trigger=IntervalTrigger(hours=2, start_date=start_date),
+            trigger=IntervalTrigger(hours=interval_hours, start_date=start_date),
             id=job_id,
-            name=f"{name} — every 2h (offset +{offset}m)",
+            name=f"{name} — every {interval_hours}h (offset +{offset}m)",
         )
 
     return scheduler
@@ -283,8 +286,8 @@ async def upsert_agent_config() -> None:
     code-level config changes take effect without manual DB edits.
 
     quick-260421-eoe: removed the old content_agent interval override —
-    sub-agents run on a fixed 2h cadence. The DB row may remain for manual
-    cleanup but is no longer authoritative.
+    sub-agents run on fixed cadences (sub_breaking_news=1h, others=2h). The
+    DB row may remain for manual cleanup but is no longer authoritative.
 
     quick-260421-k9z: removed the content_agent_max_stories_per_run and
     content_agent_breaking_window_hours overrides — both were writes-only

@@ -1,6 +1,6 @@
 """Breaking News sub-agent — self-contained drafter.
 
-Part of the 7-agent split (quick-260421-eoe). Runs every 2 hours on its own
+Part of the 7-agent split (quick-260421-eoe). Runs every hour on its own
 APScheduler cron. Filters ``content_agent.fetch_stories()`` to the breaking_news
 predicted_format and drafts short, urgency-first tweets. Writes a ContentBundle
 row with ``content_type="breaking_news"`` in a single transaction after running
