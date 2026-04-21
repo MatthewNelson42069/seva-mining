@@ -6,6 +6,7 @@ Wave 0 state: agents.content_agent does not exist yet.
 All 15 tests skip immediately (before any lazy import) so they are
 collectable and show as SKIPPED (not ERROR) until implementation.
 """
+import json as _json
 import os
 import sys
 import pytest
@@ -419,67 +420,75 @@ async def test_content_agent_whatsapp_failure_is_non_fatal():
 
 @pytest.mark.asyncio
 async def test_gate_accepts_direct_gold_story():
-    """Gate returns True for a direct gold story when LLM answers 'yes'."""
+    """Gate returns keep=True for a direct gold story (macro/sector keep shape)."""
     ca = _get_content_agent()
-    story = {"title": "Barrick Gold Q3 earnings beat estimates", "summary": "Production up 12%."}
+    story = {"title": "Gold prices hit new record amid safe-haven demand", "summary": "Spot gold up 2%."}
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="yes")]
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
     )
-    assert result is True
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
 
 
 @pytest.mark.asyncio
 async def test_gate_accepts_systemic_shock_strait_of_hormuz():
-    """Gate returns True for a Strait of Hormuz disruption story when LLM answers 'yes'."""
+    """Gate returns keep=True for a Strait of Hormuz disruption story (macro keep shape)."""
     ca = _get_content_agent()
     story = {"title": "Iran threatens to close Strait of Hormuz after tanker attack", "summary": "Oil supply at risk."}
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="yes")]
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
     )
-    assert result is True
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
 
 
 @pytest.mark.asyncio
 async def test_gate_rejects_generic_option_traders():
-    """Gate returns False for a generic options story when LLM answers 'no'."""
+    """Gate returns keep=False for a generic options story (not_gold_relevant reject shape)."""
     ca = _get_content_agent()
     story = {"title": "Option Traders Chasing Torrid Stock Rally Turn Focus to Earnings", "summary": "Equity options volume rises."}
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="no")]
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": False, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
     )
-    assert result is False
+    assert result["keep"] is False
+    assert result["reject_reason"] == "not_gold_relevant"
+    assert result["company"] is None
 
 
 @pytest.mark.asyncio
 async def test_gate_rejects_private_credit():
-    """Gate returns False for a private credit story when LLM answers 'no'."""
+    """Gate returns keep=False for a private credit story (not_gold_relevant reject shape)."""
     ca = _get_content_agent()
     story = {"title": "Why Private Credit Is Not a Financial Crisis Threat", "summary": "Asset managers weigh in."}
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="no")]
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": False, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
     )
-    assert result is False
+    assert result["keep"] is False
+    assert result["reject_reason"] == "not_gold_relevant"
+    assert result["company"] is None
 
 
 @pytest.mark.asyncio
 async def test_gate_fails_open_on_api_error():
-    """Gate returns True (fail-open) when Anthropic raises an exception."""
+    """Gate returns keep=True dict (fail-open) when Anthropic raises an exception."""
     ca = _get_content_agent()
     story = {"title": "Gold surges on Fed pivot", "summary": "Spot gold up 2%."}
     mock_client = AsyncMock()
@@ -488,12 +497,14 @@ async def test_gate_fails_open_on_api_error():
     result = await ca.is_gold_relevant_or_systemic_shock(
         story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
     )
-    assert result is True
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
 
 
 @pytest.mark.asyncio
 async def test_gate_bypassed_when_disabled():
-    """Gate returns True without any LLM call when content_gold_gate_enabled=False."""
+    """Gate returns keep=True dict without any LLM call when content_gold_gate_enabled=False."""
     ca = _get_content_agent()
     story = {"title": "Anything at all", "summary": "Does not matter."}
     mock_client = AsyncMock()
@@ -501,7 +512,9 @@ async def test_gate_bypassed_when_disabled():
     result = await ca.is_gold_relevant_or_systemic_shock(
         story, {"content_gold_gate_enabled": "false"}, client=mock_client
     )
-    assert result is True
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
     mock_client.messages.create.assert_not_called()
 
 
@@ -763,7 +776,7 @@ def test_select_qualifying_stories_no_max_count_unchanged_behavior():
 
 @pytest.mark.asyncio
 async def test_gate_rejects_listicle_top_5_gold_stocks():
-    """Gate returns False for a 'Top 5 Junior Gold Stocks' listicle article."""
+    """Gate returns keep=False for a 'Top 5 Junior Gold Stocks' listicle article (not_gold_relevant)."""
     ca = _get_content_agent()
     story = {
         "title": "Top 5 Junior Gold Stocks of 2026",
@@ -771,19 +784,21 @@ async def test_gate_rejects_listicle_top_5_gold_stocks():
     }
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="no")]
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": False, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
         {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
         client=mock_client,
     )
-    assert result is False
+    assert result["keep"] is False
+    assert result["reject_reason"] == "not_gold_relevant"
+    assert result["company"] is None
 
 
 @pytest.mark.asyncio
 async def test_gate_rejects_listicle_best_performing():
-    """Gate returns False for a '7 Best-Performing Gold Stocks' listicle."""
+    """Gate returns keep=False for a '7 Best-Performing Gold Stocks' listicle (not_gold_relevant)."""
     ca = _get_content_agent()
     story = {
         "title": "7 Best-Performing Gold Stocks For Hedging Against Volatility",
@@ -791,19 +806,22 @@ async def test_gate_rejects_listicle_best_performing():
     }
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="no")]
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": False, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
         {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
         client=mock_client,
     )
-    assert result is False
+    assert result["keep"] is False
+    assert result["reject_reason"] == "not_gold_relevant"
+    assert result["company"] is None
 
 
 @pytest.mark.asyncio
-async def test_gate_accepts_single_company_earnings():
-    """Gate returns True for single-company earnings news."""
+async def test_gate_rejects_single_company_earnings_under_nnh():
+    # quick-260420-nnh: inverts rqx-era behavior — single-company earnings is now a reject under the specific-miner rule.
+    """Gate returns keep=False for single-company Newmont earnings (specific-miner reject)."""
     ca = _get_content_agent()
     story = {
         "title": "Newmont Reports Record Q1 Gold Production",
@@ -811,21 +829,21 @@ async def test_gate_accepts_single_company_earnings():
     }
     mock_client = AsyncMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="yes")]
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "Newmont"}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
         {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
         client=mock_client,
     )
-    assert result is True
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert result["company"] == "Newmont"
 
 
 # ---------------------------------------------------------------------------
 # quick-260420-mfy: brand_preamble + three-field infographic/quote tests
 # ---------------------------------------------------------------------------
-
-import json as _json
 
 
 def _make_mfy_infographic_response():
@@ -1047,8 +1065,9 @@ def test_compliance_screens_data_facts():
     text = ca_module._extract_check_text(dc)
     assert "guaranteed returns" in text, "_extract_check_text must include data_facts content"
 @pytest.mark.asyncio
-async def test_gate_accepts_single_company_ma():
-    """Gate returns True for single-company M&A news."""
+async def test_gate_rejects_barrick_ma_under_nnh():
+    # quick-260420-nnh: inverts rqx-era behavior — Barrick M&A is a specific-miner story (two specific miners, same rule) and must reject under nnh. Consistent with B2Gold/Newmont/Seva Mining rejects above.
+    """Gate returns keep=False for Barrick M&A news (specific-miner reject)."""
     ca = _get_content_agent()
     story = {
         "title": "Barrick Announces $5B Acquisition of X Mining",
@@ -1056,6 +1075,273 @@ async def test_gate_accepts_single_company_ma():
     }
     mock_client = AsyncMock()
     mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "Barrick"}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert "Barrick" in result["company"]
+
+
+# ---------------------------------------------------------------------------
+# quick-260420-nnh: Company-specific rejection tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_gate_rejects_b2gold_production_update():
+    """Gate rejects B2Gold production update — primary subject is specific miner."""
+    ca = _get_content_agent()
+    story = {
+        "title": "B2Gold expects lower Q2 output from Goose mine",
+        "summary": "B2Gold Corp says Goose mine production will be below guidance for Q2.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "B2Gold"}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert result["company"] == "B2Gold"
+
+
+@pytest.mark.asyncio
+async def test_gate_rejects_mclaren_drone_program():
+    """Gate rejects McLaren drone program update — primary subject is specific miner."""
+    ca = _get_content_agent()
+    story = {
+        "title": "McLaren Completes Drone MAG Program at Blue Quartz Gold Property",
+        "summary": "McLaren Mining announces completion of its drone magnetics survey at Blue Quartz.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "McLaren"}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert result["company"] == "McLaren"
+
+
+@pytest.mark.asyncio
+async def test_gate_rejects_barrick_kinross_ma():
+    """Gate rejects Barrick-Kinross M&A — primary subjects are two specific miners."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Barrick acquires Kinross in $8B deal",
+        "summary": "Barrick Gold announces acquisition of Kinross Gold in a transformative all-stock $8B deal.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "Barrick"}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert result["company"] is not None
+    assert "Barrick" in result["company"]
+
+
+@pytest.mark.asyncio
+async def test_gate_rejects_newmont_guidance():
+    """Gate rejects Newmont guidance raise — primary subject is specific miner."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Newmont posts record Q2, raises guidance",
+        "summary": "Newmont Corporation reports record Q2 gold production and raises full-year guidance.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "Newmont"}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert result["company"] == "Newmont"
+
+
+@pytest.mark.asyncio
+async def test_gate_rejects_seva_mining_drill_result():
+    """Gate rejects Seva Mining drill result — operator's own company is also rejected."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Seva Mining hits 12g/t gold at Timmins drill hole 42",
+        "summary": "Seva Mining Corp announces a significant drill result at its Timmins property.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "Seva Mining"}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert result["company"] == "Seva Mining"
+
+
+@pytest.mark.asyncio
+async def test_gate_keeps_goldman_forecast_as_source():
+    """Gate keeps story where Goldman is cited as a source, not the subject."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Gold hits record $3,200 as Goldman forecasts $4K by year-end",
+        "summary": "Spot gold reached a new all-time high; Goldman Sachs raised its 12-month target to $4,000.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
+
+@pytest.mark.asyncio
+async def test_gate_keeps_wgc_central_bank_report():
+    """Gate keeps central bank buying story citing World Gold Council as source."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Central banks added 800t of gold in Q1, says World Gold Council",
+        "summary": "The WGC's quarterly report shows record central bank gold purchases.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
+
+@pytest.mark.asyncio
+async def test_gate_keeps_miners_index_sector_move():
+    """Gate keeps sector-wide miners index story."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Gold miners index hits new high",
+        "summary": "The NYSE Arca Gold Miners Index (GDX) set a new 52-week high on Thursday.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
+
+@pytest.mark.asyncio
+async def test_gate_keeps_etf_flows():
+    """Gate keeps gold miner ETF flow story."""
+    ca = _get_content_agent()
+    story = {
+        "title": "ETF flows into gold miners surge",
+        "summary": "Inflows into gold miner ETFs reached a multi-year high last week.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
+
+@pytest.mark.asyncio
+async def test_gate_keeps_cpi_macro():
+    """Gate keeps macro CPI story with gold rally angle."""
+    ca = _get_content_agent()
+    story = {
+        "title": "US CPI at 2.1%; gold rallies on Fed cut odds",
+        "summary": "Lower-than-expected CPI boosted expectations for a Fed rate cut, sending gold higher.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
+
+@pytest.mark.asyncio
+async def test_gate_keeps_rare_earth_geopolitics():
+    """Gate keeps rare-earth geopolitics story (systemic shock bucket)."""
+    ca = _get_content_agent()
+    story = {
+        "title": "China imposes new rare-earth export restrictions",
+        "summary": "Beijing announced controls on rare-earth mineral exports, rattling commodity markets.",
+    }
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
+
+@pytest.mark.asyncio
+async def test_gate_fails_open_on_malformed_json():
+    """Gate returns keep=True dict when Haiku returns non-JSON (fail-open, guards against output-format drift)."""
+    ca = _get_content_agent()
+    story = {"title": "Gold price update", "summary": "Spot gold moves higher."}
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    # Haiku returns bare "yes" instead of JSON — must fail-open
     mock_response.content = [MagicMock(text="yes")]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
@@ -1063,5 +1349,7 @@ async def test_gate_accepts_single_company_ma():
         {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
         client=mock_client,
     )
-    assert result is True
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
 
