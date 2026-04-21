@@ -351,6 +351,18 @@ async def _validate_env() -> None:
             logger.error("ENV %s: MISSING — agents will fail without this key", key)
     for key, present in optional.items():
         logger.info("ENV %s: %s", key, "SET ✓" if present else "not set (optional)")
+    market_data = {
+        "FRED_API_KEY": bool(settings.fred_api_key),
+        "METALPRICEAPI_API_KEY": bool(settings.metalpriceapi_api_key),
+    }
+    for key, present in market_data.items():
+        if present:
+            logger.info("ENV %s: SET ✓", key)
+        else:
+            logger.warning(
+                "ENV %s: MISSING — drafter will fall back to [UNAVAILABLE] for this source",
+                key,
+            )
 
 
 async def main() -> None:
