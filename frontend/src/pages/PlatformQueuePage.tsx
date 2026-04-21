@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import type { Platform, DraftItemResponse } from '@/api/types'
-import { ApprovalCard } from '@/components/approval/ApprovalCard'
 import { ContentSummaryCard } from '@/components/approval/ContentSummaryCard'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { useQueue } from '@/hooks/useQueue'
@@ -11,14 +10,13 @@ import { Button } from '@/components/ui/button'
 import { getAgentRuns } from '@/api/settings'
 import type { AgentRunResponse } from '@/api/types'
 
+// Single-agent (content only) post quick-260420-sn9.
 const PLATFORM_LABELS: Record<Platform, string> = {
-  twitter: 'Twitter',
   content: 'Content',
 }
 
 // Agent name used in the agent_runs table for each platform
 const AGENT_NAMES: Partial<Record<Platform, string>> = {
-  twitter: 'twitter_agent',
   content: 'content_agent',
 }
 
@@ -109,7 +107,7 @@ export function PlatformQueuePage({ platform }: PlatformQueuePageProps) {
     }
   }, [])
 
-  const showRunGroups = (platform === 'twitter' || platform === 'content') && runs.length > 0
+  const showRunGroups = platform === 'content' && runs.length > 0
 
   return (
     <div className="flex flex-col h-full">
@@ -132,18 +130,14 @@ export function PlatformQueuePage({ platform }: PlatformQueuePageProps) {
         ) : items.length === 0 ? (
           <EmptyState />
         ) : showRunGroups ? (
-          // Twitter + Content: grouped by agent run
+          // Content: grouped by agent run (single-agent system post quick-260420-sn9)
           <div className="max-w-2xl space-y-6">
             {groupByRun(items, runs).map((group, gi) => (
               <div key={gi} className="space-y-3">
                 <RunHeader run={group.run} />
-                {group.items.map((item) =>
-                  platform === 'content' ? (
-                    <ContentSummaryCard key={item.id} item={item} />
-                  ) : (
-                    <ApprovalCard key={item.id} item={item} platform={platform} />
-                  )
-                )}
+                {group.items.map((item) => (
+                  <ContentSummaryCard key={item.id} item={item} />
+                ))}
               </div>
             ))}
 
@@ -161,15 +155,11 @@ export function PlatformQueuePage({ platform }: PlatformQueuePageProps) {
             )}
           </div>
         ) : (
-          // Other platforms: flat list
+          // Flat list fallback (no runs fetched yet)
           <div className="max-w-2xl space-y-4">
-            {items.map((item) =>
-              platform === 'content' ? (
-                <ContentSummaryCard key={item.id} item={item} />
-              ) : (
-                <ApprovalCard key={item.id} item={item} platform={platform} />
-              )
-            )}
+            {items.map((item) => (
+              <ContentSummaryCard key={item.id} item={item} />
+            ))}
 
             {queue.hasNextPage && (
               <div className="flex justify-center pt-2">

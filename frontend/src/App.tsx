@@ -14,11 +14,10 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
-            {/* Redirect root to Twitter queue */}
-            <Route path="/" element={<Navigate to="/twitter" replace />} />
+            {/* Redirect root to Content queue (Twitter purged in quick-260420-sn9) */}
+            <Route path="/" element={<Navigate to="/content" replace />} />
 
-            {/* Platform queues */}
-            <Route path="/twitter" element={<PlatformQueuePage platform="twitter" />} />
+            {/* Platform queues — single-agent (content only) */}
             <Route path="/content" element={<PlatformQueuePage platform="content" />} />
 
             {/* Other pages */}

@@ -12,11 +12,13 @@ function createWrapper() {
   }
 }
 
+// Watchlists tab + QuotaBar removed in quick-260420-sn9 — Twitter agent purged.
+// SettingsPage now shows 5 tabs (Keywords default).
 describe('SettingsPage', () => {
-  it('renders all 6 tab triggers', () => {
+  it('renders all 5 tab triggers', () => {
     render(<SettingsPage />, { wrapper: createWrapper() })
 
-    expect(screen.getByText('Watchlists')).toBeInTheDocument()
+    expect(screen.queryByText('Watchlists')).not.toBeInTheDocument()
     expect(screen.getByText('Keywords')).toBeInTheDocument()
     expect(screen.getByText('Scoring')).toBeInTheDocument()
     expect(screen.getByText('Notifications')).toBeInTheDocument()
@@ -24,34 +26,10 @@ describe('SettingsPage', () => {
     expect(screen.getByText('Schedule')).toBeInTheDocument()
   })
 
-  it('watchlists tab shows twitter entries by default', async () => {
-    render(<SettingsPage />, { wrapper: createWrapper() })
-
-    // Should default to watchlists tab
-    await waitFor(() => {
-      expect(screen.getByText('@goldwatcher')).toBeInTheDocument()
-    })
-  })
-
-  it('watchlists tab add button opens form', async () => {
-    render(<SettingsPage />, { wrapper: createWrapper() })
-
-    // Wait for initial data to load
-    await waitFor(() => {
-      expect(screen.getByText('Add Account')).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByText('Add Account'))
-
-    expect(screen.getByPlaceholderText('@handle')).toBeInTheDocument()
-  })
-
   it('keywords tab shows entries with term column', async () => {
     render(<SettingsPage />, { wrapper: createWrapper() })
 
-    // Click Keywords tab
-    fireEvent.click(screen.getByText('Keywords'))
-
+    // Keywords is the default tab now
     await waitFor(() => {
       expect(screen.getByText('gold price')).toBeInTheDocument()
       expect(screen.getByText('central bank')).toBeInTheDocument()
@@ -61,8 +39,6 @@ describe('SettingsPage', () => {
   it('keywords tab shows term column header', async () => {
     render(<SettingsPage />, { wrapper: createWrapper() })
 
-    fireEvent.click(screen.getByText('Keywords'))
-
     await waitFor(() => {
       expect(screen.getByText('Term')).toBeInTheDocument()
     })
@@ -70,8 +46,6 @@ describe('SettingsPage', () => {
 
   it('keywords tab delete button opens confirmation dialog', async () => {
     render(<SettingsPage />, { wrapper: createWrapper() })
-
-    fireEvent.click(screen.getByText('Keywords'))
 
     await waitFor(() => {
       expect(screen.getByText('gold price')).toBeInTheDocument()
@@ -98,6 +72,8 @@ describe('SettingsPage', () => {
 
     // Should show content scoring section heading
     expect(screen.getByText('Content Agent Scoring')).toBeInTheDocument()
+    // Twitter scoring section must be gone
+    expect(screen.queryByText('Twitter Agent Scoring')).not.toBeInTheDocument()
   })
 
   it('notifications tab renders', async () => {
@@ -119,22 +95,26 @@ describe('SettingsPage', () => {
     fireEvent.click(screen.getByText('Agent Runs'))
 
     await waitFor(() => {
-      expect(screen.getByText('twitter_agent')).toBeInTheDocument()
+      expect(screen.getByText('content_agent')).toBeInTheDocument()
     })
 
     // Filter dropdown should be present
     const filterSelect = screen.getByRole('combobox')
     expect(filterSelect).toBeInTheDocument()
+    // Twitter-agent option must be gone
+    expect(screen.queryByRole('option', { name: 'twitter_agent' })).not.toBeInTheDocument()
   })
 
-  it('agent runs tab shows quota bar', async () => {
+  it('agent runs tab no longer shows quota bar (Twitter agent purged)', async () => {
     render(<SettingsPage />, { wrapper: createWrapper() })
 
     fireEvent.click(screen.getByText('Agent Runs'))
 
+    // Wait for tab content
     await waitFor(() => {
-      expect(screen.getByText('X API Monthly Quota')).toBeInTheDocument()
+      expect(screen.getByText('content_agent')).toBeInTheDocument()
     })
+    expect(screen.queryByText('X API Monthly Quota')).not.toBeInTheDocument()
   })
 
   it('schedule tab shows interval inputs and restart note', async () => {

@@ -10,13 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { QuotaBar } from './QuotaBar'
 
+// Agent options narrowed post quick-260420-sn9 (Twitter purged; senior_agent trimmed
+// to morning-digest-only — now runs under name "morning_digest").
 const AGENT_OPTIONS = [
   { value: '', label: 'All agents' },
-  { value: 'twitter_agent', label: 'twitter_agent' },
   { value: 'content_agent', label: 'content_agent' },
-  { value: 'senior_agent', label: 'senior_agent' },
+  { value: 'morning_digest', label: 'morning_digest' },
+  { value: 'gold_history_agent', label: 'gold_history_agent' },
 ]
 
 export function AgentRunsTab() {
@@ -30,8 +31,7 @@ export function AgentRunsTab() {
 
   return (
     <div className="p-4">
-      <QuotaBar />
-
+      {/* QuotaBar removed in quick-260420-sn9 — Twitter agent (sole consumer of X API quota) purged. */}
       <div className="flex items-center gap-3 mb-4">
         <label className="text-sm text-muted-foreground">Filter:</label>
         <select

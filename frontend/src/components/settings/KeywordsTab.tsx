@@ -22,9 +22,9 @@ export function KeywordsTab() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<KeywordResponse | null>(null)
 
-  // Add form state
+  // Add form state (default platform: content post quick-260420-sn9)
   const [addTerm, setAddTerm] = useState('')
-  const [addPlatform, setAddPlatform] = useState('twitter')
+  const [addPlatform, setAddPlatform] = useState('content')
   const [addWeight, setAddWeight] = useState(1.0)
 
   const { data: keywords = [], isLoading } = useQuery({
@@ -38,7 +38,7 @@ export function KeywordsTab() {
       queryClient.invalidateQueries({ queryKey: ['keywords'] })
       setShowAddForm(false)
       setAddTerm('')
-      setAddPlatform('twitter')
+      setAddPlatform('content')
       setAddWeight(1.0)
     },
   })
@@ -108,7 +108,6 @@ export function KeywordsTab() {
                     value={addPlatform}
                     onChange={e => setAddPlatform(e.target.value)}
                   >
-                    <option value="twitter">twitter</option>
                     <option value="content">content</option>
                   </select>
                 </td>
@@ -139,7 +138,7 @@ export function KeywordsTab() {
                       onClick={() => {
                         setShowAddForm(false)
                         setAddTerm('')
-                        setAddPlatform('twitter')
+                        setAddPlatform('content')
                         setAddWeight(1.0)
                       }}
                     >

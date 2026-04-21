@@ -119,44 +119,24 @@ export function ScoringTab() {
     }
   }
 
+  // Twitter scoring block removed in quick-260420-sn9 — Twitter agent purged.
   const contentKeys = config.filter(e => e.key.startsWith('content_'))
-  const twitterScoringKeys = config.filter(
-    e =>
-      e.key.startsWith('twitter_') &&
-      !e.key.includes('quota') &&
-      !e.key.includes('monthly') &&
-      !e.key.includes('schedule') &&
-      !e.key.includes('interval'),
-  )
 
-  if (contentKeys.length === 0 && twitterScoringKeys.length === 0) {
+  if (contentKeys.length === 0) {
     return <p className="text-sm text-muted-foreground p-4">No scoring config keys found.</p>
   }
 
   return (
     <div className="p-4">
-      {contentKeys.length > 0 && (
-        <ScoringSection
-          title="Content Agent Scoring"
-          keys={contentKeys}
-          overrides={overrides}
-          onInputChange={handleInputChange}
-          dirtyKeys={dirtyKeys}
-          onSave={handleSave}
-          isPending={isPending}
-        />
-      )}
-      {twitterScoringKeys.length > 0 && (
-        <ScoringSection
-          title="Twitter Agent Scoring"
-          keys={twitterScoringKeys}
-          overrides={overrides}
-          onInputChange={handleInputChange}
-          dirtyKeys={dirtyKeys}
-          onSave={handleSave}
-          isPending={isPending}
-        />
-      )}
+      <ScoringSection
+        title="Content Agent Scoring"
+        keys={contentKeys}
+        overrides={overrides}
+        onInputChange={handleInputChange}
+        dirtyKeys={dirtyKeys}
+        onSave={handleSave}
+        isPending={isPending}
+      />
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { apiFetch } from './client'
 import type {
   WatchlistResponse, WatchlistCreate, WatchlistUpdate,
   KeywordResponse, KeywordCreate, KeywordUpdate,
-  AgentRunResponse, ConfigEntry, QuotaResponse,
+  AgentRunResponse, ConfigEntry,
 } from './types'
 
 export async function getWatchlists(platform?: string): Promise<WatchlistResponse[]> {
@@ -65,8 +65,4 @@ export async function updateConfig(key: string, value: string): Promise<ConfigEn
   return apiFetch<ConfigEntry>(`/config/${key}`, {
     method: 'PATCH', body: JSON.stringify({ value }),
   })
-}
-
-export async function getQuota(): Promise<QuotaResponse> {
-  return apiFetch<QuotaResponse>('/config/quota')
 }

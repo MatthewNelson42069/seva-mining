@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Bird, FileText, Newspaper, Settings, LogOut } from 'lucide-react'
+import { FileText, Newspaper, Settings, LogOut } from 'lucide-react'
 import { useAppStore } from '@/stores'
 import { useQueueCounts } from '@/hooks/useQueueCounts'
 import { cn } from '@/lib/utils'
@@ -19,13 +19,9 @@ export function Sidebar() {
     return hasMore ? `${n}+` : String(n)
   }
 
+  // Single-agent (Content only) post quick-260420-sn9 (Twitter purged);
+  // Instagram was purged in quick-260419-lvy.
   const agentItems = [
-    {
-      to: '/twitter',
-      label: 'Twitter',
-      icon: <Bird className="size-4" />,
-      badge: countLabel(counts.twitter, counts.twitterHasMore),
-    },
     {
       to: '/content',
       label: 'Content',

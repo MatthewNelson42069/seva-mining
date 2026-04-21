@@ -1,9 +1,9 @@
-import { MessageSquare, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import type { Platform } from '@/api/types'
 
+// Single-agent post quick-260420-sn9 — content only. Twitter/Instagram purged.
 const PLATFORM_CONFIG: Record<Platform, { label: string; icon: React.ElementType }> = {
-  twitter: { label: 'Twitter', icon: MessageSquare },
   content: { label: 'Content', icon: FileText },
 }
 

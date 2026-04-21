@@ -1,10 +1,12 @@
 export type DraftStatus = 'pending' | 'approved' | 'edited_approved' | 'rejected' | 'expired'
-export type Platform = 'twitter' | 'content'
+// Platform narrowed to 'content' only in quick-260420-sn9 (Twitter agent purged;
+// Instagram agent was purged in quick-260419-lvy). Backend column stays permissive String(20).
+export type Platform = 'content'
 
 export interface DraftAlternative {
   text: string
   type: 'reply' | 'retweet' | 'comment' | 'thread' | 'long_post'
-  label: string  // "Draft A", "Draft B", "RT Quote"
+  label: string  // "Draft A", "Draft B" (retweet/RT Quote types are legacy — no longer produced)
 }
 
 export interface DraftItemResponse {
@@ -147,9 +149,3 @@ export interface ConfigEntry {
   value: string
 }
 
-export interface QuotaResponse {
-  monthly_tweet_count: number
-  quota_safety_margin: number
-  monthly_cap: number
-  reset_date?: string
-}

@@ -8,8 +8,8 @@ import { getLatestDigest, getDigestByDate, getNewsFeed } from '@/api/digests'
 import type { DailyDigestResponse } from '@/api/types'
 import type { NewsStory } from '@/api/digests'
 
+// Single-agent system post quick-260420-sn9 — content-only queue snapshot.
 interface QueueSnapshot {
-  twitter?: number
   content?: number
   total?: number
 }
@@ -248,13 +248,9 @@ export function DigestPage() {
         </div>
       </div>
 
-      {/* ── Stats row ── */}
+      {/* ── Stats row (Twitter tile removed in quick-260420-sn9) ── */}
       {!statsLoading && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-xl border bg-card p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Twitter</p>
-            <p className="text-xl font-semibold">{snapshot.twitter ?? 0}</p>
-          </div>
+        <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl border bg-card p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Content</p>
             <p className="text-xl font-semibold">{snapshot.content ?? 0}</p>

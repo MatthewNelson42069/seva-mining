@@ -4,62 +4,9 @@ import type {
   WatchlistResponse, KeywordResponse,
 } from '@/api/types'
 
+// Mock data updated in quick-260420-sn9 — Twitter agent purged; Instagram was
+// purged in quick-260419-lvy. Sevamining is now a single-agent system (content only).
 const mockItems: DraftItemResponse[] = [
-  {
-    id: '11111111-1111-1111-1111-111111111111',
-    platform: 'twitter',
-    status: 'pending',
-    source_url: 'https://x.com/goldwatcher/status/123',
-    source_text: 'Gold breaks $2,400 resistance — watch for continuation above 2,420 before loading.',
-    source_account: '@goldwatcher',
-    follower_count: 45200,
-    score: 8.2,
-    quality_score: 7.8,
-    alternatives: [
-      { text: 'The 2,400 break matters because it clears the March 2024 high. Next technical level is 2,450 — the 78.6% Fib retracement from the 2020 low.', type: 'reply', label: 'Draft A' },
-      { text: 'Central bank accumulation is doing the heavy lifting here. WGC data shows 1,037 tonnes purchased in 2023 — that bid doesn\'t go away on a daily chart move.', type: 'reply', label: 'Draft B' },
-    ],
-    rationale: 'High engagement tweet from credible technical account. Breaking key resistance level with specific price targets.',
-    urgency: 'high',
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-  },
-  {
-    id: '22222222-2222-2222-2222-222222222222',
-    platform: 'twitter',
-    status: 'pending',
-    source_url: 'https://x.com/mininganalyst/status/456',
-    source_text: 'Central banks bought 1,037 tonnes of gold in 2023. Pace accelerating in Q1 2024.',
-    source_account: '@mininganalyst',
-    follower_count: 12800,
-    score: 7.5,
-    quality_score: 8.1,
-    alternatives: [
-      { text: 'The demand shift is structural: 1,037t in 2023 vs 450t average 2010-2020. Central banks aren\'t buying as a hedge anymore — they\'re diversifying away from dollar reserves.', type: 'reply', label: 'Draft A' },
-      { text: 'Worth noting: Turkey, China, and Poland account for ~40% of that 1,037t. Concentrated demand from nations actively reducing USD exposure.', type: 'reply', label: 'Draft B' },
-      { text: 'Q1 2024 pace would imply 1,200t annual run rate if sustained. That\'s the kind of floor demand that makes price dips shallow.', type: 'retweet', label: 'RT Quote' },
-    ],
-    rationale: 'Macro-level data point with strong engagement. Central bank buying is core narrative for gold sector.',
-    urgency: 'medium',
-    created_at: new Date(Date.now() - 7200000).toISOString(),
-  },
-  {
-    id: '33333333-3333-3333-3333-333333333333',
-    platform: 'twitter',
-    status: 'pending',
-    source_url: 'https://x.com/juniormines/status/789',
-    source_text: 'Kinross Q1 results beat on production. All-in sustaining costs at $1,248/oz — below guidance.',
-    source_account: '@juniormines',
-    follower_count: 8900,
-    score: 6.8,
-    quality_score: 7.2,
-    alternatives: [
-      { text: 'AISC at $1,248 with gold at $2,200+ means $950/oz margin. At current strip ratio that\'s 43% operating margin — the best in Kinross history.', type: 'reply', label: 'Draft A' },
-      { text: 'Production beat + cost miss is the typical junior pattern. Kinross executing on both metrics is the story here — puts them in conversation for a premium rating.', type: 'reply', label: 'Draft B' },
-    ],
-    rationale: 'Q1 earnings beat with AISC detail. Strong engagement from mining community.',
-    urgency: 'medium',
-    created_at: new Date(Date.now() - 10800000).toISOString(),
-  },
   {
     id: '66666666-6666-6666-6666-666666666666',
     platform: 'content',
@@ -130,7 +77,7 @@ export const handlers = [
         { headline: 'Kinross Q1 beats', source: 'WGC', url: 'https://wgc.com/1', score: 7.5 },
         { headline: 'Inflation data boosts gold', source: 'Kitco', url: 'https://kitco.com/2', score: 7.2 },
       ],
-      queue_snapshot: { twitter: 3, content: 1 },
+      queue_snapshot: { content: 1, total: 1 },
       yesterday_approved: { count: 4, items: [] },
       yesterday_rejected: { count: 1, items: [] },
       yesterday_expired: { count: 2, items: [] },
@@ -147,7 +94,7 @@ export const handlers = [
       id: 'digest-2',
       digest_date: params.date,
       top_stories: [],
-      queue_snapshot: { twitter: 0, content: 0 },
+      queue_snapshot: { content: 0, total: 0 },
       yesterday_approved: { count: 0, items: [] },
       yesterday_rejected: { count: 0, items: [] },
       yesterday_expired: { count: 0, items: [] },
@@ -174,19 +121,11 @@ export const handlers = [
   }),
 
   http.get('/watchlists', ({ request }) => {
+    // Watchlists UI tab removed in quick-260420-sn9; endpoint retained for
+    // backwards compatibility but returns empty by default in mocks.
     const url = new URL(request.url)
     const platform = url.searchParams.get('platform')
-    const allWatchlists: WatchlistResponse[] = [
-      {
-        id: 'wl-1',
-        platform: 'twitter',
-        account_handle: '@goldwatcher',
-        relationship_value: 5,
-        notes: 'Top gold analyst',
-        active: true,
-        created_at: new Date().toISOString(),
-      },
-    ]
+    const allWatchlists: WatchlistResponse[] = []
     const filtered = platform ? allWatchlists.filter(w => w.platform === platform) : allWatchlists
     return HttpResponse.json(filtered)
   }),
@@ -198,7 +137,7 @@ export const handlers = [
 
   http.patch('/watchlists/:id', async ({ params, request }) => {
     const body = await request.json() as Partial<WatchlistResponse>
-    return HttpResponse.json({ id: params.id, platform: 'twitter', account_handle: '@updated', active: true, created_at: new Date().toISOString(), ...body })
+    return HttpResponse.json({ id: params.id, platform: 'content', account_handle: '@updated', active: true, created_at: new Date().toISOString(), ...body })
   }),
 
   http.delete('/watchlists/:id', () => {
@@ -210,7 +149,7 @@ export const handlers = [
       {
         id: 'kw-1',
         term: 'gold price',
-        platform: 'twitter',
+        platform: 'content',
         weight: 1.0,
         active: true,
         created_at: new Date().toISOString(),
@@ -243,8 +182,8 @@ export const handlers = [
 
   http.get('/agent-runs', () => {
     return HttpResponse.json([
-      { id: 'run-1', agent_name: 'twitter_agent', started_at: new Date().toISOString(), status: 'success', items_found: 12, items_queued: 5, items_filtered: 7, created_at: new Date().toISOString() },
       { id: 'run-3', agent_name: 'content_agent', started_at: new Date().toISOString(), status: 'error', items_found: 0, items_queued: 0, items_filtered: 0, errors: { message: 'API timeout' }, created_at: new Date().toISOString() },
+      { id: 'run-4', agent_name: 'morning_digest', started_at: new Date().toISOString(), status: 'success', items_found: 0, items_queued: 0, items_filtered: 0, created_at: new Date().toISOString() },
     ])
   }),
 
@@ -262,14 +201,7 @@ export const handlers = [
     return HttpResponse.json({ key: params.key, value: body.value })
   }),
 
-  http.get('/config/quota', () => {
-    return HttpResponse.json({
-      monthly_tweet_count: 3400,
-      quota_safety_margin: 1500,
-      monthly_cap: 10000,
-      reset_date: '2026-05-01',
-    })
-  }),
+  // /config/quota endpoint removed in quick-260420-sn9 (Twitter agent purged — no consumer).
 
   // mfy pivot — content-bundle detail (no rerender, no rendered_images)
   http.get('/content-bundles/:id', ({ params }) => {

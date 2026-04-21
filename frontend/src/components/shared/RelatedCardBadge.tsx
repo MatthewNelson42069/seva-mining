@@ -6,8 +6,8 @@ interface RelatedCardBadgeProps {
   onSwitchPlatform?: (platform: Platform) => void
 }
 
+// Single-agent post quick-260420-sn9 — content only.
 const PLATFORM_LABELS: Record<Platform, string> = {
-  twitter: 'Twitter',
   content: 'Content',
 }
 

@@ -28,7 +28,8 @@ const mockLatestDigest: DailyDigestResponse = {
   id: 'aaaaaaaa-0000-0000-0000-000000000001',
   digest_date: '2026-04-02',
   top_stories: [],
-  queue_snapshot: { twitter: 3, content: 1 },
+  // Queue snapshot narrowed to content-only post quick-260420-sn9 (Twitter purged).
+  queue_snapshot: { content: 1, total: 1 },
   yesterday_approved: { count: 4, items: [] },
   yesterday_rejected: { count: 1, items: [] },
   yesterday_expired: { count: 2, items: [] },
@@ -73,8 +74,9 @@ describe('DigestPage', () => {
     expect(screen.getByText('Thursday, April 2, 2026')).toBeInTheDocument()
     // Section headings present (component uses "Top Gold News Stories" not "Top Stories")
     expect(screen.getByText('Top Gold News Stories')).toBeInTheDocument()
-    // Stats cards render platform labels
-    expect(screen.getByText('Twitter')).toBeInTheDocument()
+    // Stats cards render platform labels — Twitter tile removed in sn9
+    expect(screen.queryByText('Twitter')).not.toBeInTheDocument()
+    expect(screen.getByText('Content')).toBeInTheDocument()
     // Yesterday card label
     expect(screen.getByText('Yesterday')).toBeInTheDocument()
   })
@@ -102,11 +104,11 @@ describe('DigestPage', () => {
     render(<DigestPage />, { wrapper: createWrapper() })
 
     await waitFor(() => {
-      expect(screen.getByText('Twitter')).toBeInTheDocument()
+      expect(screen.getByText('Content')).toBeInTheDocument()
     })
-    expect(screen.getByText('Content')).toBeInTheDocument()
-    // Check counts appear
-    expect(screen.getByText('3')).toBeInTheDocument()
+    // Twitter tile removed in sn9
+    expect(screen.queryByText('Twitter')).not.toBeInTheDocument()
+    // Check content count appears
     expect(screen.getByText('1')).toBeInTheDocument()
   })
 
@@ -164,7 +166,7 @@ describe('DigestPage', () => {
           id: 'aaaaaaaa-0000-0000-0000-000000000003',
           digest_date: params.date as string,
           top_stories: [],
-          queue_snapshot: { twitter: 1, content: 0 },
+          queue_snapshot: { content: 0, total: 0 },
           yesterday_approved: { count: 2, items: [] },
           yesterday_rejected: { count: 0, items: [] },
           yesterday_expired: { count: 1, items: [] },
