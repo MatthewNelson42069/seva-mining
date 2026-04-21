@@ -557,6 +557,12 @@ async def is_gold_relevant_or_systemic_shock(
         )
         raw = response.content[0].text.strip()
         try:
+            # Strip markdown code fences — Haiku 4.5 often wraps JSON in ```json ... ```
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.rsplit("```", 1)[0].strip()
             parsed = json.loads(raw)
         except (json.JSONDecodeError, ValueError):
             logger.warning(

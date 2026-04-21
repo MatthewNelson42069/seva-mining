@@ -1355,6 +1355,84 @@ async def test_gate_fails_open_on_malformed_json():
     assert result["company"] is None
 
 
+# ---------------------------------------------------------------------------
+# quick-260420-pwh: Haiku 4.5 markdown-fence-wrapped JSON parse tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_gate_parses_fenced_json_keep():
+    """Gate parses ```json-fenced keep response (Haiku 4.5 wraps JSON in code fences)."""
+    ca = _get_content_agent()
+    story = {"title": "Gold prices hit new record amid safe-haven demand", "summary": "Spot gold up 2%."}
+    fenced = (
+        "```json\n"
+        + _json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None})
+        + "\n```"
+    )
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=fenced)]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
+
+@pytest.mark.asyncio
+async def test_gate_parses_fenced_json_specific_miner_reject():
+    """Gate parses ```json-fenced specific-miner reject response (ensures prod rejection path works under Haiku 4.5)."""
+    ca = _get_content_agent()
+    story = {
+        "title": "Barrick Announces $5B Acquisition of X Mining",
+        "summary": "Barrick Gold to acquire X Mining in all-stock deal, expanding Tier 1 asset base.",
+    }
+    fenced = (
+        "```json\n"
+        + _json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": True, "company": "Barrick"})
+        + "\n```"
+    )
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=fenced)]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
+        client=mock_client,
+    )
+    assert result["keep"] is False
+    assert result["reject_reason"] == "primary_subject_is_specific_miner"
+    assert "Barrick" in result["company"]
+
+
+@pytest.mark.asyncio
+async def test_gate_parses_bare_fenced_json_keep():
+    """Gate parses bare ```-fenced JSON without language tag (defensive coverage for fence-only wrap)."""
+    ca = _get_content_agent()
+    story = {"title": "Gold surges on Fed pivot", "summary": "Spot gold up 3%."}
+    fenced = (
+        "```\n"
+        + _json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None})
+        + "\n```"
+    )
+    mock_client = AsyncMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=fenced)]
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    result = await ca.is_gold_relevant_or_systemic_shock(
+        story,
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
+        client=mock_client,
+    )
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["company"] is None
+
 
 # ---------------------------------------------------------------------------
 # quick-260420-oa1: Market snapshot integration tests (Task 2)
