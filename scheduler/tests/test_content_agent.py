@@ -429,7 +429,7 @@ async def test_gate_accepts_direct_gold_story():
     mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
-        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"}, client=mock_client
     )
     assert result["keep"] is True
     assert result["reject_reason"] is None
@@ -446,7 +446,7 @@ async def test_gate_accepts_systemic_shock_strait_of_hormuz():
     mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": True, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
-        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"}, client=mock_client
     )
     assert result["keep"] is True
     assert result["reject_reason"] is None
@@ -463,7 +463,7 @@ async def test_gate_rejects_generic_option_traders():
     mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": False, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
-        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"}, client=mock_client
     )
     assert result["keep"] is False
     assert result["reject_reason"] == "not_gold_relevant"
@@ -480,7 +480,7 @@ async def test_gate_rejects_private_credit():
     mock_response.content = [MagicMock(text=_json.dumps({"is_gold_relevant": False, "primary_subject_is_specific_miner": False, "company": None}))]
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
-        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"}, client=mock_client
     )
     assert result["keep"] is False
     assert result["reject_reason"] == "not_gold_relevant"
@@ -496,7 +496,7 @@ async def test_gate_fails_open_on_api_error():
     # APIError requires request= param — use a generic Exception to simulate infra blip
     mock_client.messages.create = AsyncMock(side_effect=Exception("API unavailable"))
     result = await ca.is_gold_relevant_or_systemic_shock(
-        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"}, client=mock_client
+        story, {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"}, client=mock_client
     )
     assert result["keep"] is True
     assert result["reject_reason"] is None
@@ -789,7 +789,7 @@ async def test_gate_rejects_listicle_top_5_gold_stocks():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -811,7 +811,7 @@ async def test_gate_rejects_listicle_best_performing():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -834,7 +834,7 @@ async def test_gate_rejects_single_company_earnings_under_nnh():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -1080,7 +1080,7 @@ async def test_gate_rejects_barrick_ma_under_nnh():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -1106,7 +1106,7 @@ async def test_gate_rejects_b2gold_production_update():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -1128,7 +1128,7 @@ async def test_gate_rejects_mclaren_drone_program():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -1150,7 +1150,7 @@ async def test_gate_rejects_barrick_kinross_ma():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -1173,7 +1173,7 @@ async def test_gate_rejects_newmont_guidance():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -1195,7 +1195,7 @@ async def test_gate_rejects_seva_mining_drill_result():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is False
@@ -1217,7 +1217,7 @@ async def test_gate_keeps_goldman_forecast_as_source():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is True
@@ -1239,7 +1239,7 @@ async def test_gate_keeps_wgc_central_bank_report():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is True
@@ -1261,7 +1261,7 @@ async def test_gate_keeps_miners_index_sector_move():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is True
@@ -1283,7 +1283,7 @@ async def test_gate_keeps_etf_flows():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is True
@@ -1305,7 +1305,7 @@ async def test_gate_keeps_cpi_macro():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is True
@@ -1327,7 +1327,7 @@ async def test_gate_keeps_rare_earth_geopolitics():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is True
@@ -1347,7 +1347,7 @@ async def test_gate_fails_open_on_malformed_json():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert result["keep"] is True
@@ -1745,7 +1745,7 @@ async def test_gold_gate_dict_contract_unchanged():
 
     result = await ca.is_gold_relevant_or_systemic_shock(
         story,
-        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-3-5-haiku-latest"},
+        {"content_gold_gate_enabled": "true", "content_gold_gate_model": "claude-haiku-4-5"},
         client=mock_client,
     )
     assert isinstance(result, dict)

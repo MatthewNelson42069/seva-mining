@@ -274,7 +274,7 @@ def _is_within_window(
 async def classify_format_lightweight(story: dict, *, client) -> str:
     """Lightweight Haiku format classifier for slice-priority decision.
 
-    Uses claude-3-5-haiku-latest (cheap) — full Sonnet format+draft call happens
+    Uses claude-haiku-4-5 (cheap) — full Sonnet format+draft call happens
     later only for the top-N selected stories.
 
     Returns one of: breaking_news | thread | long_form | infographic | quote.
@@ -284,7 +284,7 @@ async def classify_format_lightweight(story: dict, *, client) -> str:
     valid_formats = {"breaking_news", "thread", "long_form", "infographic", "quote"}
     try:
         response = await client.messages.create(
-            model="claude-3-5-haiku-latest",
+            model="claude-haiku-4-5",
             max_tokens=20,
             system="You are a content format classifier. Reply with one word.",
             messages=[{
@@ -500,7 +500,7 @@ async def is_gold_relevant_or_systemic_shock(
 
     title = story.get("title", "")
     summary = story.get("summary", "")
-    model = config.get("content_gold_gate_model", "claude-3-5-haiku-latest")
+    model = config.get("content_gold_gate_model", "claude-haiku-4-5")
 
     anthropic_client = client or AsyncAnthropic()
     try:
@@ -1532,7 +1532,7 @@ For "quote" format, draft_content must have:
         rec_weight = float(await self._get_config(session, "content_recency_weight", "0.30"))
         cred_weight = float(await self._get_config(session, "content_credibility_weight", "0.30"))
         gate_enabled = await self._get_config(session, "content_gold_gate_enabled", "true")
-        gate_model = await self._get_config(session, "content_gold_gate_model", "claude-3-5-haiku-latest")
+        gate_model = await self._get_config(session, "content_gold_gate_model", "claude-haiku-4-5")
         gate_config = {
             "content_gold_gate_enabled": gate_enabled,
             "content_gold_gate_model": gate_model,
