@@ -22,8 +22,13 @@ _ssl_context = ssl.create_default_context()
 
 engine = create_async_engine(
     _db_url,
-    # Neon-specific pool config (D-05, INFRA-07)
-    pool_size=5,            # conservative for Neon free tier (max_connections=104)
+    # Neon-specific pool config (D-05, INFRA-07).
+    # quick-260421-eoe bump 5 → 15: the 7-sub-agent scheduler topology can
+    # issue up to 7 parallel writes during the stagger window, and the
+    # user-facing API must still serve /queue + /content_bundles on top.
+    # Neon free tier allows max_connections=104 — 15 + scheduler's 15 +
+    # overflow stays well under that.
+    pool_size=15,
     max_overflow=10,
     pool_pre_ping=True,     # detect stale connections after Neon compute auto-suspend
     pool_recycle=300,       # 5 min matches Neon default auto-suspend timeout
