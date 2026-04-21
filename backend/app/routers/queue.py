@@ -4,11 +4,12 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, select
+from sqlalchemy import String, and_, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.content_bundle import ContentBundle
 from app.models.draft_item import DraftItem, DraftStatus
 from app.schemas.draft_item import (
     ApproveRequest,
@@ -49,11 +50,22 @@ def _encode_cursor(created_at: datetime, item_id: UUID) -> str:
 async def list_queue(
     platform: str | None = Query(None),
     status_filter: str | None = Query(None, alias="status"),
+    content_type: str | None = Query(None),
     cursor: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    """List draft items with cursor-based pagination. Filterable by platform and status."""
+    """List draft items with cursor-based pagination.
+
+    Filterable by:
+    - platform (e.g. "content")
+    - status (pending, approved, rejected, ...)
+    - content_type (breaking_news, thread, long_form, quote, infographic,
+      video_clip, gold_history) — filters via the JSONB link
+      draft_items.engagement_snapshot->>'content_bundle_id' ↔
+      content_bundles.id::text (there is no direct FK, see
+      quick-260421-eoe interfaces §1).
+    """
     stmt = select(DraftItem)
     conditions = []
 
@@ -61,6 +73,19 @@ async def list_queue(
         conditions.append(DraftItem.platform == platform)
     if status_filter:
         conditions.append(DraftItem.status == status_filter)
+    if content_type:
+        # No direct FK — draft_items.engagement_snapshot["content_bundle_id"]
+        # stores the bundle UUID as text. Subquery returns the set of bundle
+        # IDs (stringified) whose content_type matches, then filter drafts
+        # whose JSONB pointer is in that set.
+        bundle_ids_subq = select(cast(ContentBundle.id, String)).where(
+            ContentBundle.content_type == content_type
+        )
+        conditions.append(
+            DraftItem.engagement_snapshot["content_bundle_id"].astext.in_(
+                bundle_ids_subq
+            )
+        )
     if cursor:
         cursor_ts, cursor_id = _decode_cursor(cursor)
         conditions.append(

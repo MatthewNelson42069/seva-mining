@@ -11,13 +11,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 
-// Agent options narrowed post quick-260420-sn9 (Twitter purged; senior_agent trimmed
-// to morning-digest-only — now runs under name "morning_digest").
+// Agent options updated in quick-260421-eoe: monolithic content_agent split into
+// 7 sub-agents (`sub_breaking_news`, `sub_threads`, `sub_long_form`, `sub_quotes`,
+// `sub_infographics`, `sub_video_clip`, `sub_gold_history`). The legacy
+// `content_agent` + `gold_history_agent` names no longer appear in new
+// agent_runs rows (historical rows persist in the DB but aren't filterable
+// here anymore — intentional UI-simplification).
 const AGENT_OPTIONS = [
   { value: '', label: 'All agents' },
-  { value: 'content_agent', label: 'content_agent' },
-  { value: 'morning_digest', label: 'morning_digest' },
-  { value: 'gold_history_agent', label: 'gold_history_agent' },
+  { value: 'sub_breaking_news', label: 'breaking_news' },
+  { value: 'sub_threads',       label: 'threads' },
+  { value: 'sub_long_form',     label: 'long_form' },
+  { value: 'sub_quotes',        label: 'quotes' },
+  { value: 'sub_infographics',  label: 'infographics' },
+  { value: 'sub_video_clip',    label: 'video_clip (Gold Media)' },
+  { value: 'sub_gold_history',  label: 'gold_history' },
+  { value: 'morning_digest',    label: 'morning_digest' },
 ]
 
 export function AgentRunsTab() {

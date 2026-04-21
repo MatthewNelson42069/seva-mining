@@ -2,25 +2,42 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-It starts AsyncIOScheduler with 3 jobs and uses PostgreSQL advisory locks
-to prevent duplicate execution during Railway zero-downtime deploys.
+Post quick-260421-eoe, it starts AsyncIOScheduler with 8 jobs:
+
+- morning_digest (daily cron, 08:00 UTC)
+- 7 content sub-agents, each on a 2h IntervalTrigger staggered across the
+  2h window with offsets [0, 17, 34, 51, 68, 85, 102] minutes.
+
+PostgreSQL advisory locks prevent duplicate execution during Railway
+zero-downtime deploys.
 
 Requirements: INFRA-04, INFRA-05, EXEC-03, EXEC-04, SENR-01, SENR-09
 Decisions: D-12 (APScheduler 3.11.2), D-13 (advisory lock), D-14 (placeholder jobs)
 Phase 5 (SENR): morning_digest job wired to SeniorAgent; expiry_sweep removed in
 Phase 10; dedup/alerts/queue-cap/engagement surfaces removed in quick-260420-sn9.
+quick-260421-eoe: Content Agent cron + gold_history_agent cron retired; replaced
+by 7 independent sub-agent crons under agents.content.*.
 """
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
 from sqlalchemy import text, select
 
 from database import engine  # single shared engine — avoids duplicate connection pools
 from models.config import Config
-from agents.content_agent import ContentAgent
-from agents.gold_history_agent import GoldHistoryAgent
+from agents.content import (
+    breaking_news,
+    threads,
+    long_form,
+    quotes,
+    infographics,
+    video_clip,
+    gold_history,
+)
 from agents.senior_agent import SeniorAgent, seed_senior_config
 
 logging.basicConfig(
@@ -37,8 +54,7 @@ _scheduler: AsyncIOScheduler | None = None
 def get_scheduler() -> AsyncIOScheduler:
     """Return the running module-level scheduler. Raises RuntimeError if not started yet.
 
-    Used by agents (e.g. ContentAgent) to enqueue one-off DateTrigger jobs
-    after bundle commits (Phase 11 — Image render).
+    Used by agents to enqueue one-off DateTrigger jobs (e.g. image render).
     """
     if _scheduler is None:
         raise RuntimeError("Scheduler has not been started yet")
@@ -48,11 +64,33 @@ def get_scheduler() -> AsyncIOScheduler:
 # Stable integer lock IDs per job.
 # NEVER reuse an ID across different jobs — advisory locks are process-global.
 # These IDs are stable for the lifetime of the project.
+# quick-260421-eoe: retired content_agent(1003) + gold_history_agent(1009);
+# added sub_*(1010-1016) for the 7 content sub-agents.
 JOB_LOCK_IDS: dict[str, int] = {
-    "content_agent": 1003,
-    "morning_digest": 1005,
-    "gold_history_agent": 1009,
+    "morning_digest":    1005,
+    "sub_breaking_news": 1010,
+    "sub_threads":       1011,
+    "sub_long_form":     1012,
+    "sub_quotes":        1013,
+    "sub_infographics":  1014,
+    "sub_video_clip":    1015,
+    "sub_gold_history":  1016,
 }
+
+
+# Content sub-agent registration table (quick-260421-eoe).
+# Tuple shape: (job_id, run_fn, name, lock_id, offset_minutes).
+# Stagger offsets spread 7 sub-agents across the 2h interval to avoid thundering herds
+# on SerpAPI + Anthropic. Offsets selected per RESEARCH stagger analysis.
+CONTENT_SUB_AGENTS: list[tuple[str, object, str, int, int]] = [
+    ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0),
+    ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17),
+    ("sub_long_form",     long_form.run_draft_cycle,      "Long-form",      1012,  34),
+    ("sub_quotes",        quotes.run_draft_cycle,         "Quotes",         1013,  51),
+    ("sub_infographics",  infographics.run_draft_cycle,   "Infographics",   1014,  68),
+    ("sub_video_clip",    video_clip.run_draft_cycle,     "Gold Media",     1015,  85),
+    ("sub_gold_history",  gold_history.run_draft_cycle,   "Gold History",   1016, 102),
+]
 
 
 async def with_advisory_lock(
@@ -119,62 +157,38 @@ async def with_advisory_lock(
             )
 
 
-async def placeholder_job(job_name: str) -> None:
-    """
-    Async placeholder for agent jobs wired in later phases (D-14).
+def _make_morning_digest_job(engine):
+    """Create the morning_digest job callback (advisory-lock wrapped).
 
-    Each agent phase will replace this with the real agent function.
-    This placeholder satisfies EXEC-03 (all agent functions are async).
-    """
-    logger.info("Job %s: placeholder executed (Phase 1 skeleton)", job_name)
-
-
-def _make_job(job_name: str, engine):
-    """
-    Create a job callback for APScheduler that wraps the appropriate agent
-    or placeholder with the advisory lock.
-
-    - content_agent: ContentAgent().run()
-    - morning_digest: SeniorAgent().run_morning_digest() [Phase 5 — SENR-01]
-    - gold_history_agent: GoldHistoryAgent().run()
-
-    Note: expiry_sweep was removed in Phase 10 and run_expiry_sweep() was
-    deleted in quick-260420-sn9 along with all other Senior non-digest surfaces.
-    Twitter agent was purged in quick-260420-sn9.
+    Retained as a dedicated factory for clarity — morning_digest is the
+    sole cron-scheduled job that isn't a content sub-agent.
     """
     async def job():
         async with engine.connect() as conn:
-            if job_name == "morning_digest":
-                agent = SeniorAgent()
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    agent.run_morning_digest,
-                )
-            elif job_name == "content_agent":
-                agent = ContentAgent()
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    agent.run,
-                )
-            elif job_name == "gold_history_agent":
-                agent = GoldHistoryAgent()
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    agent.run,
-                )
-            else:
-                await with_advisory_lock(
-                    conn,
-                    JOB_LOCK_IDS[job_name],
-                    job_name,
-                    lambda: placeholder_job(job_name),
-                )
+            agent = SeniorAgent()
+            await with_advisory_lock(
+                conn,
+                JOB_LOCK_IDS["morning_digest"],
+                "morning_digest",
+                agent.run_morning_digest,
+            )
+    return job
+
+
+def _make_sub_agent_job(job_id: str, lock_id: int, run_fn, engine):
+    """Create a content sub-agent job callback (advisory-lock wrapped).
+
+    Parameterized on ``run_fn`` so every sub-agent executes under its own
+    advisory lock without needing a dispatch switch (quick-260421-eoe).
+    """
+    async def job():
+        async with engine.connect() as conn:
+            await with_advisory_lock(
+                conn,
+                lock_id,
+                job_id,
+                run_fn,
+            )
     return job
 
 
@@ -183,11 +197,13 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 
     Returns a dict of {key: value} for schedule config keys.
     Falls back to hardcoded defaults if DB is unreachable or keys are missing.
+
+    quick-260421-eoe: the old content_agent and gold_history interval/cron
+    config keys are no longer read — sub-agents run on a fixed 2h cadence
+    with static offsets.
     """
     defaults = {
-        "content_agent_interval_hours": "3",
         "morning_digest_schedule_hour": "8",
-        "gold_history_hour": "9",
     }
     try:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -211,60 +227,51 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 
 
 async def build_scheduler(engine) -> AsyncIOScheduler:
-    """Build the APScheduler instance with jobs registered.
+    """Build the APScheduler instance with 8 jobs registered.
 
-    Job schedule intervals read from DB config (EXEC-02).
-    Falls back to hardcoded defaults if config keys are missing.
+    - morning_digest: cron at morning_digest_schedule_hour (default 08:00 UTC).
+    - 7 content sub-agents: IntervalTrigger(hours=2) with staggered start_date
+      offsets [0, 17, 34, 51, 68, 85, 102] minutes.
 
     Config keys:
-    - content_agent_interval_hours (default: 3)
     - morning_digest_schedule_hour (default: 8)
-    - gold_history_hour (default: 9)
     """
     cfg = await _read_schedule_config(engine)
 
-    content_hours = int(cfg["content_agent_interval_hours"])
     digest_hour = int(cfg["morning_digest_schedule_hour"])
-    gold_history_hour = int(cfg["gold_history_hour"])
 
     logger.info(
-        "Schedule config: content=%dh, "
-        "digest=cron(%d:00 UTC), gold_history=cron(%d:00 bi-weekly Sun)",
-        content_hours,
-        digest_hour, gold_history_hour,
+        "Schedule config: digest=cron(%d:00 UTC), content_sub_agents=%d jobs on 2h interval",
+        digest_hour, len(CONTENT_SUB_AGENTS),
     )
 
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(
+        job_defaults={
+            "coalesce": True,
+            "max_instances": 1,
+            "misfire_grace_time": 300,
+        },
+        timezone="UTC",
+    )
 
     scheduler.add_job(
-        _make_job("content_agent", engine),
-        trigger="interval",
-        hours=content_hours,
-        id="content_agent",
-        name=f"Content Agent — every {content_hours} hours",
-    )
-    scheduler.add_job(
-        _make_job("morning_digest", engine),
+        _make_morning_digest_job(engine),
         trigger="cron",
         hour=digest_hour,
         minute=0,
         id="morning_digest",
         name=f"Morning Digest — daily at {digest_hour}am",
     )
-    # NOTE: week="*/2" fires on alternating ISO weeks. At ISO week 52/53 → week 1 rollover,
-    # two consecutive Sunday firings may occur (one extra Gold History post in early January).
-    # Low-stakes for this content type — acceptable edge case.
-    scheduler.add_job(
-        _make_job("gold_history_agent", engine),
-        trigger="cron",
-        day_of_week="sun",
-        week="*/2",
-        hour=gold_history_hour,
-        minute=0,
-        id="gold_history_agent",
-        name="Gold History Agent — bi-weekly Sunday",
-        timezone="UTC",
-    )
+
+    now = datetime.now(timezone.utc)
+    for job_id, run_fn, name, lock_id, offset in CONTENT_SUB_AGENTS:
+        start_date = now + timedelta(minutes=offset)
+        scheduler.add_job(
+            _make_sub_agent_job(job_id, lock_id, run_fn, engine),
+            trigger=IntervalTrigger(hours=2, start_date=start_date),
+            id=job_id,
+            name=f"{name} — every 2h (offset +{offset}m)",
+        )
 
     return scheduler
 
@@ -274,13 +281,16 @@ async def upsert_agent_config() -> None:
 
     Unlike seed_senior_config (insert-only), this OVERWRITES existing values so
     code-level config changes take effect without manual DB edits.
+
+    quick-260421-eoe: removed the old content_agent interval override —
+    sub-agents run on a fixed 2h cadence. The DB row may remain for manual
+    cleanup but is no longer authoritative.
     """
     overrides = {
         # Content quality threshold
         # Anthropic relevance scoring fallback is 0.5 — lower threshold so more stories pass.
         # With 0.5 relevance: (0.5*0.4 + recency*0.3 + cred*0.3)*10 = min 4.0 for old/unknown sources
         "content_quality_threshold": "7.0",    # restored — feed narrowing + gold gate replace this workaround
-        "content_agent_interval_hours": "3",   # Railway overwrites live DB on startup
         "content_recency_weight": "0.40",      # bump from 0.30 — favours fresher stories
         "content_agent_max_stories_per_run": "5",
         "content_agent_breaking_window_hours": "3",

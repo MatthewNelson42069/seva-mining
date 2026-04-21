@@ -2,9 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/pages/LoginPage'
-import { PlatformQueuePage } from '@/pages/PlatformQueuePage'
+import { PerAgentQueuePage } from '@/pages/PerAgentQueuePage'
 import { DigestPage } from '@/pages/DigestPage'
-import { ContentPage } from '@/pages/ContentPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
 export default function App() {
@@ -14,15 +13,18 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
-            {/* Redirect root to Content queue (Twitter purged in quick-260420-sn9) */}
-            <Route path="/" element={<Navigate to="/content" replace />} />
+            {/* Redirect root to Breaking News (priority-1 sub-agent, quick-260421-eoe) */}
+            <Route path="/" element={<Navigate to="/agents/breaking-news" replace />} />
 
-            {/* Platform queues — single-agent (content only) */}
-            <Route path="/content" element={<PlatformQueuePage platform="content" />} />
+            {/* Per-sub-agent queues via single dynamic route (quick-260421-eoe).
+                CONTENT_AGENT_TABS drives Sidebar + PerAgentQueuePage slug lookup.
+                Unknown slug → redirect back to /agents/breaking-news. */}
+            <Route path="/agents/:slug" element={<PerAgentQueuePage />} />
 
-            {/* Other pages */}
+            {/* Other pages. /content-review + ContentPage were orphaned after
+                quick-260421-eoe (no Sidebar link, no internal linkage); route
+                removed. ContentPage.tsx retained pending a follow-up quick task. */}
             <Route path="/digest" element={<DigestPage />} />
-            <Route path="/content-review" element={<ContentPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
         </Route>

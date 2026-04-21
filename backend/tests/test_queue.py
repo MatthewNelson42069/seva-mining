@@ -437,3 +437,82 @@ class TestQueueList:
             assert data["next_cursor"] is None
         finally:
             app.dependency_overrides.pop(get_db, None)
+
+
+class TestQueueContentTypeFilter:
+    """quick-260421-eoe: /queue?content_type=X filters via the JSONB bundle link.
+
+    draft_items has no direct FK to content_bundles; the link lives in
+    draft_items.engagement_snapshot->>'content_bundle_id'. The router must
+    issue a correlated subquery against content_bundles.id::text.
+    """
+
+    async def test_content_type_filter_present_in_sql(self, auth_headers):
+        """When content_type is given, the compiled SQL references content_bundles."""
+        item = make_draft_item(status="pending")
+        mock_db = make_mock_db(item)
+
+        async def override_get_db():
+            yield mock_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get(
+                    "/queue?platform=content&content_type=thread",
+                    headers=auth_headers,
+                )
+            assert resp.status_code == 200
+            # Inspect the SQLAlchemy statement that was executed — must include
+            # the content_bundles subquery AND the JSONB ->> extraction.
+            executed_stmt = mock_db.execute.call_args.args[0]
+            compiled_sql = str(
+                executed_stmt.compile(compile_kwargs={"literal_binds": True})
+            )
+            assert "content_bundles" in compiled_sql
+            assert "content_bundle_id" in compiled_sql
+            assert "thread" in compiled_sql
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+    async def test_content_type_filter_omitted_does_not_reference_bundles(self, auth_headers):
+        """Without content_type, the query stays untouched — no JOIN / subquery added."""
+        item = make_draft_item(status="pending")
+        mock_db = make_mock_db(item)
+
+        async def override_get_db():
+            yield mock_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get("/queue?platform=content", headers=auth_headers)
+            assert resp.status_code == 200
+            executed_stmt = mock_db.execute.call_args.args[0]
+            compiled_sql = str(
+                executed_stmt.compile(compile_kwargs={"literal_binds": True})
+            )
+            assert "content_bundles" not in compiled_sql
+        finally:
+            app.dependency_overrides.pop(get_db, None)
+
+    async def test_content_type_filter_unknown_type_returns_empty_list(self, auth_headers):
+        """Bogus content_type must return 200 with empty items, not 500."""
+        mock_db = make_mock_db(None)  # empty result set
+
+        async def override_get_db():
+            yield mock_db
+
+        app.dependency_overrides[get_db] = override_get_db
+        try:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+                resp = await ac.get(
+                    "/queue?platform=content&content_type=bogus_unknown_type",
+                    headers=auth_headers,
+                )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["items"] == []
+            assert data["next_cursor"] is None
+        finally:
+            app.dependency_overrides.pop(get_db, None)

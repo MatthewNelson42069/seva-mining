@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { FileText, Newspaper, Settings, LogOut } from 'lucide-react'
 import { useAppStore } from '@/stores'
 import { useQueueCounts } from '@/hooks/useQueueCounts'
+import { CONTENT_AGENT_TABS } from '@/config/agentTabs'
 import { cn } from '@/lib/utils'
 
 export function Sidebar() {
@@ -19,16 +20,21 @@ export function Sidebar() {
     return hasMore ? `${n}+` : String(n)
   }
 
-  // Single-agent (Content only) post quick-260420-sn9 (Twitter purged);
-  // Instagram was purged in quick-260419-lvy.
-  const agentItems = [
-    {
-      to: '/content',
-      label: 'Content',
-      icon: <FileText className="size-4" />,
-      badge: countLabel(counts.content, counts.contentHasMore),
-    },
-  ]
+  // 7 sub-agents post quick-260421-eoe (monolithic content_agent split).
+  // Rendered in priority order from CONTENT_AGENT_TABS (the single source
+  // of truth shared with the /agents/:slug route). Twitter purged in
+  // quick-260420-sn9; Instagram purged in quick-260419-lvy.
+  const agentItems = [...CONTENT_AGENT_TABS]
+    .sort((a, b) => a.priority - b.priority)
+    .map((tab) => {
+      const entry = counts[tab.contentType]
+      return {
+        to: `/agents/${tab.slug}`,
+        label: tab.label,
+        icon: <FileText className="size-4" />,
+        badge: countLabel(entry?.count ?? 0, entry?.hasMore ?? false),
+      }
+    })
 
   const bottomItems = [
     { to: '/digest', label: 'Digest', icon: <Newspaper className="size-4" /> },

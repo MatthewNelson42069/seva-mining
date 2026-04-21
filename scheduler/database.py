@@ -25,13 +25,17 @@ def _make_async_url(url: str) -> str:
 
 settings = get_settings()
 
-# Scheduler worker runs one job at a time (advisory locks enforce this).
-# pool_size=3 covers: the active job + seed calls + headroom for retries.
-# max_overflow=2 allows brief spikes without blocking.
+# Scheduler worker runs 8 jobs (morning_digest + 7 content sub-agents) post
+# quick-260421-eoe. Peak concurrency is bounded by max_instances=1 per job +
+# 2h staggered intervals, but each sub-agent may hold multiple sessions
+# (bundle write + DraftItem write + config reads) concurrently with other
+# sub-agents' sessions during overlap windows.
+# pool_size=15 + max_overflow=10 gives ample headroom for the 7 sub-agents
+# plus seed/upsert calls without blocking.
 engine = create_async_engine(
     _make_async_url(settings.database_url),
-    pool_size=3,
-    max_overflow=2,
+    pool_size=15,
+    max_overflow=10,
     pool_pre_ping=True,
     pool_recycle=300,
     echo=False,
