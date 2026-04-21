@@ -1,10 +1,12 @@
 # Roadmap: Seva Mining AI Social Media Agency
 
-> **DEPRECATION NOTICE (2026-04-19):** The Instagram Agent (Phase 6) has been fully removed from the product scope. Apify-based Instagram scraping proved non-viable and the platform-economics no longer justify the spend (~$50/mo). Seva Mining is now a **three-agent** system (Twitter, Senior, Content). Phase 6 is retained below for historical context only — it will never be executed. Any dependencies or references to the Instagram Agent in later phases (Phase 7 dual-platform content, Phase 10 notifications, Phase 11 carousel rendering) are also deprecated in-place. See quick task `260419-lvy` for the purge commits.
+> **DEPRECATION NOTICE (2026-04-19):** The Instagram Agent (Phase 6) has been fully removed from the product scope. Apify-based Instagram scraping proved non-viable and the platform-economics no longer justify the spend (~$50/mo). After that purge the system was a three-agent system (Twitter, Senior, Content). Phase 6 is retained below for historical context only — it will never be executed. Any dependencies or references to the Instagram Agent in later phases (Phase 7 dual-platform content, Phase 10 notifications, Phase 11 carousel rendering) are also deprecated in-place. See quick task `260419-lvy` for the purge commits.
+>
+> **DEPRECATION NOTICE (2026-04-20):** The Twitter Agent (Phase 4) and the broader Senior Agent (Phase 5, Phase 10) have been fully removed from the product scope. The X API Basic tier ($100/mo) was not justified when the Content Agent's news-feed pipeline was already producing higher-signal drafts, and the Senior Agent had narrowed in practice to a single cron — the 07:00 morning digest. Seva Mining is now a **single-agent** system (Content Agent only, with a trimmed `morning_digest` job and the opportunistic `gold_history_agent`). Phase 4 and Phase 5 are retained below for historical context only — they will never be re-executed. Phase 10 is retained as executed-and-trimmed: `morning_digest` at 15:00 UTC remains live; the "Twitter/Instagram/Content new-item alert" goal is now "Content new-item alert" only. `tweepy[async]>=4.14` and the `x_api_bearer_token` / `x_api_key` / `x_api_secret` env wiring are preserved — the Content Agent's `video_clip` pipeline still calls tweepy's async client to search X video clips when a story has strong video supporting material. This is an X API read used downstream by Content, not the Twitter Agent. See quick task `260420-sn9` for the purge commits.
 
 ## Overview
 
-Build a three-agent AI monitoring and drafting system from the ground up. The dependency graph dictates the build order: database schema and infrastructure first (everything depends on it), then the FastAPI backend, then the React approval dashboard (human workflow must be testable before agents run), then agents in ascending complexity (Twitter Agent first — simplest pipeline — then Senior Agent core to manage the queue before adding more agents, then Content Agent — most complex). Dashboard views for digest and content review, and full Settings configurability, are wired last once agents are producing verified output.
+Build a single-agent AI monitoring and drafting system. The original build order was: database schema and infrastructure first (everything depends on it), then the FastAPI backend, then the React approval dashboard (human workflow must be testable before agents run), then agents in ascending complexity (Twitter Agent first — simplest pipeline — then Senior Agent core to manage the queue, then Content Agent — most complex). Dashboard views for digest and content review, and full Settings configurability, were wired last once agents were producing verified output. Post-2026-04-20 (`260420-sn9`) the Twitter Agent and Senior Agent are deprecated; the shipped system is the Content Agent + trimmed `morning_digest` cron + `gold_history_agent`.
 
 ## Phases
 
@@ -17,8 +19,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Infrastructure and Foundation** - Full database schema on Neon, Alembic migrations, two Railway services configured, APScheduler worker skeleton with DB job lock, Twilio WhatsApp template submission
 - [ ] **Phase 2: FastAPI Backend** - Password auth (bcrypt + JWT), all REST endpoints, state machine transition enforcement, Twilio outbound notification service
 - [ ] **Phase 3: React Approval Dashboard** - Tabbed approval interface, approval cards with full context and inline editing, approve/edit+approve/reject actions, copy-to-clipboard, direct source links
-- [x] **Phase 4: Twitter Agent** - X API v2 monitoring, engagement scoring with recency decay, dual-format drafting with compliance checker, monthly quota counter with hard-stop logic (completed 2026-04-02)
-- [ ] **Phase 5: Senior Agent Core** - Story fingerprint deduplication, 15-item queue cap, auto-expiry sweep, WhatsApp morning digest and alert dispatch
+- [x] **~~Phase 4: Twitter Agent~~** - **DEPRECATED 2026-04-20 — see quick task `260420-sn9`.** Originally shipped 2026-04-02 as X API v2 monitoring with engagement scoring, dual-format drafting, and monthly quota counter. Purged because X API Basic tier ($100/mo) spend was not justified when Content Agent's news pipeline produced higher-signal drafts.
+- [ ] **~~Phase 5: Senior Agent Core~~** - **DEPRECATED 2026-04-20 — see quick task `260420-sn9`.** Never fully executed. Story fingerprint dedup + 15-item queue cap + expiry sweep are no longer relevant in a single-agent system; the Content Agent has its own cross-run dedup. The `morning_digest` slice is retained under Phase 10 as a trimmed cron job.
 - [ ] **~~Phase 6: Instagram Agent~~** - **DEPRECATED 2026-04-19. Never executed. Retained for historical context only.** Apify scraper integration, per-hashtag baseline tracking, retry/health logic, comment draft alternatives with compliance checker
 - [x] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), dual-platform output (Twitter + Instagram), cross-run dedup, 12pm midday run, bi-weekly Gold History agent, compliance checker (completed 2026-04-07)
 - [ ] **Phase 8: Dashboard Views and Digest** - Daily digest view, content review page, full Settings page wired to live DB config
@@ -87,7 +89,9 @@ Plans:
 - [ ] 03-04-PLAN.md — QueuePage wiring, content modal, related badges, empty state, database seed script
 - [ ] 03-05-PLAN.md — Human verification of complete approval dashboard (checkpoint)
 
-### Phase 4: Twitter Agent
+### ~~Phase 4: Twitter Agent~~
+**DEPRECATED 2026-04-20 — see quick task `260420-sn9`. The Twitter Agent was shipped on 2026-04-02 and ran in prod until 2026-04-20. It has been fully purged from code, scheduler, frontend, and prod database (177 historical `draft_items WHERE platform='twitter'` rows deleted, all `twitter_*` config keys removed, all 40 watchlists emptied). This phase's plans 04-01..04-05 are retained as historical record only.**
+
 **Goal**: The Twitter Agent runs on schedule, fetches qualifying gold-sector posts, scores them, drafts dual-format alternatives with a separate compliance checker, and delivers items to the dashboard — with monthly quota tracking and hard-stop logic running from day one
 **Depends on**: Phase 3
 **Requirements**: TWIT-01, TWIT-02, TWIT-03, TWIT-04, TWIT-05, TWIT-06, TWIT-07, TWIT-08, TWIT-09, TWIT-10, TWIT-11, TWIT-12, TWIT-13, TWIT-14
@@ -106,7 +110,9 @@ Plans:
 - [x] 04-04-PLAN.md — Wiring: APScheduler integration, seed script (25 watchlist accounts, keywords, config defaults)
 - [x] 04-05-PLAN.md — Backend model sync, full test suite, human verification checkpoint
 
-### Phase 5: Senior Agent Core
+### ~~Phase 5: Senior Agent Core~~
+**DEPRECATED 2026-04-20 — see quick task `260420-sn9`. Phase 5 was never fully shipped; in practice only the `morning_digest` slice survived into prod (via Phase 10's 10-03). With Twitter purged and Instagram already purged in `260419-lvy`, there is only one producer (Content Agent) and no need for cross-platform dedup, queue cap displacement, or expiry sweeps. The `senior_agent.py` module was trimmed to morning-digest-only in `260420-sn9` Task 2. This phase header is retained for historical record only.**
+
 **Goal**: All items entering the queue are deduplicated across platforms, the 15-item hard cap is enforced with priority tiebreaking, items auto-expire on schedule, and WhatsApp morning digests and alerts are dispatched via Twilio
 **Depends on**: Phase 4
 **Requirements**: SENR-01, SENR-02, SENR-03, SENR-04, SENR-05, SENR-06, SENR-07, SENR-08, SENR-09, WHAT-01, WHAT-02, WHAT-03, WHAT-05
@@ -209,7 +215,9 @@ Plans:
 - [ ] 09-02-PLAN.md — Schedule intervals to DB config (worker.py, seed scripts)
 
 ### Phase 10: Senior Agent WhatsApp Notifications
-**Goal**: The Senior Agent sends real WhatsApp notifications via the Twilio sandbox — a morning digest at 7am PST and an instant alert every time any agent (Twitter, Instagram, Content) creates new draft items for review. The expiry sweep job is removed. The WhatsApp service is rewritten to use free-form sandbox messages instead of pre-approved Meta templates.
+> **PARTIAL DEPRECATION (2026-04-20 — `260420-sn9`):** The Twitter + Instagram + Content multi-agent new-item alert goal is now Content-only (Twitter and Instagram agents were both purged). The `morning_digest` at 15:00 UTC continues to run as the sole surviving slice of the Senior Agent. All other Senior Agent responsibilities (dedup, queue cap, expiry sweep) are permanently out of scope.
+
+**Goal**: The Senior Agent sends real WhatsApp notifications via the Twilio sandbox — a morning digest at 7am PST and an instant alert every time the Content Agent creates new draft items for review. The expiry sweep job is removed. The WhatsApp service is rewritten to use free-form sandbox messages instead of pre-approved Meta templates.
 **Depends on**: Phase 9
 **Requirements**: WHAT-01, WHAT-02, WHAT-05
 **Success Criteria** (what must be TRUE):
@@ -264,7 +272,7 @@ Plans:
 Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9 -> 10 -> 11
 
 Milestones:
-- **v1.0** — Phases 1–10 (core four-agent platform + dashboard + WhatsApp)
+- **v1.0** — Phases 1–10 (originally core four-agent platform + dashboard + WhatsApp; post-2026-04-20 the only surviving agents are Content + trimmed morning_digest + gold_history_agent)
 - **v1.0.1** — Phase 11 (content preview & rendered images) — shipped 2026-04-19
 
 | Phase | Plans Complete | Status | Completed |
@@ -272,8 +280,8 @@ Milestones:
 | 1. Infrastructure and Foundation | 4/7 | In Progress|  |
 | 2. FastAPI Backend | 3/4 | In Progress|  |
 | 3. React Approval Dashboard | 3/5 | In Progress|  |
-| 4. Twitter Agent | 5/5 | Complete   | 2026-04-02 |
-| 5. Senior Agent Core | 0/6 | Planned    |  |
+| 4. Twitter Agent | 5/5 | **Deprecated 2026-04-20** | (shipped 2026-04-02, purged 2026-04-20) |
+| 5. Senior Agent Core | 0/6 | **Deprecated 2026-04-20** |  |
 | 6. Instagram Agent | 0/5 | **Deprecated 2026-04-19** |  |
 | 7. Content Agent | 10/10 | Complete   | 2026-04-07 |
 | 8. Dashboard Views and Digest | 6/6 | Complete   |  |

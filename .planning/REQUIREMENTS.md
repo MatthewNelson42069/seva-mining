@@ -25,22 +25,24 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **AUTH-02**: Session persists across browser refresh (JWT token)
 - [x] **AUTH-03**: Unauthenticated requests to dashboard and API are rejected
 
-### Twitter Agent
+### ~~Twitter Agent~~ (DEPRECATED 2026-04-20)
 
-- [x] **TWIT-01**: Agent monitors X via Basic API using configurable cashtags, hashtags, and natural language keywords every 2 hours
-- [x] **TWIT-02**: Agent scores posts on engagement (40%), account authority (30%), and topic relevance (30%)
-- [x] **TWIT-03**: Engagement formula: likes x1 + retweets x2 + replies x1.5
-- [x] **TWIT-04**: Minimum engagement gate: 500+ likes OR watchlist account with 50+ likes
-- [x] **TWIT-05**: Recency decay: full score under 1h, 50% at 4h, expired at 6h
-- [x] **TWIT-06**: Top 3-5 qualifying posts per run passed to drafting
-- [x] **TWIT-07**: Agent drafts both a reply comment AND a retweet-with-comment for each qualifying post
-- [x] **TWIT-08**: Agent produces 2-3 alternative drafts per response type
-- [x] **TWIT-09**: Each draft evaluated against quality rubric (relevance, originality, tone match, no company mention, no financial advice) before queuing
-- [x] **TWIT-10**: Separate Claude compliance-checker call validates no Seva Mining mention and no financial advice in every draft
-- [x] **TWIT-11**: Monthly X API quota counter tracks tweet reads against 10,000/month cap
-- [x] **TWIT-12**: Hard-stop logic prevents API calls when quota approaches limit (configurable safety margin)
-- [x] **TWIT-13**: Dashboard displays current quota usage and alerts when quota is low
-- [x] **TWIT-14**: All drafts sent to Senior Agent with rationale explaining why this post matters and what angle the draft takes
+> Shipped 2026-04-02, ran in prod until 2026-04-20, then fully purged in quick task `260420-sn9`. The X API Basic tier ($100/mo) spend was not justified relative to the Content Agent's higher-signal news pipeline output. All TWIT-* requirements are historically "complete-then-deprecated" — they reflect work that shipped but is no longer part of the product. The `video_clip` pipeline on the Content Agent still calls the X API (tweepy async) for video-clip search — that is a downstream tool, not the Twitter Agent.
+
+- [ ] ~~**TWIT-01**: Agent monitors X via Basic API using configurable cashtags, hashtags, and natural language keywords every 2 hours~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-02**: Agent scores posts on engagement (40%), account authority (30%), and topic relevance (30%)~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-03**: Engagement formula: likes x1 + retweets x2 + replies x1.5~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-04**: Minimum engagement gate: 500+ likes OR watchlist account with 50+ likes~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-05**: Recency decay: full score under 1h, 50% at 4h, expired at 6h~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-06**: Top 3-5 qualifying posts per run passed to drafting~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-07**: Agent drafts both a reply comment AND a retweet-with-comment for each qualifying post~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-08**: Agent produces 2-3 alternative drafts per response type~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-09**: Each draft evaluated against quality rubric (relevance, originality, tone match, no company mention, no financial advice) before queuing~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-10**: Separate Claude compliance-checker call validates no Seva Mining mention and no financial advice in every draft~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-11**: Monthly X API quota counter tracks tweet reads against 10,000/month cap~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-12**: Hard-stop logic prevents API calls when quota approaches limit (configurable safety margin)~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-13**: Dashboard displays current quota usage and alerts when quota is low~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**TWIT-14**: All drafts sent to Senior Agent with rationale explaining why this post matters and what angle the draft takes~~ **(DEPRECATED 2026-04-20)**
 
 ### ~~Instagram Agent~~ (DEPRECATED 2026-04-19)
 
@@ -79,17 +81,19 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CONT-16**: Separate Claude compliance-checker call on all content
 - [x] **CONT-17**: Content packaged with all sources and credibility score, sent to Senior Agent
 
-### Senior Agent
+### ~~Senior Agent~~ (DEPRECATED 2026-04-20)
 
-- [x] **SENR-01**: Receives all drafts from sub-agents as they arrive
-- [x] **SENR-02**: Deduplicates across agents — same story surfaces as separate cards per platform, visually linked as "related"
-- [x] **SENR-03**: Prioritizes queue: Twitter time-sensitive first, breaking news content second, Instagram third, evergreen last
-- [x] **SENR-04**: Hard cap of 15 items in queue — lower-scoring items displaced by higher-scoring new items when full
-- [x] **SENR-05**: Auto-expires items after platform window (Twitter: 6h, Instagram: 12h)
-- [x] **SENR-06**: Assembles morning digest daily at 8am
-- [x] **SENR-07**: Morning digest contains: top 5 gold sector stories (one sentence each), queue snapshot by platform, yesterday's approved/rejected/expired counts, scraped surface metrics on @sevamining posts, single highest-value queue item
-- [x] **SENR-08**: Logs every approval and rejection with reason tags
-- [x] **SENR-09**: Expiry processor runs every 30 minutes to sweep stale items
+> Never fully shipped. Of the 9 SENR-* requirements, only SENR-06 + SENR-07 (the morning digest) were implemented — and those live under Phase 10. With Twitter + Instagram purged, cross-agent dedup (SENR-02), multi-platform queue priority (SENR-03), queue cap (SENR-04), per-platform expiry (SENR-05), and the expiry sweep (SENR-09) are no longer in scope. The trimmed `senior_agent.py` keeps `run_morning_digest()` and nothing else. See quick task `260420-sn9` for the trim.
+
+- [ ] ~~**SENR-01**: Receives all drafts from sub-agents as they arrive~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**SENR-02**: Deduplicates across agents — same story surfaces as separate cards per platform, visually linked as "related"~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**SENR-03**: Prioritizes queue: Twitter time-sensitive first, breaking news content second, Instagram third, evergreen last~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**SENR-04**: Hard cap of 15 items in queue — lower-scoring items displaced by higher-scoring new items when full~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**SENR-05**: Auto-expires items after platform window (Twitter: 6h, Instagram: 12h)~~ **(DEPRECATED 2026-04-20)**
+- [x] **SENR-06**: Assembles morning digest daily at 8am *(shipped via Phase 10-03 as `morning_digest` at 15:00 UTC; retained post-sn9)*
+- [x] **SENR-07**: Morning digest contains: top 5 gold sector stories (one sentence each), queue snapshot by platform, yesterday's approved/rejected/expired counts, scraped surface metrics on @sevamining posts, single highest-value queue item *(shipped via Phase 10-03; retained post-sn9)*
+- [ ] ~~**SENR-08**: Logs every approval and rejection with reason tags~~ **(DEPRECATED 2026-04-20)**
+- [ ] ~~**SENR-09**: Expiry processor runs every 30 minutes to sweep stale items~~ **(DEPRECATED 2026-04-20)**
 
 ### Approval Dashboard
 
@@ -219,29 +223,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DASH-08 | Phase 3 | Complete |
 | DASH-09 | Phase 3 | Pending |
 | DASH-10 | Phase 3 | Pending |
-| TWIT-01 | Phase 4 | Complete |
-| TWIT-02 | Phase 4 | Complete |
-| TWIT-03 | Phase 4 | Complete |
-| TWIT-04 | Phase 4 | Complete |
-| TWIT-05 | Phase 4 | Complete |
-| TWIT-06 | Phase 4 | Complete |
-| TWIT-07 | Phase 4 | Complete |
-| TWIT-08 | Phase 4 | Complete |
-| TWIT-09 | Phase 4 | Complete |
-| TWIT-10 | Phase 4 | Complete |
-| TWIT-11 | Phase 4 | Complete |
-| TWIT-12 | Phase 4 | Complete |
-| TWIT-13 | Phase 4 | Complete |
-| TWIT-14 | Phase 4 | Complete |
-| SENR-01 | Phase 5 | Complete |
-| SENR-02 | Phase 5 | Complete |
-| SENR-03 | Phase 5 | Complete |
-| SENR-04 | Phase 5 | Complete |
-| SENR-05 | Phase 5 | Complete |
-| SENR-06 | Phase 5 | Complete |
-| SENR-07 | Phase 5 | Complete |
-| SENR-08 | Phase 5 | Complete |
-| SENR-09 | Phase 5 | Complete |
+| ~~TWIT-01~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-02~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-03~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-04~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-05~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-06~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-07~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-08~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-09~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-10~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-11~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-12~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-13~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~TWIT-14~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
+| ~~SENR-01~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
+| ~~SENR-02~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
+| ~~SENR-03~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
+| ~~SENR-04~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
+| ~~SENR-05~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
+| SENR-06 | Phase 10 (partial-carryover) | Complete |
+| SENR-07 | Phase 10 (partial-carryover) | Complete |
+| ~~SENR-08~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
+| ~~SENR-09~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
 | WHAT-01 | Phase 5 | Complete |
 | WHAT-02 | Phase 5 | Complete |
 | WHAT-03 | Phase 5 | Complete |
