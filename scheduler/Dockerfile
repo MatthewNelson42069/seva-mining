@@ -21,7 +21,6 @@ COPY agents/ ./agents/
 COPY models/ ./models/
 COPY services/ ./services/
 COPY seed_content_data.py .
-COPY seed_twitter_data.py .
 
 # No EXPOSE — scheduler worker has no HTTP port
 
