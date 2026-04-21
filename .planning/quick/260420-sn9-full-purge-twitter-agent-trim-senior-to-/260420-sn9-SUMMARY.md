@@ -10,7 +10,7 @@ commits:
   - be9cd8b  # Task 2: trim Senior Agent to run_morning_digest only
   - aeaf412  # Task 3: backend purge (/config/quota endpoint + test fixtures + seed_mock_data)
   - c30e288  # Task 4: frontend purge (Platform type narrowing + 7 files deleted + 13 files modified)
-  - <task5-sha>  # Task 5: prod DB purge + CLAUDE.md + ROADMAP.md + REQUIREMENTS.md + STATE.md (this commit)
+  - 55100c9  # Task 5: prod DB purge + CLAUDE.md + ROADMAP.md + REQUIREMENTS.md + STATE.md (this commit)
 tags: [deprecation, twitter-agent, senior-agent, scheduler, backend, frontend, prod-db, budget, planning-docs]
 ---
 
@@ -160,7 +160,7 @@ Modified:
 - `pnpm build` → green, 544KB bundle
 - Grep sweep: 0 `Twitter|twitter_agent|QuotaBar|ApprovalCard|PlatformTabBar|WatchlistTab` matches in `frontend/src/` (inside file bodies; the inert `twitter_post`/`twitter_caption` string literals are expected content_agent output keys, not references to the Twitter Agent).
 
-## Task 5 — Prod DB purge + docs refresh (`<task5-sha>`)
+## Task 5 — Prod DB purge + docs refresh (`55100c9`)
 
 ### Prod DB purge
 
@@ -271,7 +271,7 @@ None introduced. The content-agent output fields `twitter_post` / `twitter_capti
 - **Issue:** `draft_items_related_id_draft_items` FK constraint blocked `DELETE FROM draft_items WHERE platform='twitter'` — 1 `instagram` row had `related_id` pointing at a twitter row (from lvy-era cross-platform relation wiring that lvy's purge did not clean up because it stayed scope-bounded to Instagram rows).
 - **Fix:** Prepended `UPDATE draft_items SET related_id = NULL WHERE platform != 'twitter' AND related_id IN (SELECT id FROM draft_items WHERE platform='twitter')` to the DELETE transaction. Exactly 1 row affected. Instagram row itself left in place.
 - **Files modified:** None (prod DB only).
-- **Commit:** `<task5-sha>` (this task's commit — no code change for the fix; the adjustment was a one-off SQL applied inside the `railway run` transaction).
+- **Commit:** `55100c9` (this task's commit — no code change for the fix; the adjustment was a one-off SQL applied inside the `railway run` transaction).
 
 **2. [Rule 3 — Deferred out-of-scope lint error] Pre-existing ruff I001 in `backend/alembic/versions/0007_add_market_snapshots.py`.**
 - **Found during:** Task 3 backend pytest verification.
@@ -300,7 +300,7 @@ Well inside the stated $205-225 envelope with $90-110/mo headroom available for 
 - Commit `be9cd8b` (Task 2 — senior trim) — FOUND
 - Commit `aeaf412` (Task 3 — backend purge) — FOUND
 - Commit `c30e288` (Task 4 — frontend purge) — FOUND
-- Commit `<task5-sha>` (Task 5 — DB + docs refresh) — FOUND (recorded post-commit)
+- Commit `55100c9` (Task 5 — DB + docs refresh) — FOUND (recorded post-commit)
 - Prod DB post-probe: `draft_items_twitter=0`, `watchlists_all=0`, `config_twitter_keys=0` — CONFIRMED
 - Prod DB content row preservation: `draft_items_content=955` both pre and post — CONFIRMED
 - `frontend/` grep for `Twitter|twitter_agent|QuotaBar|ApprovalCard|PlatformTabBar|WatchlistTab` — 0 matches in file bodies (inert `twitter_post`/`twitter_caption` content_agent output keys excluded)
