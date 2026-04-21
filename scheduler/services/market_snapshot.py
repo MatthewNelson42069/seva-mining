@@ -189,8 +189,9 @@ class MetalsFetcher:
 class MetalpriceAPIFetcher:
     """Fetches spot gold + silver from metalpriceapi.com.
 
-    Handles reciprocal rate trap: response gives USDXAU=0.000426 (USD per oz of gold
-    expressed as reciprocal), so price = 1 / rate to get USD per oz.
+    Response shape with base=USD returns USDXAU and USDXAG as direct USD-per-oz
+    prices (e.g. USDXAU≈4816.39 means gold is $4,816.39/oz); read as-is, no
+    inversion. The reciprocal fields XAU/XAG (without the USD prefix) are ignored.
     """
 
     def __init__(self, api_key: str) -> None:
@@ -207,10 +208,8 @@ class MetalpriceAPIFetcher:
             r.raise_for_status()
             data = r.json()
             rates = data.get("rates", {})
-            xau = rates.get("USDXAU")
-            xag = rates.get("USDXAG")
-            gold = (1.0 / xau) if xau else None
-            silver = (1.0 / xag) if xag else None
+            gold = rates.get("USDXAU")
+            silver = rates.get("USDXAG")
             return {"gold_usd_per_oz": gold, "silver_usd_per_oz": silver}
         except Exception as exc:
             raise exc

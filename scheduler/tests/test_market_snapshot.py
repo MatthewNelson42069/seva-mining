@@ -9,7 +9,7 @@ All 12 unit tests covering:
   5.  Missing FRED key logs WARNING
   6.  Missing metalpriceapi key logs WARNING
   7.  Malformed JSON from a source
-  8.  metalpriceapi reciprocal rate conversion
+  8.  metalpriceapi direct price read (no inversion)
   9.  FRED "." missing-observation sentinel
   10. render_snapshot_block populated
   11. render_snapshot_block fallback (all None)
@@ -113,8 +113,8 @@ FRED_CPI_GOOD = {
 
 METALS_GOOD = {
     "rates": {
-        "USDXAU": 0.000426,
-        "USDXAG": 0.035842,
+        "USDXAU": 4816.39,
+        "USDXAG": 79.58,
     },
     "timestamp": 1745280000,
 }
@@ -420,18 +420,18 @@ async def test_malformed_json_from_source():
 
 
 # ---------------------------------------------------------------------------
-# Test 8: metalpriceapi reciprocal rate conversion
+# Test 8: metalpriceapi direct price read (no inversion)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_metalpriceapi_reciprocal_conversion():
-    """USDXAU=0.000426 → gold=$2347.42/oz; USDXAG=0.035842 → silver=$27.90/oz."""
+async def test_metalpriceapi_direct_price_read():
+    """USDXAU=4816.39 → gold=$4816.39/oz; USDXAG=79.58 → silver=$79.58/oz (direct USD/oz, no inversion)."""
     ms = _get_market_snapshot()
 
     metals_response = {
         "rates": {
-            "USDXAU": 0.000426,
-            "USDXAG": 0.035842,
+            "USDXAU": 4816.39,
+            "USDXAG": 79.58,
         },
         "timestamp": 1745280000,
     }
@@ -451,8 +451,8 @@ async def test_metalpriceapi_reciprocal_conversion():
 
             snap = await ms.fetch_market_snapshot(session=None)
 
-    assert snap["gold_usd_per_oz"] == pytest.approx(2347.42, rel=1e-4)
-    assert snap["silver_usd_per_oz"] == pytest.approx(27.90, rel=1e-4)
+    assert snap["gold_usd_per_oz"] == pytest.approx(4816.39, rel=1e-4)
+    assert snap["silver_usd_per_oz"] == pytest.approx(79.58, rel=1e-4)
 
 
 # ---------------------------------------------------------------------------
