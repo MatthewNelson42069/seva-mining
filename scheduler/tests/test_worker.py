@@ -28,7 +28,8 @@ os.environ.setdefault("SERPAPI_API_KEY", "x")
 os.environ.setdefault("FRONTEND_URL", "https://x.com")
 
 from worker import (  # noqa: E402
-    CONTENT_SUB_AGENTS,
+    CONTENT_CRON_AGENTS,
+    CONTENT_INTERVAL_AGENTS,
     JOB_LOCK_IDS,
     build_scheduler,
     with_advisory_lock,
@@ -72,20 +73,24 @@ async def test_job_exception_does_not_propagate():
 # quick-260421-eoe: 8-job topology
 # ---------------------------------------------------------------------------
 
-def test_content_sub_agents_has_seven_entries():
-    """CONTENT_SUB_AGENTS registration table must contain exactly 7 sub-agents."""
-    assert len(CONTENT_SUB_AGENTS) == 7
+def test_sub_agents_total_seven():
+    """Interval + cron sub-agent lists together must still cover all 7 sub-agents."""
+    assert len(CONTENT_INTERVAL_AGENTS) + len(CONTENT_CRON_AGENTS) == 7
+    assert len(CONTENT_INTERVAL_AGENTS) == 6
+    assert len(CONTENT_CRON_AGENTS) == 1
 
 
 def test_sub_agent_staggering():
-    """Offsets are exactly [0, 17, 34, 51, 68, 85, 102] minutes in priority order."""
-    offsets = [t[4] for t in CONTENT_SUB_AGENTS]
-    assert offsets == [0, 17, 34, 51, 68, 85, 102]
+    """Interval offsets are exactly [0, 17, 34, 68, 85, 102] minutes (51 removed — sub_quotes is now cron)."""
+    offsets = [t[4] for t in CONTENT_INTERVAL_AGENTS]
+    assert offsets == [0, 17, 34, 68, 85, 102]
 
 
 def test_sub_agent_lock_ids():
-    """Lock IDs cover 1010-1016 (inclusive) mapped to the sub_* job IDs."""
-    sub_entries = {job_id: lock_id for job_id, _, _, lock_id, _, _ in CONTENT_SUB_AGENTS}
+    """Lock IDs cover 1010-1016 (inclusive) mapped to the sub_* job IDs across both schedule shapes."""
+    sub_entries = {job_id: lock_id for job_id, _, _, lock_id, *_ in CONTENT_INTERVAL_AGENTS}
+    for job_id, _, _, lock_id, *_ in CONTENT_CRON_AGENTS:
+        sub_entries[job_id] = lock_id
     assert sub_entries == {
         "sub_breaking_news": 1010,
         "sub_threads":       1011,
@@ -98,6 +103,18 @@ def test_sub_agent_lock_ids():
     # Also assert JOB_LOCK_IDS matches.
     for job_id, lock_id in sub_entries.items():
         assert JOB_LOCK_IDS[job_id] == lock_id
+
+
+def test_quotes_is_daily_cron():
+    """sub_quotes is registered as the sole cron sub-agent at 12:00 America/Los_Angeles."""
+    assert len(CONTENT_CRON_AGENTS) == 1
+    job_id, _, name, lock_id, hour, minute, tz = CONTENT_CRON_AGENTS[0]
+    assert job_id == "sub_quotes"
+    assert name == "Quotes"
+    assert lock_id == 1013
+    assert hour == 12
+    assert minute == 0
+    assert tz == "America/Los_Angeles"
 
 
 def test_retired_crons_absent_from_job_lock_ids():

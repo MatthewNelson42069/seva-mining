@@ -22,6 +22,25 @@ logger = logging.getLogger(__name__)
 CONTENT_TYPE: str = "quote"
 AGENT_NAME: str = "sub_quotes"
 
+# Tier-1 source patterns for reputable-quote filtering (quick-260421-mos).
+# Matched case-insensitive as substrings against story["source_name"].
+# Deliberate over-inclusion of aliases (e.g. "wall street journal" AND "wsj")
+# to catch both canonical names and common shorthand returned by SerpAPI.
+REPUTABLE_SOURCES: frozenset[str] = frozenset({
+    # Tier-1 financial
+    "reuters", "bloomberg", "wsj", "wall street journal",
+    "financial times", "ft.com", "barron", "marketwatch",
+    "cnbc", "economist", "financial post",
+    # Gold-specialist
+    "kitco", "mining.com", "mining journal", "mining weekly",
+    "northern miner", "gold hub",
+    # Institutional (WGC, IMF, BIS, central banks, ratings agencies)
+    "world gold council", "wgc", "imf", "bis.org",
+    "federal reserve", "european central bank",
+    "bank of england", "bank of japan", "people's bank",
+    "s&p global", "moody's",
+})
+
 
 async def _draft(
     story: dict,
@@ -80,6 +99,31 @@ Source: {story.get('source_name', '')} ({story.get('link', '')})
    the claude.ai render fields.
 3. Provide a brief rationale for the format choice (1-2 sentences).
 
+## Quality bar — a quote is ONLY "solid" if ALL hold:
+1. **Speaker credibility:** Named figure with a verifiable senior role —
+   chief economist/strategist at a tier-1 bank, central bank official
+   (Fed/ECB/BoE/BoJ/PBoC), World Gold Council staff, IMF/BIS official,
+   head of research at a major gold firm, or a well-known commodity
+   analyst with a public track record. REJECT: anonymous "strategist at X",
+   "market watcher", retail commentators, forum posters, generic
+   "analysts at [unnamed firm]".
+2. **Substance:** Verbatim statement containing AT LEAST ONE of:
+   - A specific price target or range (e.g. "$2,800 by Q3")
+   - A specific percentage (move, probability, allocation)
+   - A specific timeframe or catalyst ("if the Fed cuts in September...")
+   - A contrarian or non-consensus view with clear reasoning
+3. **Freshness:** Quote is from this article's reporting (not a weeks-old rehash).
+4. **Clarity:** Quote is self-contained — a reader can understand the claim
+   without reading the full article.
+
+## If NO quote in this article meets the quality bar, respond with:
+{{
+  "reject": true,
+  "rationale": "1-2 sentence explanation of which criterion failed"
+}}
+
+Otherwise, respond with the draft JSON as specified below.
+
 Respond in valid JSON with this structure:
 {{
   "format": "quote",
@@ -116,6 +160,13 @@ Respond in valid JSON with this structure:
         logger.error("quotes._draft JSON parse failed: %s", exc)
         return None
 
+    if parsed.get("reject") is True:
+        logger.info(
+            "quotes._draft: story rejected by quality gate — %s",
+            parsed.get("rationale", "no rationale given"),
+        )
+        return None  # returning None triggers run_text_story_cycle stub-bundle path
+
     draft_content = parsed.get("draft_content", {}) or {}
     draft_content.setdefault("format", "quote")
 
@@ -141,9 +192,11 @@ Respond in valid JSON with this structure:
 
 
 async def run_draft_cycle() -> None:
-    """Single-tick pipeline: fetch → filter → draft → review → write."""
+    """Single-tick pipeline: fetch → filter → reputable-only → top-2 → draft (quality-gated) → review → write."""
     await run_text_story_cycle(
         agent_name=AGENT_NAME,
         content_type=CONTENT_TYPE,
         draft_fn=_draft,
+        max_count=2,
+        source_whitelist=REPUTABLE_SOURCES,
     )

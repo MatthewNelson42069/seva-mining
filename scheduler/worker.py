@@ -2,12 +2,13 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-Post quick-260421-eoe, it starts AsyncIOScheduler with 8 jobs:
+Post quick-260421-mos, it starts AsyncIOScheduler with 8 jobs:
 
 - morning_digest (daily cron, 08:00 UTC)
-- 7 content sub-agents on IntervalTrigger — sub_breaking_news every 1h,
-  the other 6 every 2h — staggered across the 2h window with offsets
-  [0, 17, 34, 51, 68, 85, 102] minutes.
+- 6 interval sub-agents on IntervalTrigger — sub_breaking_news every 1h,
+  the other 5 every 2h — staggered across the 2h window with offsets
+  [0, 17, 34, 68, 85, 102] minutes.
+- 1 cron sub-agent — sub_quotes daily at 12:00 America/Los_Angeles.
 
 PostgreSQL advisory locks prevent duplicate execution during Railway
 zero-downtime deploys.
@@ -18,12 +19,15 @@ Phase 5 (SENR): morning_digest job wired to SeniorAgent; expiry_sweep removed in
 Phase 10; dedup/alerts/queue-cap/engagement surfaces removed in quick-260420-sn9.
 quick-260421-eoe: Content Agent cron + gold_history_agent cron retired; replaced
 by 7 independent sub-agent crons under agents.content.*.
+quick-260421-mos: sub_quotes moved from IntervalTrigger(2h) to
+CronTrigger(12:00 America/Los_Angeles); other 6 sub-agents unchanged.
 """
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
 from sqlalchemy import text, select
@@ -79,18 +83,29 @@ JOB_LOCK_IDS: dict[str, int] = {
 }
 
 
-# Content sub-agent registration table (quick-260421-eoe).
+# Content sub-agent registration table — interval-scheduled (quick-260421-eoe).
 # Tuple shape: (job_id, run_fn, name, lock_id, offset_minutes, interval_hours).
-# Stagger offsets spread 7 sub-agents across the 2h interval to avoid thundering herds
-# on SerpAPI + Anthropic. Offsets selected per RESEARCH stagger analysis.
-CONTENT_SUB_AGENTS: list[tuple[str, object, str, int, int, int]] = [
+# Stagger offsets spread the 6 interval sub-agents across a 2h window to avoid
+# thundering herds on SerpAPI + Anthropic. sub_breaking_news fires every 1h;
+# the other 5 interval agents fire every 2h. sub_quotes moved to
+# CONTENT_CRON_AGENTS below (quick-260421-mos) — daily at 12pm Pacific.
+CONTENT_INTERVAL_AGENTS: list[tuple[str, object, str, int, int, int]] = [
     ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0, 1),
     ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17, 2),
     ("sub_long_form",     long_form.run_draft_cycle,      "Long-form",      1012,  34, 2),
-    ("sub_quotes",        quotes.run_draft_cycle,         "Quotes",         1013,  51, 2),
+    # sub_quotes moved to CONTENT_CRON_AGENTS — daily at 12pm America/Los_Angeles
     ("sub_infographics",  infographics.run_draft_cycle,   "Infographics",   1014,  68, 2),
     ("sub_video_clip",    video_clip.run_draft_cycle,     "Gold Media",     1015,  85, 2),
     ("sub_gold_history",  gold_history.run_draft_cycle,   "Gold History",   1016, 102, 2),
+]
+
+# Cron-scheduled sub-agents (quick-260421-mos).
+# Tuple shape: (job_id, run_fn, name, lock_id, hour, minute, timezone).
+# sub_quotes fires once daily at 12:00 America/Los_Angeles — post US morning news,
+# pre market close — with tier-1 reputable-source whitelist + top-2 cap + drafter
+# quality gate applied inside the sub-agent's run_draft_cycle.
+CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, int, int, str]] = [
+    ("sub_quotes", quotes.run_draft_cycle, "Quotes", 1013, 12, 0, "America/Los_Angeles"),
 ]
 
 
@@ -231,8 +246,9 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     """Build the APScheduler instance with 8 jobs registered.
 
     - morning_digest: cron at morning_digest_schedule_hour (default 08:00 UTC).
-    - 7 content sub-agents: IntervalTrigger with per-agent hours (sub_breaking_news=1,
-      others=2) and staggered start_date offsets [0, 17, 34, 51, 68, 85, 102] minutes.
+    - 6 interval sub-agents: IntervalTrigger with per-agent hours (sub_breaking_news=1,
+      others=2) and staggered start_date offsets [0, 17, 34, 68, 85, 102] minutes.
+    - 1 cron sub-agent: sub_quotes daily at 12:00 America/Los_Angeles.
 
     Config keys:
     - morning_digest_schedule_hour (default: 8)
@@ -242,8 +258,8 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     digest_hour = int(cfg["morning_digest_schedule_hour"])
 
     logger.info(
-        "Schedule config: digest=cron(%d:00 UTC), content_sub_agents=%d jobs (sub_breaking_news=1h, others=2h)",
-        digest_hour, len(CONTENT_SUB_AGENTS),
+        "Schedule config: digest=cron(%d:00 UTC), interval_sub_agents=%d jobs (sub_breaking_news=1h, others=2h), cron_sub_agents=%d jobs (sub_quotes daily 12:00 America/Los_Angeles)",
+        digest_hour, len(CONTENT_INTERVAL_AGENTS), len(CONTENT_CRON_AGENTS),
     )
 
     scheduler = AsyncIOScheduler(
@@ -265,7 +281,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     )
 
     now = datetime.now(timezone.utc)
-    for job_id, run_fn, name, lock_id, offset, interval_hours in CONTENT_SUB_AGENTS:
+    for job_id, run_fn, name, lock_id, offset, interval_hours in CONTENT_INTERVAL_AGENTS:
         # +10s buffer ensures start_date > scheduler.start() wall clock for offset=0
         # (APScheduler IntervalTrigger skips first fire if start_date <= now).
         start_date = now + timedelta(minutes=offset) + timedelta(seconds=10)
@@ -274,6 +290,14 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
             trigger=IntervalTrigger(hours=interval_hours, start_date=start_date),
             id=job_id,
             name=f"{name} — every {interval_hours}h (offset +{offset}m)",
+        )
+
+    for job_id, run_fn, name, lock_id, hour, minute, tz in CONTENT_CRON_AGENTS:
+        scheduler.add_job(
+            _make_sub_agent_job(job_id, lock_id, run_fn, engine),
+            trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
+            id=job_id,
+            name=f"{name} — daily at {hour:02d}:{minute:02d} {tz}",
         )
 
     return scheduler

@@ -78,3 +78,46 @@ async def test_run_draft_cycle_no_candidates_exits_cleanly():
         await quotes.run_draft_cycle()
 
     assert session.commit.await_count >= 2
+
+
+def test_reputable_sources_set_populated():
+    """REPUTABLE_SOURCES covers tier-1 financial + gold-specialist + institutional aliases."""
+    assert isinstance(quotes.REPUTABLE_SOURCES, frozenset)
+    assert len(quotes.REPUTABLE_SOURCES) >= 10
+    # Spot-check representative entries from each tier.
+    assert "reuters" in quotes.REPUTABLE_SOURCES
+    assert "bloomberg" in quotes.REPUTABLE_SOURCES
+    assert "wgc" in quotes.REPUTABLE_SOURCES
+    assert "kitco" in quotes.REPUTABLE_SOURCES
+
+
+@pytest.mark.asyncio
+async def test_draft_returns_none_on_reject(caplog):
+    """_draft returns None when Claude responds with {"reject": true, ...} and logs the rationale."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"reject": true, "rationale": "speaker is anonymous"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    with caplog.at_level("INFO"):
+        draft = await quotes._draft(
+            {"title": "T", "link": "http://x", "source_name": "kitco"},
+            {"article_text": "body", "corroborating_sources": []}, None, client=client,
+        )
+    assert draft is None
+    assert "quality gate" in caplog.text
+    assert "speaker is anonymous" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_passes_filters():
+    """run_draft_cycle passes max_count=2 and source_whitelist=REPUTABLE_SOURCES to the shared cycle."""
+    with patch("agents.content.quotes.run_text_story_cycle", new=AsyncMock()) as mock_cycle:
+        await quotes.run_draft_cycle()
+    mock_cycle.assert_awaited_once()
+    kwargs = mock_cycle.await_args.kwargs
+    assert kwargs["agent_name"] == "sub_quotes"
+    assert kwargs["content_type"] == "quote"
+    assert kwargs["max_count"] == 2
+    assert kwargs["source_whitelist"] is quotes.REPUTABLE_SOURCES
+    assert callable(kwargs["draft_fn"])

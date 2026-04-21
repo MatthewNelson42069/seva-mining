@@ -65,6 +65,8 @@ async def run_text_story_cycle(
     agent_name: str,
     content_type: str,
     draft_fn,
+    max_count: int | None = None,
+    source_whitelist: frozenset[str] | None = None,
 ) -> None:
     """Shared fetch → filter → draft → review → persist pipeline.
 
@@ -79,6 +81,12 @@ async def run_text_story_cycle(
                   that returns a draft_content dict or None on failure. The
                   drafter may stash ``_rationale`` and ``_key_data_points`` on
                   the returned dict; the pipeline pops these before persistence.
+        max_count: If not None, cap candidates to the top N by published_at desc
+                   AFTER the predicted_format filter and AFTER the whitelist filter.
+                   None (default) = no cap — existing behavior.
+        source_whitelist: If not None, drop candidates whose source_name does not
+                          contain (case-insensitive) any pattern in the set.
+                          None (default) = no filter — existing behavior.
     """
     settings = get_settings()
     anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -109,6 +117,31 @@ async def run_text_story_cycle(
             stories = await content_agent.fetch_stories()
             agent_run.items_found = len(stories)
             candidates = [s for s in stories if s.get("predicted_format") == content_type]
+
+            # Reputable-source whitelist (case-insensitive substring match on source_name).
+            # Opt-in via source_whitelist kwarg; None (default) = no filter.
+            if source_whitelist is not None:
+                before = len(candidates)
+
+                def _is_reputable(story: dict) -> bool:
+                    source = (story.get("source_name") or "").lower()
+                    return bool(source) and any(p in source for p in source_whitelist)
+
+                candidates = [s for s in candidates if _is_reputable(s)]
+                logger.info(
+                    "%s: reputable filter: %d -> %d (dropped %d non-whitelisted sources)",
+                    agent_name, before, len(candidates), before - len(candidates),
+                )
+
+            # Cap to top max_count by published_at desc (after whitelist).
+            # Opt-in via max_count kwarg; None (default) = no cap.
+            if max_count is not None and len(candidates) > max_count:
+                candidates.sort(key=lambda s: s.get("published_at", ""), reverse=True)
+                candidates = candidates[:max_count]
+                logger.info(
+                    "%s: max_count cap: trimmed to top %d by recency",
+                    agent_name, max_count,
+                )
 
             if not candidates:
                 logger.info(
