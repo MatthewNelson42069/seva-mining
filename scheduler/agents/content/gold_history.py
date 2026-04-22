@@ -7,9 +7,11 @@ historical-story source driven by a Claude Sonnet picker and a
 once. It DOES call ``content_agent.review()`` inline before writing the
 ContentBundle.
 
-Runs on the standard 2h sub-agent cadence; most ticks no-op because the
-used-topics guard skips already-surfaced stories. Retires the standalone
-``scheduler/agents/gold_history_agent.py`` module.
+Runs every other day at 12:00 America/Los_Angeles via
+CronTrigger(day='*/2', hour=12, minute=0, timezone='America/Los_Angeles')
+(quick-260422-vxg). Most runs still no-op when ``_pick_story`` returns an
+already-used slug; halving cadence halves the Claude picker spend. Retires
+the standalone ``scheduler/agents/gold_history_agent.py`` module.
 
 Requirements: CONT-07, CONT-14, CONT-15, CONT-16, CONT-17.
 """

@@ -118,6 +118,6 @@ async def test_run_draft_cycle_passes_filters():
     kwargs = mock_cycle.await_args.kwargs
     assert kwargs["agent_name"] == "sub_quotes"
     assert kwargs["content_type"] == "quote"
-    assert kwargs["max_count"] == 2
+    assert kwargs["max_count"] == 1
     assert kwargs["source_whitelist"] is quotes.REPUTABLE_SOURCES
     assert callable(kwargs["draft_fn"])

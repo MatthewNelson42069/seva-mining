@@ -192,11 +192,11 @@ Respond in valid JSON with this structure:
 
 
 async def run_draft_cycle() -> None:
-    """Single-tick pipeline: fetch → filter → reputable-only → top-2 → draft (quality-gated) → review → write."""
+    """Single-tick pipeline: fetch → filter → reputable-only → top-1 → draft (quality-gated) → review → write."""
     await run_text_story_cycle(
         agent_name=AGENT_NAME,
         content_type=CONTENT_TYPE,
         draft_fn=_draft,
-        max_count=2,
+        max_count=1,
         source_whitelist=REPUTABLE_SOURCES,
     )

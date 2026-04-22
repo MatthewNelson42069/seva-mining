@@ -2,13 +2,15 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-Post quick-260421-mos, it starts AsyncIOScheduler with 8 jobs:
+Post quick-260422-vxg, it starts AsyncIOScheduler with 8 jobs:
 
 - morning_digest (daily cron, 08:00 UTC)
-- 6 interval sub-agents on IntervalTrigger — sub_breaking_news every 1h,
-  the other 5 every 2h — staggered across the 2h window with offsets
-  [0, 17, 34, 68, 85, 102] minutes.
-- 1 cron sub-agent — sub_quotes daily at 12:00 America/Los_Angeles.
+- 3 interval sub-agents on IntervalTrigger — sub_breaking_news every 2h,
+  sub_threads + sub_long_form every 4h — staggered across the 4h window
+  with offsets [0, 17, 34] minutes.
+- 4 cron sub-agents — sub_quotes / sub_infographics / sub_video_clip all
+  daily at 12:00 America/Los_Angeles; sub_gold_history every other day
+  (``day='*/2'``) at 12:00 America/Los_Angeles.
 
 PostgreSQL advisory locks prevent duplicate execution during Railway
 zero-downtime deploys.
@@ -21,6 +23,11 @@ quick-260421-eoe: Content Agent cron + gold_history_agent cron retired; replaced
 by 7 independent sub-agent crons under agents.content.*.
 quick-260421-mos: sub_quotes moved from IntervalTrigger(2h) to
 CronTrigger(12:00 America/Los_Angeles); other 6 sub-agents unchanged.
+quick-260422-vxg: cadence rebalance — BN reverts 1h→2h, Threads+Long-form 2h→4h,
+Infographics/Gold Media/Gold History moved off interval onto cron (daily noon PT,
+except Gold History every-other-day noon PT via ``day='*/2'``).
+CONTENT_CRON_AGENTS tuple shape changed to (job_id, run_fn, name, lock_id,
+cron_kwargs: dict).
 """
 import asyncio
 import logging
@@ -83,29 +90,32 @@ JOB_LOCK_IDS: dict[str, int] = {
 }
 
 
-# Content sub-agent registration table — interval-scheduled (quick-260421-eoe).
+# Content sub-agent registration table — interval-scheduled (quick-260422-vxg).
 # Tuple shape: (job_id, run_fn, name, lock_id, offset_minutes, interval_hours).
-# Stagger offsets spread the 6 interval sub-agents across a 2h window to avoid
-# thundering herds on SerpAPI + Anthropic. sub_breaking_news fires every 1h;
-# the other 5 interval agents fire every 2h. sub_quotes moved to
-# CONTENT_CRON_AGENTS below (quick-260421-mos) — daily at 12pm Pacific.
+# Only 3 news-responsive agents run on interval now: sub_breaking_news every 2h,
+# sub_threads + sub_long_form every 4h. Stagger offsets [0, 17, 34] minutes
+# spread the three across the first 34 minutes of each hour to avoid thundering
+# herds on SerpAPI + Anthropic. The other 4 sub-agents moved to
+# CONTENT_CRON_AGENTS (daily / every-other-day).
 CONTENT_INTERVAL_AGENTS: list[tuple[str, object, str, int, int, int]] = [
-    ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0, 1),
-    ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17, 2),
-    ("sub_long_form",     long_form.run_draft_cycle,      "Long-form",      1012,  34, 2),
-    # sub_quotes moved to CONTENT_CRON_AGENTS — daily at 12pm America/Los_Angeles
-    ("sub_infographics",  infographics.run_draft_cycle,   "Infographics",   1014,  68, 2),
-    ("sub_video_clip",    video_clip.run_draft_cycle,     "Gold Media",     1015,  85, 2),
-    ("sub_gold_history",  gold_history.run_draft_cycle,   "Gold History",   1016, 102, 2),
+    ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0, 2),
+    ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17, 4),
+    ("sub_long_form",     long_form.run_draft_cycle,      "Long-form",      1012,  34, 4),
 ]
 
-# Cron-scheduled sub-agents (quick-260421-mos).
-# Tuple shape: (job_id, run_fn, name, lock_id, hour, minute, timezone).
-# sub_quotes fires once daily at 12:00 America/Los_Angeles — post US morning news,
-# pre market close — with tier-1 reputable-source whitelist + top-2 cap + drafter
-# quality gate applied inside the sub-agent's run_draft_cycle.
-CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, int, int, str]] = [
-    ("sub_quotes", quotes.run_draft_cycle, "Quotes", 1013, 12, 0, "America/Los_Angeles"),
+# Cron-scheduled sub-agents (quick-260422-vxg).
+# Tuple shape: (job_id, run_fn, name, lock_id, cron_kwargs: dict). `cron_kwargs`
+# is unpacked directly into `CronTrigger(**cron_kwargs)` at registration time
+# so heterogeneous patterns (daily noon PT vs every-other-day noon PT via
+# `day='*/2'`) coexist without extra tuple columns. All 4 agents fire at
+# 12:00 America/Los_Angeles — post US morning news, pre market close. Gold
+# History fires every other day because the used-topics guard means most daily
+# ticks no-op; halving cadence halves the Claude picker spend.
+CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, dict]] = [
+    ("sub_quotes",        quotes.run_draft_cycle,       "Quotes",        1013, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
+    ("sub_infographics",  infographics.run_draft_cycle, "Infographics",  1014, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
+    ("sub_video_clip",    video_clip.run_draft_cycle,   "Gold Media",    1015, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
+    ("sub_gold_history",  gold_history.run_draft_cycle, "Gold History",  1016, {"day": "*/2", "hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
 ]
 
 
@@ -246,9 +256,12 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     """Build the APScheduler instance with 8 jobs registered.
 
     - morning_digest: cron at morning_digest_schedule_hour (default 08:00 UTC).
-    - 6 interval sub-agents: IntervalTrigger with per-agent hours (sub_breaking_news=1,
-      others=2) and staggered start_date offsets [0, 17, 34, 68, 85, 102] minutes.
-    - 1 cron sub-agent: sub_quotes daily at 12:00 America/Los_Angeles.
+    - 3 interval sub-agents: IntervalTrigger with per-agent hours
+      (sub_breaking_news=2, sub_threads=4, sub_long_form=4) and staggered
+      start_date offsets [0, 17, 34] minutes.
+    - 4 cron sub-agents: sub_quotes / sub_infographics / sub_video_clip daily
+      at 12:00 America/Los_Angeles; sub_gold_history every other day at
+      12:00 America/Los_Angeles.
 
     Config keys:
     - morning_digest_schedule_hour (default: 8)
@@ -258,7 +271,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     digest_hour = int(cfg["morning_digest_schedule_hour"])
 
     logger.info(
-        "Schedule config: digest=cron(%d:00 UTC), interval_sub_agents=%d jobs (sub_breaking_news=1h, others=2h), cron_sub_agents=%d jobs (sub_quotes daily 12:00 America/Los_Angeles)",
+        "Schedule config: digest=cron(%d:00 UTC), interval_sub_agents=%d jobs (sub_breaking_news=2h, sub_threads=4h, sub_long_form=4h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
         digest_hour, len(CONTENT_INTERVAL_AGENTS), len(CONTENT_CRON_AGENTS),
     )
 
@@ -292,12 +305,12 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
             name=f"{name} — every {interval_hours}h (offset +{offset}m)",
         )
 
-    for job_id, run_fn, name, lock_id, hour, minute, tz in CONTENT_CRON_AGENTS:
+    for job_id, run_fn, name, lock_id, cron_kwargs in CONTENT_CRON_AGENTS:
         scheduler.add_job(
             _make_sub_agent_job(job_id, lock_id, run_fn, engine),
-            trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
+            trigger=CronTrigger(**cron_kwargs),
             id=job_id,
-            name=f"{name} — daily at {hour:02d}:{minute:02d} {tz}",
+            name=f"{name} — cron ({' '.join(f'{k}={v}' for k, v in cron_kwargs.items())})",
         )
 
     return scheduler

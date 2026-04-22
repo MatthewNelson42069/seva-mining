@@ -36,16 +36,18 @@ logger = logging.getLogger(__name__)
 CONTENT_TYPE: str = "video_clip"
 AGENT_NAME: str = "sub_video_clip"
 
-# Curated video-source accounts (CONT-09, CONT-13). Preserved verbatim from
-# the pre-split content_agent.py VIDEO_ACCOUNTS constant.
+# Curated video-source accounts (CONT-09, CONT-13). Reordered + trimmed in
+# quick-260422-vxg to favor analyst/economist media handles over
+# corporate/sector accounts — Gold Media's goal is senior-analyst commentary,
+# not PR clips.
 VIDEO_ACCOUNTS = [
-    "Kitco",
-    "CNBC",
-    "Bloomberg",
-    "BarrickGold",
-    "WorldGoldCouncil",
-    "Mining",
-    "Newaborngold",
+    "Kitco",            # Michael Oliver / Jeff Christian / roundtable analyst interviews
+    "CNBC",             # Halftime Report, Fast Money — frequent analyst segments
+    "Bloomberg",        # analyst + economist segments
+    "BloombergTV",      # real-time analyst interviews
+    "ReutersBiz",       # economist panels
+    "FT",               # Financial Times video interviews
+    "MarketWatch",      # analyst segments
 ]
 
 VIDEO_CLIP_SCORE = 7.5  # Fixed score for Twitter-sourced content (parity).
@@ -180,7 +182,22 @@ async def _draft_video_caption(
 Tweet text: {tweet_text}
 Video URL: {tweet_url}
 
-Respond in valid JSON:
+## Quality bar — draft ONLY if the video features an identifiable senior
+analyst or economist with clear gold-market commentary:
+1. **Speaker identifiable:** Named analyst, economist, strategist, or
+   central bank official — NOT anonymous reporters reading headlines, NOT
+   retail commentators, NOT pure market-recap voice-overs without named
+   speaker.
+2. **Substantive commentary:** Contains an analyst view, forecast, data
+   interpretation, or contrarian take on gold price / macro. NOT just
+   "gold prices rose today" news-recital.
+3. **Gold focus:** Speaker discusses gold specifically (not mentioning
+   gold in passing during a broader markets segment).
+
+If the video does NOT meet this bar, respond with:
+{{"reject": true, "rationale": "1-2 sentence reason"}}
+
+Otherwise, respond in valid JSON:
 {{
   "twitter_caption": "1-3 sentences for X quote-tweet (data-forward, senior analyst voice)",
   "instagram_caption": "same content adapted for Instagram (slightly more context)"
@@ -204,6 +221,13 @@ Respond in valid JSON:
         logger.warning("%s: _draft_video_caption JSON parse failed: %s", AGENT_NAME, exc)
         return None
 
+    if parsed.get("reject") is True:
+        logger.info(
+            "%s: _draft_video_caption rejected — %s",
+            AGENT_NAME, parsed.get("rationale", "no rationale given"),
+        )
+        return None
+
     return {
         "format": "video_clip",
         "source_account": author_username,
@@ -218,6 +242,10 @@ async def run_draft_cycle() -> None:
 
     Does NOT call content_agent.fetch_stories() — video_clip has its own source.
     Does call content_agent.review() inline before writing each bundle.
+
+    Post quick-260422-vxg: iterates up to MAX_DRAFT_ATTEMPTS=5 most-recent
+    candidates, breaks after first successful persist — goal is 1 analyst
+    clip/day. If no clip passes the drafter quality bar, none queued.
     """
     settings = get_settings()
     anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -250,6 +278,9 @@ async def run_draft_cycle() -> None:
                 market_snapshot = None
 
             clips = await _search_video_clips(session, tweepy_client)
+            clips.sort(key=lambda c: c.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+            MAX_DRAFT_ATTEMPTS = 5
+            clips = clips[:MAX_DRAFT_ATTEMPTS]
             agent_run.items_found = len(clips)
             if not clips:
                 agent_run.status = "completed"
@@ -305,6 +336,7 @@ async def run_draft_cycle() -> None:
                         await session.flush()
                         items_queued += 1
                         logger.info("%s: queued video clip from @%s", AGENT_NAME, clip["author_username"])
+                        break  # max 1 analyst clip per day — per quick-260422-vxg
                     else:
                         logger.warning(
                             "%s: compliance blocked video clip %s — reason=%s",

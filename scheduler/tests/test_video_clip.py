@@ -92,3 +92,42 @@ async def test_draft_video_caption_returns_none_on_parse_failure():
         tweet_url="https://x", market_snapshot=None, client=client,
     )
     assert draft is None
+
+
+def test_video_accounts_reordered_analyst_first():
+    """VIDEO_ACCOUNTS is reordered post-vxg to favor analyst/economist media handles.
+
+    Top 3 must be Kitco / CNBC / Bloomberg (analyst-interview-heavy).
+    Corporate/sector accounts (BarrickGold, WorldGoldCouncil, Mining, Newaborngold)
+    must be dropped — they posted PR-style clips, not analyst commentary.
+    """
+    assert video_clip.VIDEO_ACCOUNTS[:3] == ["Kitco", "CNBC", "Bloomberg"]
+    assert "BarrickGold" not in video_clip.VIDEO_ACCOUNTS
+    assert "WorldGoldCouncil" not in video_clip.VIDEO_ACCOUNTS
+    assert "Mining" not in video_clip.VIDEO_ACCOUNTS
+    assert "Newaborngold" not in video_clip.VIDEO_ACCOUNTS
+    # New additions — analyst-heavy handles.
+    assert "BloombergTV" in video_clip.VIDEO_ACCOUNTS
+    assert "ReutersBiz" in video_clip.VIDEO_ACCOUNTS
+
+
+@pytest.mark.asyncio
+async def test_draft_video_caption_returns_none_on_reject(caplog):
+    """_draft_video_caption returns None when Claude responds with {"reject": true, ...}."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"reject": true, "rationale": "anonymous voice-over, no named speaker"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    with caplog.at_level("INFO"):
+        draft = await video_clip._draft_video_caption(
+            tweet_text="Gold prices rose today.",
+            author_username="Kitco",
+            author_name="Kitco News",
+            tweet_url="https://twitter.com/Kitco/status/1",
+            market_snapshot=None,
+            client=client,
+        )
+    assert draft is None
+    assert "rejected" in caplog.text
+    assert "anonymous" in caplog.text

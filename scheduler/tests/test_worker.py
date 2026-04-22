@@ -74,16 +74,16 @@ async def test_job_exception_does_not_propagate():
 # ---------------------------------------------------------------------------
 
 def test_sub_agents_total_seven():
-    """Interval + cron sub-agent lists together must still cover all 7 sub-agents."""
+    """Interval + cron sub-agent lists together must still cover all 7 sub-agents (post-vxg: 3 interval + 4 cron)."""
     assert len(CONTENT_INTERVAL_AGENTS) + len(CONTENT_CRON_AGENTS) == 7
-    assert len(CONTENT_INTERVAL_AGENTS) == 6
-    assert len(CONTENT_CRON_AGENTS) == 1
+    assert len(CONTENT_INTERVAL_AGENTS) == 3
+    assert len(CONTENT_CRON_AGENTS) == 4
 
 
 def test_sub_agent_staggering():
-    """Interval offsets are exactly [0, 17, 34, 68, 85, 102] minutes (51 removed — sub_quotes is now cron)."""
+    """Post quick-260422-vxg: only 3 interval agents remain. Offsets are [0, 17, 34] minutes — Breaking News (2h), Threads + Long-form (4h each)."""
     offsets = [t[4] for t in CONTENT_INTERVAL_AGENTS]
-    assert offsets == [0, 17, 34, 68, 85, 102]
+    assert offsets == [0, 17, 34]
 
 
 def test_sub_agent_lock_ids():
@@ -106,15 +106,12 @@ def test_sub_agent_lock_ids():
 
 
 def test_quotes_is_daily_cron():
-    """sub_quotes is registered as the sole cron sub-agent at 12:00 America/Los_Angeles."""
-    assert len(CONTENT_CRON_AGENTS) == 1
-    job_id, _, name, lock_id, hour, minute, tz = CONTENT_CRON_AGENTS[0]
-    assert job_id == "sub_quotes"
-    assert name == "Quotes"
-    assert lock_id == 1013
-    assert hour == 12
-    assert minute == 0
-    assert tz == "America/Los_Angeles"
+    """sub_quotes is registered as a cron sub-agent at 12:00 America/Los_Angeles (dict-shape post-vxg)."""
+    quotes_entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_quotes")
+    assert quotes_entry[0] == "sub_quotes"
+    assert quotes_entry[2] == "Quotes"
+    assert quotes_entry[3] == 1013
+    assert quotes_entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
 
 
 def test_retired_crons_absent_from_job_lock_ids():
@@ -165,3 +162,57 @@ def test_read_schedule_config_has_no_retired_keys():
     assert "twitter_interval_hours" not in source
     assert "expiry_sweep_interval_minutes" not in source
     assert "morning_digest_schedule_hour" in source
+
+
+def test_interval_agents_cadences():
+    """Post-vxg interval cadences: BN=2h, Threads=4h, Long-form=4h."""
+    cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
+    assert cadences == {
+        "sub_breaking_news": 2,
+        "sub_threads":       4,
+        "sub_long_form":     4,
+    }
+
+
+def test_cron_agents_count_four():
+    """Post-vxg: 4 cron sub-agents (quotes / infographics / video_clip / gold_history)."""
+    assert len(CONTENT_CRON_AGENTS) == 4
+    ids = [t[0] for t in CONTENT_CRON_AGENTS]
+    assert set(ids) == {
+        "sub_quotes", "sub_infographics", "sub_video_clip", "sub_gold_history",
+    }
+
+
+def test_cron_agents_use_dict_shape():
+    """Post-vxg: 5th tuple element is a CronTrigger kwargs dict."""
+    for entry in CONTENT_CRON_AGENTS:
+        assert len(entry) == 5
+        assert isinstance(entry[4], dict)
+        # All four fire at noon Pacific.
+        assert entry[4]["hour"] == 12
+        assert entry[4]["minute"] == 0
+        assert entry[4]["timezone"] == "America/Los_Angeles"
+
+
+def test_gold_history_is_every_other_day():
+    """sub_gold_history uses day='*/2' so it fires every other day at noon PT."""
+    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_gold_history")
+    assert entry[3] == 1016
+    assert entry[4] == {
+        "day": "*/2",
+        "hour": 12,
+        "minute": 0,
+        "timezone": "America/Los_Angeles",
+    }
+
+
+def test_infographics_is_daily_cron():
+    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_infographics")
+    assert entry[3] == 1014
+    assert entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
+
+
+def test_video_clip_is_daily_cron():
+    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_video_clip")
+    assert entry[3] == 1015
+    assert entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
