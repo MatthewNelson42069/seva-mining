@@ -32,6 +32,7 @@ from worker import (  # noqa: E402
     CONTENT_INTERVAL_AGENTS,
     JOB_LOCK_IDS,
     build_scheduler,
+    reconcile_stale_runs,
     with_advisory_lock,
 )
 
@@ -216,3 +217,101 @@ def test_video_clip_is_daily_cron():
     entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_video_clip")
     assert entry[3] == 1015
     assert entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
+
+
+# ---------------------------------------------------------------------------
+# Boot-time reconciler (quick-260422-l40)
+# ---------------------------------------------------------------------------
+
+def _make_mock_session_factory(rowcount: int):
+    """Build a mock AsyncSessionLocal factory returning a session with the given rowcount."""
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.rowcount = rowcount
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.commit = AsyncMock()
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+    mock_factory = MagicMock(return_value=session_cm)
+    return mock_factory, mock_session
+
+
+@pytest.mark.asyncio
+async def test_reconcile_stale_runs_updates_orphans():
+    """reconcile_stale_runs() issues an UPDATE against agent_runs and returns rowcount."""
+    mock_factory, mock_session = _make_mock_session_factory(rowcount=2)
+
+    with patch("worker.AsyncSessionLocal", mock_factory):
+        count = await reconcile_stale_runs()
+
+    assert count == 2
+    mock_session.execute.assert_called_once()
+    mock_session.commit.assert_called_once()
+
+    # Inspect the update() statement passed to session.execute
+    stmt = mock_session.execute.call_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+    assert "agent_runs" in compiled
+    assert "status" in compiled
+    # Verify values set: status='failed', errors array with marker, ended_at
+    params = stmt.compile().params
+    assert params.get("status") == "failed" or "failed" in str(params)
+    # errors should be a list (JSONB array)
+    errors_val = params.get("errors")
+    assert isinstance(errors_val, list), f"Expected errors to be a list, got {type(errors_val)}: {errors_val}"
+    assert len(errors_val) == 1
+    assert "scheduler restart" in errors_val[0]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_stale_runs_skips_fresh_rows():
+    """reconcile_stale_runs() returns 0 when no orphan rows exist (rowcount=0)."""
+    mock_factory, mock_session = _make_mock_session_factory(rowcount=0)
+
+    with patch("worker.AsyncSessionLocal", mock_factory):
+        count = await reconcile_stale_runs()
+
+    assert count == 0
+    # Session was still called (UPDATE ran, just matched zero rows)
+    mock_session.execute.assert_called_once()
+    mock_session.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_stale_runs_custom_threshold():
+    """threshold_minutes kwarg is honoured — cutoff is ~60 min before now."""
+    from datetime import datetime, timezone, timedelta
+
+    mock_factory, mock_session = _make_mock_session_factory(rowcount=0)
+    before = datetime.now(timezone.utc)
+
+    with patch("worker.AsyncSessionLocal", mock_factory):
+        await reconcile_stale_runs(threshold_minutes=60)
+
+    after = datetime.now(timezone.utc)
+
+    stmt = mock_session.execute.call_args.args[0]
+    # Extract the WHERE clause criteria to find the cutoff value
+    # The whereclause is a BooleanClauseList; iterate its clauses to find started_at
+    found_cutoff = None
+    for clause in stmt.whereclause.clauses:
+        # Each clause is a BinaryExpression like AgentRun.started_at < <value>
+        compiled_clause = str(clause.compile(compile_kwargs={"literal_binds": False}))
+        if "started_at" in compiled_clause:
+            # Get the right-hand side bound parameter value
+            params = clause.compile().params
+            if params:
+                cutoff_val = list(params.values())[0]
+                if isinstance(cutoff_val, datetime):
+                    found_cutoff = cutoff_val
+                    break
+
+    assert found_cutoff is not None, "Could not find started_at cutoff in WHERE clause"
+    expected_cutoff_low = before - timedelta(minutes=60) - timedelta(seconds=2)
+    expected_cutoff_high = after - timedelta(minutes=60) + timedelta(seconds=2)
+    assert expected_cutoff_low <= found_cutoff <= expected_cutoff_high, (
+        f"Cutoff {found_cutoff} not within ±2s of 60 min ago "
+        f"(range: {expected_cutoff_low} — {expected_cutoff_high})"
+    )

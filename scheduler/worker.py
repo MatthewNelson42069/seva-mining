@@ -37,9 +37,10 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
-from sqlalchemy import text, select
+from sqlalchemy import text, select, update
 
-from database import engine  # single shared engine — avoids duplicate connection pools
+from database import engine, AsyncSessionLocal  # single shared engine — avoids duplicate connection pools
+from models.agent_run import AgentRun
 from models.config import Config
 from agents.content import (
     breaking_news,
@@ -351,6 +352,51 @@ async def upsert_agent_config() -> None:
     logger.info("upsert_agent_config: engagement thresholds applied.")
 
 
+async def reconcile_stale_runs(threshold_minutes: int = 30) -> int:
+    """Mark any agent_runs with status='running' older than threshold as 'failed'.
+
+    Handles the case where the scheduler process was hard-killed (Railway deploy,
+    OOM, container crash) before the try/finally block in a sub-agent pipeline
+    could update status. In-process exceptions are already handled by the
+    try/finally in each sub-agent — this sweeps the orphans those blocks
+    couldn't reach. Called once at scheduler startup, before any jobs are
+    registered.
+
+    Args:
+        threshold_minutes: Rows with started_at older than now - threshold are
+            swept. Default 30 min mirrors the APScheduler misfire_grace_time
+            set in quick-260422-krz.
+
+    Returns:
+        Count of rows updated (0 if no orphans).
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(minutes=threshold_minutes)
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            update(AgentRun)
+            .where(AgentRun.status == "running")
+            .where(AgentRun.started_at < cutoff)
+            .values(
+                status="failed",
+                errors=[
+                    "scheduler restart — run abandoned (process killed "
+                    "before finally block)",
+                ],
+                ended_at=now,
+            )
+        )
+        await session.commit()
+        count = result.rowcount or 0
+        if count > 0:
+            logger.info(
+                "reconcile_stale_runs: marked %d orphan 'running' agent_runs "
+                "as 'failed' (older than %d min)",
+                count, threshold_minutes,
+            )
+        return count
+
+
 async def _validate_env() -> None:
     """Log critical env var status at startup so Railway logs show any missing keys.
 
@@ -397,6 +443,9 @@ async def main() -> None:
     await seed_senior_config()
     # Upsert engagement thresholds (overwrites existing values — code is source of truth)
     await upsert_agent_config()
+    # Reconcile orphan 'running' agent_runs rows left over from hard kills
+    # (Railway redeploy SIGKILL / OOM / crash). Must run BEFORE jobs register.
+    await reconcile_stale_runs()
 
     global _scheduler
     _scheduler = await build_scheduler(engine)
