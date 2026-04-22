@@ -8,7 +8,7 @@ Post quick-260422-vxg, it starts AsyncIOScheduler with 8 jobs:
 - 3 interval sub-agents on IntervalTrigger — sub_breaking_news every 2h,
   sub_threads + sub_long_form every 4h — staggered across the 4h window
   with offsets [0, 17, 34] minutes.
-- 4 cron sub-agents — sub_quotes / sub_infographics / sub_video_clip all
+- 4 cron sub-agents — sub_quotes / sub_infographics / sub_gold_media all
   daily at 12:00 America/Los_Angeles; sub_gold_history every other day
   (``day='*/2'``) at 12:00 America/Los_Angeles.
 
@@ -48,7 +48,7 @@ from agents.content import (
     long_form,
     quotes,
     infographics,
-    video_clip,
+    gold_media,
     gold_history,
 )
 from agents.senior_agent import SeniorAgent, seed_senior_config
@@ -86,7 +86,7 @@ JOB_LOCK_IDS: dict[str, int] = {
     "sub_long_form":     1012,
     "sub_quotes":        1013,
     "sub_infographics":  1014,
-    "sub_video_clip":    1015,
+    "sub_gold_media":    1015,
     "sub_gold_history":  1016,
 }
 
@@ -115,7 +115,7 @@ CONTENT_INTERVAL_AGENTS: list[tuple[str, object, str, int, int, int]] = [
 CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, dict]] = [
     ("sub_quotes",        quotes.run_draft_cycle,       "Quotes",        1013, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
     ("sub_infographics",  infographics.run_draft_cycle, "Infographics",  1014, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
-    ("sub_video_clip",    video_clip.run_draft_cycle,   "Gold Media",    1015, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
+    ("sub_gold_media",    gold_media.run_draft_cycle,   "Gold Media",    1015, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
     ("sub_gold_history",  gold_history.run_draft_cycle, "Gold History",  1016, {"day": "*/2", "hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
 ]
 
@@ -260,7 +260,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     - 3 interval sub-agents: IntervalTrigger with per-agent hours
       (sub_breaking_news=2, sub_threads=4, sub_long_form=4) and staggered
       start_date offsets [0, 17, 34] minutes.
-    - 4 cron sub-agents: sub_quotes / sub_infographics / sub_video_clip daily
+    - 4 cron sub-agents: sub_quotes / sub_infographics / sub_gold_media daily
       at 12:00 America/Los_Angeles; sub_gold_history every other day at
       12:00 America/Los_Angeles.
 

@@ -71,12 +71,12 @@ describe('PerAgentQueuePage', () => {
     })
   })
 
-  it('renders the Gold Media tab (slug gold-media) and queries with contentType=video_clip', async () => {
+  it('renders the Gold Media tab (slug gold-media) and queries with contentType=gold_media', async () => {
     renderAt('/agents/gold-media')
     await screen.findByText('Gold Media Queue')
     await waitFor(() => {
       expect(mockGetQueue).toHaveBeenCalledWith(
-        expect.objectContaining({ platform: 'content', contentType: 'video_clip' })
+        expect.objectContaining({ platform: 'content', contentType: 'gold_media' })
       )
     })
   })

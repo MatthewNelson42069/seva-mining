@@ -565,11 +565,11 @@ def build_draft_item(content_bundle, rationale: str):
             ))
         draft_text = "\n\n".join(parts) if parts else f"Gold History: {draft.get('story_title', '')}"
 
-    elif fmt == "video_clip":
+    elif fmt == "gold_media":
         draft_text = (
             draft.get("twitter_caption", "")
             or draft.get("instagram_caption", "")
-            or f"Video clip from @{draft.get('source_account', 'unknown')}"
+            or f"Gold media clip from @{draft.get('source_account', 'unknown')}"
         )
 
     elif fmt == "quote":
@@ -649,7 +649,7 @@ def _extract_check_text(draft_content: dict) -> str:
                 parts.append(slide.get("headline", ""))
                 parts.append(slide.get("body", ""))
         parts.append(draft_content.get("instagram_caption", ""))
-    elif fmt == "video_clip":
+    elif fmt == "gold_media":
         parts.append(draft_content.get("twitter_caption", ""))
         parts.append(draft_content.get("instagram_caption", ""))
     elif fmt == "quote":

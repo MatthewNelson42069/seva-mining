@@ -1,14 +1,14 @@
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 
-interface VideoClipDraft {
-  format: 'video_clip'
+interface GoldMediaDraft {
+  format: 'gold_media'
   twitter_caption?: string
   video_url?: string
 }
 
-export function VideoClipPreview({ draft }: { draft: unknown }) {
-  const d = (draft ?? {}) as VideoClipDraft
+export function GoldMediaPreview({ draft }: { draft: unknown }) {
+  const d = (draft ?? {}) as GoldMediaDraft
   const twitterCaption = typeof d.twitter_caption === 'string' ? d.twitter_caption : ''
   const videoUrl = typeof d.video_url === 'string' ? d.video_url : ''
 
@@ -24,7 +24,7 @@ export function VideoClipPreview({ draft }: { draft: unknown }) {
     <div className="space-y-3 border rounded-lg p-4">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          VIDEO CLIP
+          GOLD MEDIA
         </span>
         {videoUrl && (
           <Button

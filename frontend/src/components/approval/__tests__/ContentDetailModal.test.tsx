@@ -232,12 +232,12 @@ describe('ContentDetailModal format-aware (mfy pivot)', () => {
     expect(container.querySelector('img')).toBeNull()
   })
 
-  // Test 6 — video_clip; no gallery
-  it('renders VideoClipPreview when bundle.content_type === "video_clip" and no gallery', () => {
+  // Test 6 — gold_media; no gallery
+  it('renders GoldMediaPreview when bundle.content_type === "gold_media" and no gallery', () => {
     const bundle = makeBundle({
-      content_type: 'video_clip',
+      content_type: 'gold_media',
       draft_content: {
-        format: 'video_clip',
+        format: 'gold_media',
         twitter_caption: 'Watch the gold market analysis clip.',
         video_url: 'https://youtube.com/watch?v=abc',
       },
@@ -250,7 +250,7 @@ describe('ContentDetailModal format-aware (mfy pivot)', () => {
 
     renderModal()
 
-    expect(screen.getByText(/VIDEO CLIP/i)).toBeInTheDocument()
+    expect(screen.getByText(/GOLD MEDIA/i)).toBeInTheDocument()
     expect(screen.getByText('Watch the gold market analysis clip.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Regenerate images/i })).not.toBeInTheDocument()
   })

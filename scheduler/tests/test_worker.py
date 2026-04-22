@@ -98,7 +98,7 @@ def test_sub_agent_lock_ids():
         "sub_long_form":     1012,
         "sub_quotes":        1013,
         "sub_infographics":  1014,
-        "sub_video_clip":    1015,
+        "sub_gold_media":    1015,
         "sub_gold_history":  1016,
     }
     # Also assert JOB_LOCK_IDS matches.
@@ -126,7 +126,7 @@ def test_retired_crons_absent_from_job_lock_ids():
     assert set(JOB_LOCK_IDS.keys()) == {
         "morning_digest",
         "sub_breaking_news", "sub_threads", "sub_long_form", "sub_quotes",
-        "sub_infographics", "sub_video_clip", "sub_gold_history",
+        "sub_infographics", "sub_gold_media", "sub_gold_history",
     }
 
 
@@ -144,7 +144,7 @@ async def test_scheduler_registers_8_jobs():
         expected = sorted([
             "morning_digest",
             "sub_breaking_news", "sub_threads", "sub_long_form", "sub_quotes",
-            "sub_infographics", "sub_video_clip", "sub_gold_history",
+            "sub_infographics", "sub_gold_media", "sub_gold_history",
         ])
         assert ids == expected, f"expected {expected}, got {ids}"
         assert len(jobs) == 8
@@ -176,11 +176,11 @@ def test_interval_agents_cadences():
 
 
 def test_cron_agents_count_four():
-    """Post-vxg: 4 cron sub-agents (quotes / infographics / video_clip / gold_history)."""
+    """Post-vxg: 4 cron sub-agents (quotes / infographics / gold_media / gold_history)."""
     assert len(CONTENT_CRON_AGENTS) == 4
     ids = [t[0] for t in CONTENT_CRON_AGENTS]
     assert set(ids) == {
-        "sub_quotes", "sub_infographics", "sub_video_clip", "sub_gold_history",
+        "sub_quotes", "sub_infographics", "sub_gold_media", "sub_gold_history",
     }
 
 
@@ -213,8 +213,8 @@ def test_infographics_is_daily_cron():
     assert entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
 
 
-def test_video_clip_is_daily_cron():
-    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_video_clip")
+def test_gold_media_is_daily_cron():
+    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_gold_media")
     assert entry[3] == 1015
     assert entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
 

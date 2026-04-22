@@ -1,13 +1,13 @@
 """Content sub-agents package — one module per content_type (quick-260421-eoe).
 
 The 7 sub-agents (breaking_news, threads, long_form, quotes, infographics,
-video_clip, gold_history) each expose ``run_draft_cycle()`` and a
+gold_media, gold_history) each expose ``run_draft_cycle()`` and a
 ``CONTENT_TYPE`` constant. 5 of the 7 text-story sub-agents share the same
 fetch → filter → gold-gate → deep-research → draft → review → persist flow,
 factored here into ``run_text_story_cycle(...)`` so each sub-agent module
 only needs to supply a single-format drafter.
 
-``video_clip`` and ``gold_history`` have their own flow (X API search +
+``gold_media`` and ``gold_history`` have their own flow (X API search +
 tweepy client, and historical-story picker with used-topics guard,
 respectively) and implement ``run_draft_cycle()`` directly without calling
 into this helper.
@@ -71,7 +71,7 @@ async def run_text_story_cycle(
     """Shared fetch → filter → draft → review → persist pipeline.
 
     Used by 5 of the 7 sub-agents (breaking_news, threads, long_form, quotes,
-    infographics). The other 2 (video_clip, gold_history) implement
+    infographics). The other 2 (gold_media, gold_history) implement
     ``run_draft_cycle()`` directly.
 
     Args:

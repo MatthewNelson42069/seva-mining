@@ -29,7 +29,7 @@ export const CONTENT_AGENT_TABS: AgentTab[] = [
   { slug: 'long-form',     contentType: 'long_form',     label: 'Long-form',     priority: 3, agentName: 'sub_long_form' },
   { slug: 'quotes',        contentType: 'quote',         label: 'Quotes',        priority: 4, agentName: 'sub_quotes' },
   { slug: 'infographics',  contentType: 'infographic',   label: 'Infographics',  priority: 5, agentName: 'sub_infographics' },
-  { slug: 'gold-media',    contentType: 'video_clip',    label: 'Gold Media',    priority: 6, agentName: 'sub_video_clip' },
+  { slug: 'gold-media',    contentType: 'gold_media',    label: 'Gold Media',    priority: 6, agentName: 'sub_gold_media' },
   { slug: 'gold-history',  contentType: 'gold_history',  label: 'Gold History',  priority: 7, agentName: 'sub_gold_history' },
 ]
 

@@ -12,7 +12,7 @@ import { ThreadPreview } from '@/components/content/ThreadPreview'
 import { LongFormPreview } from '@/components/content/LongFormPreview'
 import { BreakingNewsPreview } from '@/components/content/BreakingNewsPreview'
 import { QuotePreview } from '@/components/content/QuotePreview'
-import { VideoClipPreview } from '@/components/content/VideoClipPreview'
+import { GoldMediaPreview } from '@/components/content/GoldMediaPreview'
 
 interface ContentDetailModalProps {
   item: DraftItemResponse
@@ -27,7 +27,7 @@ const FORMAT_RENDERERS: Record<string, true> = {
   long_form: true,
   breaking_news: true,
   quote: true,
-  video_clip: true,
+  gold_media: true,
 }
 
 export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModalProps) {
@@ -129,8 +129,8 @@ function renderForFormat(contentType: string, bundle: BundleData) {
       return <BreakingNewsPreview draft={draft} />
     case 'quote':
       return <QuotePreview draft={draft} />
-    case 'video_clip':
-      return <VideoClipPreview draft={draft} />
+    case 'gold_media':
+      return <GoldMediaPreview draft={draft} />
     default:
       return null
   }

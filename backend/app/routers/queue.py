@@ -61,7 +61,7 @@ async def list_queue(
     - platform (e.g. "content")
     - status (pending, approved, rejected, ...)
     - content_type (breaking_news, thread, long_form, quote, infographic,
-      video_clip, gold_history) — filters via the JSONB link
+      gold_media, gold_history) — filters via the JSONB link
       draft_items.engagement_snapshot->>'content_bundle_id' ↔
       content_bundles.id::text (there is no direct FK, see
       quick-260421-eoe interfaces §1).

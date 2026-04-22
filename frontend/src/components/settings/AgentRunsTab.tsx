@@ -13,10 +13,11 @@ import {
 
 // Agent options updated in quick-260421-eoe: monolithic content_agent split into
 // 7 sub-agents (`sub_breaking_news`, `sub_threads`, `sub_long_form`, `sub_quotes`,
-// `sub_infographics`, `sub_video_clip`, `sub_gold_history`). The legacy
+// `sub_infographics`, `sub_gold_media`, `sub_gold_history`). The legacy
 // `content_agent` + `gold_history_agent` names no longer appear in new
 // agent_runs rows (historical rows persist in the DB but aren't filterable
 // here anymore — intentional UI-simplification).
+// quick-260422-mfg: sub-agent renamed to sub_gold_media (canonical name).
 const AGENT_OPTIONS = [
   { value: '', label: 'All agents' },
   { value: 'sub_breaking_news', label: 'breaking_news' },
@@ -24,7 +25,7 @@ const AGENT_OPTIONS = [
   { value: 'sub_long_form',     label: 'long_form' },
   { value: 'sub_quotes',        label: 'quotes' },
   { value: 'sub_infographics',  label: 'infographics' },
-  { value: 'sub_video_clip',    label: 'video_clip (Gold Media)' },
+  { value: 'sub_gold_media',    label: 'gold_media' },
   { value: 'sub_gold_history',  label: 'gold_history' },
   { value: 'morning_digest',    label: 'morning_digest' },
 ]

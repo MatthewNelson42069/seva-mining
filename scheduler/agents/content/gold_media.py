@@ -1,15 +1,16 @@
-"""Video Clip (Gold Media) sub-agent — self-contained drafter.
+"""Gold Media sub-agent — self-contained drafter.
 
 Part of the 7-agent split (quick-260421-eoe). Does NOT call
 ``content_agent.fetch_stories()`` — it searches X (Twitter) directly via
-tweepy's async client for video posts from the curated VIDEO_ACCOUNTS list,
-drafts a quote-tweet style caption per clip, runs ``content_agent.review()``
-inline, and writes a ContentBundle with ``content_type="video_clip"``.
+tweepy's async client for video posts from the curated GOLD_MEDIA_ACCOUNTS
+list, drafts a quote-tweet style caption per clip, runs
+``content_agent.review()`` inline, and writes a ContentBundle with
+``content_type="gold_media"``.
 
 Preserves the X API quota pre-check from the pre-split ContentAgent
 (``twitter_monthly_tweet_count`` / ``twitter_monthly_quota_limit`` read from
-Config). Frontend label: "Gold Media" — DB value stays ``video_clip`` for
-schema parity.
+Config). Canonical name 'Gold Media' across module / constants / DB / frontend
+(quick-260422-mfg).
 """
 from __future__ import annotations
 
@@ -33,14 +34,14 @@ from services.market_snapshot import fetch_market_snapshot, render_snapshot_bloc
 
 logger = logging.getLogger(__name__)
 
-CONTENT_TYPE: str = "video_clip"
-AGENT_NAME: str = "sub_video_clip"
+CONTENT_TYPE: str = "gold_media"
+AGENT_NAME: str = "sub_gold_media"
 
 # Curated video-source accounts (CONT-09, CONT-13). Reordered + trimmed in
 # quick-260422-vxg to favor analyst/economist media handles over
 # corporate/sector accounts — Gold Media's goal is senior-analyst commentary,
 # not PR clips.
-VIDEO_ACCOUNTS = [
+GOLD_MEDIA_ACCOUNTS = [
     "Kitco",            # Michael Oliver / Jeff Christian / roundtable analyst interviews
     "CNBC",             # Halftime Report, Fast Money — frequent analyst segments
     "Bloomberg",        # analyst + economist segments
@@ -50,7 +51,7 @@ VIDEO_ACCOUNTS = [
     "MarketWatch",      # analyst segments
 ]
 
-VIDEO_CLIP_SCORE = 7.5  # Fixed score for Twitter-sourced content (parity).
+GOLD_MEDIA_SCORE = 7.5  # Fixed score for Twitter-sourced content (parity).
 
 
 async def _get_config(session: AsyncSession, key: str, default: str) -> str:
@@ -70,7 +71,7 @@ async def _set_config_str(session: AsyncSession, key: str, value: str) -> None:
         row.value = value
 
 
-async def _search_video_clips(
+async def _search_gold_media_clips(
     session: AsyncSession, tweepy_client: tweepy.asynchronous.AsyncClient
 ) -> list[dict]:
     """Search X for gold-sector video posts from credible accounts.
@@ -85,12 +86,12 @@ async def _search_video_clips(
     quota_limit = int(quota_limit_str)
     if quota_limit - current_count < 500:
         logger.info(
-            "%s: X API quota near cap (%d/%d) — skipping video clip search",
+            "%s: X API quota near cap (%d/%d) — skipping gold media search",
             AGENT_NAME, current_count, quota_limit,
         )
         return []
 
-    accounts_clause = " OR ".join(f"from:{acct}" for acct in VIDEO_ACCOUNTS[:5])
+    accounts_clause = " OR ".join(f"from:{acct}" for acct in GOLD_MEDIA_ACCOUNTS[:5])
     query = f"({accounts_clause}) has:videos gold -is:retweet"
 
     try:
@@ -143,17 +144,17 @@ async def _search_video_clips(
         await _set_config_str(session, "twitter_monthly_tweet_count", str(new_count))
 
         logger.info(
-            "%s: video clip search returned %d tweets (%d passed video filter)",
+            "%s: gold media search returned %d tweets (%d passed video filter)",
             AGENT_NAME, total_returned, len(results),
         )
         return results
 
     except Exception as exc:
-        logger.warning("%s: video clip X API search failed: %s", AGENT_NAME, exc)
+        logger.warning("%s: gold media X API search failed: %s", AGENT_NAME, exc)
         return []
 
 
-async def _draft_video_caption(
+async def _draft_gold_media_caption(
     tweet_text: str,
     author_username: str,
     author_name: str,
@@ -162,9 +163,9 @@ async def _draft_video_caption(
     *,
     client: AsyncAnthropic,
 ) -> dict | None:
-    """Draft a quote-tweet style caption for a video clip.
+    """Draft a quote-tweet style caption for a gold media video clip.
 
-    Mirrors the pre-split ContentAgent._draft_video_caption prompt exactly
+    Mirrors the pre-split ContentAgent drafting prompt exactly
     for functional parity.
     """
     snapshot_block = render_snapshot_block(market_snapshot) if market_snapshot else ""
@@ -218,18 +219,18 @@ Otherwise, respond in valid JSON:
             raw = raw.rsplit("```", 1)[0].strip()
         parsed = json.loads(raw)
     except Exception as exc:
-        logger.warning("%s: _draft_video_caption JSON parse failed: %s", AGENT_NAME, exc)
+        logger.warning("%s: _draft_gold_media_caption JSON parse failed: %s", AGENT_NAME, exc)
         return None
 
     if parsed.get("reject") is True:
         logger.info(
-            "%s: _draft_video_caption rejected — %s",
+            "%s: _draft_gold_media_caption rejected — %s",
             AGENT_NAME, parsed.get("rationale", "no rationale given"),
         )
         return None
 
     return {
-        "format": "video_clip",
+        "format": "gold_media",
         "source_account": author_username,
         "tweet_url": tweet_url,
         "twitter_caption": parsed.get("twitter_caption", ""),
@@ -240,7 +241,7 @@ Otherwise, respond in valid JSON:
 async def run_draft_cycle() -> None:
     """Single-tick pipeline: X search → per-clip draft → review → write.
 
-    Does NOT call content_agent.fetch_stories() — video_clip has its own source.
+    Does NOT call content_agent.fetch_stories() — gold_media has its own source.
     Does call content_agent.review() inline before writing each bundle.
 
     Post quick-260422-vxg: iterates up to MAX_DRAFT_ATTEMPTS=5 most-recent
@@ -277,7 +278,7 @@ async def run_draft_cycle() -> None:
                 )
                 market_snapshot = None
 
-            clips = await _search_video_clips(session, tweepy_client)
+            clips = await _search_gold_media_clips(session, tweepy_client)
             clips.sort(key=lambda c: c.get("created_at") or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
             MAX_DRAFT_ATTEMPTS = 5
             clips = clips[:MAX_DRAFT_ATTEMPTS]
@@ -302,7 +303,7 @@ async def run_draft_cycle() -> None:
                         logger.info("%s: already covered today: %s", AGENT_NAME, tweet_url)
                         continue
 
-                    draft_content = await _draft_video_caption(
+                    draft_content = await _draft_gold_media_caption(
                         tweet_text=clip["text"],
                         author_username=clip["author_username"],
                         author_name=clip["author_name"],
@@ -322,7 +323,7 @@ async def run_draft_cycle() -> None:
                         story_url=tweet_url,
                         source_name=clip["author_username"],
                         content_type=CONTENT_TYPE,
-                        score=VIDEO_CLIP_SCORE,
+                        score=GOLD_MEDIA_SCORE,
                         draft_content=draft_content,
                         compliance_passed=compliance_ok,
                     )
@@ -330,16 +331,16 @@ async def run_draft_cycle() -> None:
                     await session.flush()
 
                     if compliance_ok:
-                        rationale = f"Video clip from @{clip['author_username']} on gold sector"
+                        rationale = f"Gold media clip from @{clip['author_username']} on gold sector"
                         item = content_agent.build_draft_item(bundle, rationale)
                         session.add(item)
                         await session.flush()
                         items_queued += 1
-                        logger.info("%s: queued video clip from @%s", AGENT_NAME, clip["author_username"])
+                        logger.info("%s: queued gold media clip from @%s", AGENT_NAME, clip["author_username"])
                         break  # max 1 analyst clip per day — per quick-260422-vxg
                     else:
                         logger.warning(
-                            "%s: compliance blocked video clip %s — reason=%s",
+                            "%s: compliance blocked gold media clip %s — reason=%s",
                             AGENT_NAME, tweet_url, review_result.get("rationale"),
                         )
                 except Exception as exc:
