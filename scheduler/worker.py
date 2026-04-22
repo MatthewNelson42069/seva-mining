@@ -279,7 +279,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         job_defaults={
             "coalesce": True,
             "max_instances": 1,
-            "misfire_grace_time": 300,
+            "misfire_grace_time": 1800,
         },
         timezone="UTC",
     )
