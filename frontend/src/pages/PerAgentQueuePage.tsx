@@ -53,16 +53,22 @@ function groupByRun(
   return result
 }
 
-function RunHeader({ run }: { run: AgentRunResponse | null }) {
+function RunHeader({
+  displayTime,
+  itemsQueued,
+}: {
+  displayTime: string
+  itemsQueued?: number | null
+}) {
   return (
     <div className="flex items-center gap-3 py-1">
       <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-        Pulled from agent run {run ? `at ${format(new Date(run.started_at), 'h:mm a')} · ${format(new Date(run.started_at), 'MMM d')}` : '(earlier)'}
+        Pulled from agent run at {displayTime}
       </span>
       <div className="flex-1 border-t border-border" />
-      {run?.items_queued != null && (
+      {itemsQueued != null && (
         <span className="text-xs text-muted-foreground shrink-0">
-          {run.items_queued} queued
+          {itemsQueued} queued
         </span>
       )}
     </div>
@@ -98,7 +104,7 @@ function PerAgentQueueBody({ tab }: { tab: ReturnType<typeof findTabBySlug> & ob
 
   const runsQuery = useQuery({
     queryKey: ['agent-runs', tab.agentName],
-    queryFn: () => getAgentRuns(tab.agentName, 7),
+    queryFn: () => getAgentRuns(tab.agentName, 30),
     enabled: !!tab.agentName,
     staleTime: 60_000,
   })
@@ -132,14 +138,20 @@ function PerAgentQueueBody({ tab }: { tab: ReturnType<typeof findTabBySlug> & ob
           <EmptyState />
         ) : showRunGroups ? (
           <div className="max-w-2xl space-y-6">
-            {groupByRun(items, runs).map((group, gi) => (
-              <div key={gi} className="space-y-3">
-                <RunHeader run={group.run} />
-                {group.items.map((item) => (
-                  <ContentSummaryCard key={item.id} item={item} />
-                ))}
-              </div>
-            ))}
+            {groupByRun(items, runs).map((group, gi) => {
+              const sourceDate = group.run
+                ? new Date(group.run.started_at)
+                : new Date(group.items[0].created_at)
+              const displayTime = `${format(sourceDate, 'h:mm a')} · ${format(sourceDate, 'MMM d')}`
+              return (
+                <div key={gi} className="space-y-3">
+                  <RunHeader displayTime={displayTime} itemsQueued={group.run?.items_queued} />
+                  {group.items.map((item) => (
+                    <ContentSummaryCard key={item.id} item={item} />
+                  ))}
+                </div>
+              )
+            })}
 
             {queue.hasNextPage && (
               <div className="flex justify-center pt-2">
