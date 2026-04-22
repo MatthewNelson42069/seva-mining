@@ -1,0 +1,59 @@
+{
+  "story_slug": "munk-barrick-gold-founding-1983",
+  "story_title": "Peter Munk Builds Barrick — From a Failed Electronics Company to the World's Largest Gold Miner",
+  "summary": "Hungarian-born entrepreneur Peter Munk pivoted from a bankrupt electronics business to gold mining in 1983 by acquiring Barrick Resources Corp., an obscure Canadian junior; within 25 years he had built it into Barrick Gold, the world's largest gold mining company, through a series of audacious acquisitions including the Goldstrike mine in Nevada and the $10.4 billion takeover of Placer Dome.",
+  "tags": ["company-build", "barrick", "peter-munk", "canada", "1983", "m-and-a"],
+  "recommended_arc": "Hook: a disgraced entrepreneur blacklisted from Canadian business buys a nothing gold company for next to nothing. Rising: the Goldstrike find transforms Barrick into the world's lowest-cost producer. Climax: the $10.4 billion Placer Dome acquisition makes Barrick undeniably the world's largest. Payoff: Munk's net worth hits $1 billion; Barrick's Toronto headquarters bears his name.",
+  "verified_facts": [
+    {
+      "claim": "Peter Munk, a Hungarian-born Canadian entrepreneur who had been banned from trading on Canadian stock exchanges following the collapse of his electronics company Clairtone in the 1970s, acquired a controlling interest in Barrick Resources Corp. in 1983 with a small group of investors including Saudi arms dealer Adnan Khashoggi.",
+      "source_url": "https://en.wikipedia.org/wiki/Barrick_Gold",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Barrick Resources was renamed Barrick Gold Corporation in 1984; at the time of the name change the company was a minor exploration-stage firm with no producing mines.",
+      "source_url": "https://en.wikipedia.org/wiki/Barrick_Gold",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Barrick's acquisition of the Goldstrike mine on the Carlin Trend in Nevada in 1986 for approximately $62 million — considered absurdly cheap at the time — proved transformative; subsequent exploration revealed Goldstrike to contain over 30 million ounces of gold, making it one of the largest gold deposits in US history.",
+      "source_url": "https://en.wikipedia.org/wiki/Goldstrike_mine",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "By the mid-1990s, Barrick's Goldstrike operations had made it one of the world's lowest-cost gold producers, with all-in production costs reportedly below $200 per ounce when the gold price was hovering around $380 per ounce.",
+      "source_url": "https://en.wikipedia.org/wiki/Barrick_Gold",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "In January 2006, Barrick Gold completed the acquisition of Placer Dome — one of the world's largest gold miners — for approximately C$10.4 billion (US$9.2 billion), the largest takeover in gold mining history at that time, catapulting Barrick to the undisputed position of world's largest gold producer.",
+      "source_url": "https://en.wikipedia.org/wiki/Placer_Dome",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "At the time of Peter Munk's retirement as Barrick's executive chairman in 2014, Barrick Gold had a market capitalisation of approximately $15 billion, owned mines across five continents, and produced roughly 7.2 million ounces of gold per year.",
+      "source_url": "https://en.wikipedia.org/wiki/Barrick_Gold",
+      "published_date": "2024-01-01"
+    }
+  ],
+  "sources": [
+    {
+      "ref": "[1]",
+      "url": "https://en.wikipedia.org/wiki/Barrick_Gold",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    },
+    {
+      "ref": "[2]",
+      "url": "https://en.wikipedia.org/wiki/Goldstrike_mine",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    },
+    {
+      "ref": "[3]",
+      "url": "https://en.wikipedia.org/wiki/Placer_Dome",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    }
+  ]
+}

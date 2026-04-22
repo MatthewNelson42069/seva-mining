@@ -1,0 +1,58 @@
+{
+  "story_slug": "bre-x-busang-fraud-1997",
+  "story_title": "The Bre-X Busang Fraud — The Biggest Gold Scam in History",
+  "summary": "Calgary junior miner Bre-X Minerals claimed to have found a 71-million-ounce gold deposit in Borneo, briefly becoming a C$6 billion company, before independent assays revealed every core sample had been salted with river gold and the deposit was worthless.",
+  "tags": ["fraud", "1990s", "exploration", "indonesia", "junior-mining"],
+  "recommended_arc": "Hook: largest claimed discovery in modern history. Rising: the world's biggest miners fight for a piece of Busang. Climax: chief geologist Michael de Guzman 'falls' from a helicopter; assays show zero gold. Payoff: billions wiped out, Canada's regulatory framework transformed.",
+  "verified_facts": [
+    {
+      "claim": "Bre-X Minerals was a Calgary-based junior gold mining company whose shares were listed on the Toronto Stock Exchange and the NASDAQ.",
+      "source_url": "https://en.wikipedia.org/wiki/Bre-X",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Bre-X's chief geologist Michael de Guzman and field manager John Felderhof announced in 1995 that the Busang site in Kalimantan, Indonesia contained a deposit estimated at 30 million ounces, later revised upward to 71 million ounces — which would have made it the world's largest known gold discovery.",
+      "source_url": "https://en.wikipedia.org/wiki/Bre-X",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "At its peak in May 1996, Bre-X's market capitalisation reached approximately C$6 billion (roughly US$4.4 billion), making it one of the most valuable companies on the Toronto Stock Exchange.",
+      "source_url": "https://en.wikipedia.org/wiki/Bre-X",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "In March 1997, independent assayers hired by Freeport-McMoRan Copper & Gold — which had been awarded a 15 percent stake in Busang by the Indonesian government — reported that their drill cores showed only trace amounts of gold, contradicting Bre-X's assay results.",
+      "source_url": "https://en.wikipedia.org/wiki/Bre-X",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Michael de Guzman fell or jumped from a helicopter on 19 March 1997 en route to Busang, four days before Freeport's damning assay results were made public; his death was officially ruled a suicide.",
+      "source_url": "https://en.wikipedia.org/wiki/Bre-X",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "The Strathcona Mineral Services independent audit of May 1997 concluded that the Busang deposit was a fraud of 'previously unimaginable scale,' with core samples systematically salted with alluvial (river) gold shavings.",
+      "source_url": "https://en.wikipedia.org/wiki/Bre-X",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Bre-X filed for bankruptcy protection in Canada in 1997; investors including Ontario Teachers' Pension Plan, the Quebec public-sector pension fund CDPQ, and thousands of retail investors collectively lost an estimated C$3 billion.",
+      "source_url": "https://www.thecanadianencyclopedia.ca/en/article/bre-x-minerals",
+      "published_date": "2020-03-04"
+    }
+  ],
+  "sources": [
+    {
+      "ref": "[1]",
+      "url": "https://en.wikipedia.org/wiki/Bre-X",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    },
+    {
+      "ref": "[2]",
+      "url": "https://www.thecanadianencyclopedia.ca/en/article/bre-x-minerals",
+      "publisher": "The Canadian Encyclopedia",
+      "accessed_date": "2026-04-22"
+    }
+  ]
+}

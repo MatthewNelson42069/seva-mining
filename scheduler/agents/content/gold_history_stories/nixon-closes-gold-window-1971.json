@@ -1,0 +1,64 @@
+{
+  "story_slug": "nixon-closes-gold-window-1971",
+  "story_title": "Nixon Closes the Gold Window — The Day the Dollar's Last Link to Gold Died",
+  "summary": "On the evening of 15 August 1971, President Richard Nixon announced that the United States would no longer redeem US dollars held by foreign governments for gold at $35 per ounce, unilaterally ending the Bretton Woods system and launching the modern era of floating fiat currencies.",
+  "tags": ["monetary-policy", "1971", "nixon", "bretton-woods", "fiat", "central-bank"],
+  "recommended_arc": "Hook: a Sunday-night TV address that rewired global finance. Rising: dollar debasement fears had been mounting for years; France was already redeeming dollars for gold. Climax: Nixon closes the window without warning — a 15-minute speech topples 27 years of Bretton Woods. Payoff: gold is free to price in a new world; it rises from $35 to $850 by 1980.",
+  "verified_facts": [
+    {
+      "claim": "On Sunday evening 15 August 1971, President Richard Nixon announced in a televised address that the United States would temporarily suspend the convertibility of the US dollar into gold, effectively ending the Bretton Woods international monetary system.",
+      "source_url": "https://en.wikipedia.org/wiki/Nixon_shock",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "The Bretton Woods system, established in 1944, had pegged the US dollar at $35 per troy ounce of gold, with other major currencies fixed against the dollar; foreign central banks could exchange dollar reserves for gold at that rate.",
+      "source_url": "https://en.wikipedia.org/wiki/Bretton_Woods_system",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "By 1971, the US gold reserve had fallen to approximately $10 billion while foreign dollar liabilities exceeded $60 billion, making full gold convertibility mathematically impossible and the dollar structurally vulnerable to a run.",
+      "source_url": "https://en.wikipedia.org/wiki/Nixon_shock",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "France under President Charles de Gaulle had been the most aggressive redeemer, converting dollar reserves into gold throughout the 1960s and dispatching warships to New York Harbor to retrieve gold bullion; French officials called the dollar's reserve-currency status an 'exorbitant privilege.'",
+      "source_url": "https://en.wikipedia.org/wiki/Nixon_shock",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Nixon's decision was made in secret over a weekend at Camp David on 13-15 August 1971, with a small group of advisors including Treasury Secretary John Connally and Federal Reserve Chairman Arthur Burns; Congress was not consulted.",
+      "source_url": "https://en.wikipedia.org/wiki/Nixon_shock",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Following the Nixon Shock, the price of gold was officially devalued twice — to $38/oz in December 1971 (Smithsonian Agreement) and $42.22/oz in 1973 — before the US fully abandoned the gold peg; by January 1980, the spot price of gold had risen to a then-record $850 per ounce.",
+      "source_url": "https://en.wikipedia.org/wiki/Nixon_shock",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "The Smithsonian Agreement of December 1971 officially devalued the dollar by 7.9 percent against gold (raising the gold price from $35 to $38/oz) and realigned other major currencies; President Nixon called it 'the most significant monetary agreement in the history of the world.'",
+      "source_url": "https://en.wikipedia.org/wiki/Smithsonian_Agreement",
+      "published_date": "2024-01-01"
+    }
+  ],
+  "sources": [
+    {
+      "ref": "[1]",
+      "url": "https://en.wikipedia.org/wiki/Nixon_shock",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    },
+    {
+      "ref": "[2]",
+      "url": "https://en.wikipedia.org/wiki/Bretton_Woods_system",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    },
+    {
+      "ref": "[3]",
+      "url": "https://en.wikipedia.org/wiki/Smithsonian_Agreement",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    }
+  ]
+}

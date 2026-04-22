@@ -1,0 +1,58 @@
+{
+  "story_slug": "hunt-brothers-silver-corner-1980",
+  "story_title": "Silver Thursday — The Hunt Brothers' Attempt to Corner the Silver Market",
+  "summary": "Between 1979 and 1980, Texas oil billionaires Nelson Bunker Hunt and William Herbert Hunt accumulated an estimated 100 million troy ounces of silver — roughly one-third of the world's privately held supply — driving the price from $6 per ounce to nearly $50 before a rule change on COMEX triggered a collapse that destroyed their fortune and nearly brought down a major brokerage.",
+  "tags": ["market-manipulation", "silver", "1980", "commodities", "crash"],
+  "recommended_arc": "Hook: two Texas billionaires decide fiat currency is doomed — they'll corner silver instead. Rising: silver rockets from $6 to nearly $50 an ounce; the Hunts control a third of the world's supply. Climax: COMEX changes margin rules overnight; Silver Thursday, 27 March 1980. Payoff: the brothers lose $1.7 billion in a day; their $1 billion bailout bail-out reshapes derivatives regulation.",
+  "verified_facts": [
+    {
+      "claim": "Nelson Bunker Hunt and William Herbert Hunt, sons of Texas oil billionaire H.L. Hunt, began systematically accumulating physical silver and futures contracts in 1973 as a hedge against inflation and dollar devaluation; their buying accelerated dramatically in late 1979.",
+      "source_url": "https://en.wikipedia.org/wiki/Silver_Thursday",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "At the peak of their position in early 1980, the Hunt brothers and their associates controlled an estimated 100 million troy ounces of silver — roughly one-third of the world's total privately held silver supply.",
+      "source_url": "https://en.wikipedia.org/wiki/Silver_Thursday",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "Silver prices rose from approximately $6 per troy ounce in early 1979 to a record high of $49.45 on 18 January 1980, an increase of over 700 percent in 12 months, partly driven by the Hunts' buying.",
+      "source_url": "https://en.wikipedia.org/wiki/Silver_Thursday",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "On 7 January 1980, the Chicago Board of Trade (CBOT) and COMEX implemented 'Silver Rule 7,' limiting new silver futures positions to 3 million ounces and requiring holders of existing long positions to reduce their holdings, effectively halting the Hunts' ability to accumulate further.",
+      "source_url": "https://en.wikipedia.org/wiki/Silver_Thursday",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "On 27 March 1980 — known as 'Silver Thursday' — silver prices collapsed by approximately 50 percent in a single day, falling from around $21.62 to $10.80 per ounce, triggered by the Hunts' inability to meet margin calls.",
+      "source_url": "https://en.wikipedia.org/wiki/Silver_Thursday",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "The Hunt brothers' failure to meet margin calls threatened to bankrupt the brokerage firm Bache Halsey Stuart Shields; a consortium of major US banks arranged a $1.1 billion bailout loan to the Hunts in March 1980 to prevent broader market contagion.",
+      "source_url": "https://en.wikipedia.org/wiki/Silver_Thursday",
+      "published_date": "2024-01-01"
+    },
+    {
+      "claim": "In 1988 the Hunt brothers pleaded no contest to civil charges of market manipulation brought by the Commodity Futures Trading Commission (CFTC) and were fined $10 million; Nelson Bunker Hunt filed for personal bankruptcy in 1988, listing debts of approximately $2.5 billion.",
+      "source_url": "https://en.wikipedia.org/wiki/Nelson_Bunker_Hunt",
+      "published_date": "2024-01-01"
+    }
+  ],
+  "sources": [
+    {
+      "ref": "[1]",
+      "url": "https://en.wikipedia.org/wiki/Silver_Thursday",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    },
+    {
+      "ref": "[2]",
+      "url": "https://en.wikipedia.org/wiki/Nelson_Bunker_Hunt",
+      "publisher": "Wikipedia",
+      "accessed_date": "2026-04-22"
+    }
+  ]
+}
