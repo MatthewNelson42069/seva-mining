@@ -91,8 +91,16 @@ async def _search_gold_media_clips(
         )
         return []
 
-    accounts_clause = " OR ".join(f"from:{acct}" for acct in GOLD_MEDIA_ACCOUNTS[:5])
-    query = f"({accounts_clause}) has:videos gold -is:retweet"
+    # Use all accounts — only 3 of 7 actively post native videos (BloombergTV,
+    # ReutersBiz, FT) so excluding any reduces candidate volume.
+    # The `gold` keyword is intentionally omitted: financial media video tweet
+    # text rarely contains the literal word "gold" even when the clip covers
+    # gold-market commentary. The LLM quality bar in _draft_gold_media_caption
+    # evaluates gold relevance more precisely via the 3-criteria gate
+    # (identifiable analyst, substantive gold commentary, gold focus) — so X
+    # search is used purely for video discovery, not relevance pre-filtering.
+    accounts_clause = " OR ".join(f"from:{acct}" for acct in GOLD_MEDIA_ACCOUNTS)
+    query = f"({accounts_clause}) has:videos -is:retweet"
 
     try:
         response = await tweepy_client.search_recent_tweets(
@@ -284,10 +292,13 @@ async def run_draft_cycle() -> None:
             clips = clips[:MAX_DRAFT_ATTEMPTS]
             agent_run.items_found = len(clips)
             if not clips:
+                agent_run.notes = json.dumps({"x_returned": 0, "passed_video_filter": 0, "llm_accepted": 0})
                 agent_run.status = "completed"
                 return
 
             today_utc = datetime.now(timezone.utc).date()
+            llm_accepted = 0
+            compliance_blocked = 0
 
             for clip in clips:
                 try:
@@ -315,6 +326,7 @@ async def run_draft_cycle() -> None:
                         logger.warning("%s: caption draft failed for %s", AGENT_NAME, tweet_url)
                         continue
 
+                    llm_accepted += 1
                     review_result = await content_agent.review(draft_content)
                     compliance_ok = bool(review_result.get("compliance_passed", False))
 
@@ -339,6 +351,7 @@ async def run_draft_cycle() -> None:
                         logger.info("%s: queued gold media clip from @%s", AGENT_NAME, clip["author_username"])
                         break  # max 1 analyst clip per day — per quick-260422-vxg
                     else:
+                        compliance_blocked += 1
                         logger.warning(
                             "%s: compliance blocked gold media clip %s — reason=%s",
                             AGENT_NAME, tweet_url, review_result.get("rationale"),
@@ -350,7 +363,12 @@ async def run_draft_cycle() -> None:
                     )
 
             agent_run.items_queued = items_queued
-            agent_run.notes = json.dumps({"candidates": len(clips)})
+            agent_run.notes = json.dumps({
+                "x_candidates": len(clips),
+                "llm_accepted": llm_accepted,
+                "compliance_blocked": compliance_blocked,
+                "queued": items_queued,
+            })
             agent_run.status = "completed"
         except Exception as exc:
             agent_run.status = "failed"
