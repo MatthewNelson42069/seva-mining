@@ -116,7 +116,12 @@ async def run_text_story_cycle(
 
             stories = await content_agent.fetch_stories()
             agent_run.items_found = len(stories)
-            candidates = [s for s in stories if s.get("predicted_format") == content_type]
+            # All gold-gate-passing stories are candidates for every content type.
+            # The predicted_format classifier label was removed as a routing gate
+            # (debug 260422-zid): the classifier assigned most gold-sector stories
+            # to "breaking_news", starving the other 4 content buckets.
+            # predicted_format is retained as metadata on stories for analytics only.
+            candidates = list(stories)
 
             # Reputable-source whitelist (case-insensitive substring match on source_name).
             # Opt-in via source_whitelist kwarg; None (default) = no filter.

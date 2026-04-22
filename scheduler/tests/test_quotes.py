@@ -63,7 +63,14 @@ async def test_draft_returns_none_on_json_parse_failure():
 
 
 @pytest.mark.asyncio
-async def test_run_draft_cycle_no_candidates_exits_cleanly():
+async def test_run_draft_cycle_completes_with_stories():
+    """run_draft_cycle runs to completion regardless of predicted_format label.
+
+    The predicted_format filter was removed (debug 260422-zid): all stories are
+    candidates now. The source_whitelist filter will drop "x" (not a reputable
+    source), so the drafter is not called. The cycle still completes cleanly
+    (agent_run committed twice: initial + final).
+    """
     stories = [{"title": "A", "link": "http://a", "source_name": "x",
                 "predicted_format": "thread", "score": 5.0}]
 

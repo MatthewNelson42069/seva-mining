@@ -131,9 +131,15 @@ Respond in valid JSON with this structure:
 
 
 async def run_draft_cycle() -> None:
-    """Single-tick pipeline: fetch → filter → draft → review → write."""
+    """Single-tick pipeline: fetch → draft → review → write.
+
+    max_count=2: now that all stories are eligible (no predicted_format gate),
+    cap at top 2 by recency to avoid excessive Claude spend per cycle
+    (debug 260422-zid fix).
+    """
     await run_text_story_cycle(
         agent_name=AGENT_NAME,
         content_type=CONTENT_TYPE,
         draft_fn=_draft,
+        max_count=2,
     )

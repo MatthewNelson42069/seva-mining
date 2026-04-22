@@ -65,9 +65,15 @@ async def test_draft_returns_none_on_json_parse_failure():
 
 
 @pytest.mark.asyncio
-async def test_run_draft_cycle_no_candidates_exits_cleanly():
-    """When no stories match predicted_format='breaking_news', cycle no-ops."""
-    # fetch_stories returns only stories with unrelated formats → breaking_news filter rejects all
+async def test_run_draft_cycle_completes_with_stories():
+    """run_draft_cycle runs to completion regardless of predicted_format label.
+
+    The predicted_format filter was removed (debug 260422-zid): all stories are
+    candidates now. The cycle still completes cleanly (agent_run committed twice:
+    initial + final). The story proceeds to the gold gate — which is NOT mocked
+    here so it may error internally; the story-level try/except handles that
+    gracefully and the cycle still completes.
+    """
     stories = [{"title": "A", "link": "http://a", "source_name": "x",
                 "predicted_format": "thread", "score": 5.0}]
 

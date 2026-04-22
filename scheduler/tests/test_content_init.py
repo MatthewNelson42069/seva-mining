@@ -1,14 +1,18 @@
 """Tests for agents.content.run_text_story_cycle filter kwargs (quick-260421-mos).
 
-Covers the 4 filter-logic states introduced in this quick task:
+Covers the 4 filter-logic states:
 - source_whitelist drops non-whitelisted sources
 - max_count caps candidates to top N by published_at desc
-- source_whitelist=None is a no-op (all predicted_format matches reach drafter)
+- source_whitelist=None is a no-op (all stories reach drafter)
 - max_count=None is a no-op (all whitelist-matches reach drafter)
 
+Note (debug 260422-zid): predicted_format is no longer used as a routing gate
+— candidates = list(stories). The predicted_format field on story fixtures here
+is inert / for realism only.
+
 Does NOT re-test the 4 other sub-agents using run_text_story_cycle
-(breaking_news, threads, long_form, infographics) — they pass neither kwarg
-so the None-default no-op tests here cover them by construction.
+(breaking_news, threads, long_form, infographics) — they pass neither whitelist
+kwarg so the None-default no-op tests here cover them by construction.
 """
 import os
 import sys
@@ -121,7 +125,7 @@ async def test_max_count_caps_candidates():
 
 @pytest.mark.asyncio
 async def test_source_whitelist_none_is_noop():
-    """source_whitelist=None (default) = all predicted_format matches reach drafter — breaking_news/threads/long_form/infographics parity."""
+    """source_whitelist=None (default) = all stories reach drafter — no whitelist or format gate applied."""
     stories = [
         _story(1, "Reuters"),
         _story(2, "Some Random Blog"),
