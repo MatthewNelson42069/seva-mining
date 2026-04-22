@@ -22,10 +22,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional, TypedDict
 
 import httpx
+from sqlalchemy import Float, and_, cast, func, select
 
 from config import get_settings
 
@@ -67,7 +68,14 @@ _HARD_INSTRUCTION = (
     "Do not cite any specific dollar figures, percentages, yields, or rates — "
     "current or historical — that do not appear verbatim in this snapshot. "
     "Use qualitative language ('near recent highs', 'elevated', 'multi-year high') "
-    "or omit the claim entirely."
+    "or omit the claim entirely.\n\n"
+    "Do NOT claim the current price is 'at highs', 'at a new high', 'at an "
+    "all-time high', 'breaking out', 'at a record', or 'hitting a new record' "
+    "unless the snapshot emits `at_52w_high: true`. Do NOT claim specific "
+    "intraday moves ('$100+ intraday', 'whipsaws $X', 'X% move today') unless "
+    "the 24h high minus 24h low in this snapshot supports the magnitude. "
+    "When in doubt, use qualitative hedges ('elevated', 'near recent highs', "
+    "'volatile intraday') or omit the claim."
 )
 
 
@@ -85,6 +93,14 @@ class MarketSnapshot(TypedDict, total=False):
     fed_funds: Optional[float]
     cpi_yoy: Optional[float]
     cpi_observation_date: Optional[str]  # ISO date string "YYYY-MM-DD"
+    # --- ep9 temporal anchors (quick-260422-ep9) ---
+    gold_24h_high: Optional[float]
+    gold_24h_low: Optional[float]
+    gold_prior_close: Optional[float]
+    gold_52w_high: Optional[float]
+    gold_52w_low: Optional[float]
+    at_52w_high: Optional[bool]        # None → [UNAVAILABLE]; True/False when gold_52w_high known
+    tracking_since: Optional[str]      # ISO date "YYYY-MM-DD" (matches cpi_observation_date style)
     errors: dict  # per-source error messages
 
 
@@ -213,6 +229,99 @@ class MetalpriceAPIFetcher:
             return {"gold_usd_per_oz": gold, "silver_usd_per_oz": silver}
         except Exception as exc:
             raise exc
+
+
+# ---------------------------------------------------------------------------
+# Temporal anchors (ep9) — computed from market_snapshots table history
+# ---------------------------------------------------------------------------
+
+_ANCHOR_KEYS = (
+    "gold_24h_high",
+    "gold_24h_low",
+    "gold_prior_close",
+    "gold_52w_high",
+    "gold_52w_low",
+    "at_52w_high",
+    "tracking_since",
+)
+
+
+async def _compute_gold_anchors(session, current_spot: Optional[float]) -> dict:
+    """Compute gold temporal anchors from market_snapshots table history.
+
+    Returns dict with 7 keys (24h high/low, prior_close, 52w high/low, at_52w_high
+    binary, tracking_since ISO date). All values Optional — None on empty history.
+
+    MUST be invoked BEFORE session.add(current_row) so `prior_close` reflects the
+    last-written snapshot, not the in-flight one.
+
+    Fail-open: any exception → all-None dict returned, error logged at ERROR level.
+    Queries filter to rows where gold_usd_per_oz is not null AND status in ('ok',
+    'partial') — status='failed' rows carry data.gold_usd_per_oz=null and must not
+    contaminate anchors.
+    """
+    from models.market_snapshot import MarketSnapshot as MarketSnapshotORM  # noqa: PLC0415
+
+    now = datetime.now(timezone.utc)
+    gold_price = cast(MarketSnapshotORM.data["gold_usd_per_oz"].astext, Float)
+    valid_row = and_(
+        MarketSnapshotORM.data["gold_usd_per_oz"].astext != "null",
+        MarketSnapshotORM.data["gold_usd_per_oz"].astext.isnot(None),
+        MarketSnapshotORM.status.in_(("ok", "partial")),
+    )
+
+    # Combined aggregate query (5 labelled results in one row)
+    q = select(
+        func.max(gold_price).filter(
+            and_(valid_row, MarketSnapshotORM.fetched_at >= now - timedelta(hours=24))
+        ).label("h24_high"),
+        func.min(gold_price).filter(
+            and_(valid_row, MarketSnapshotORM.fetched_at >= now - timedelta(hours=24))
+        ).label("h24_low"),
+        func.max(gold_price).filter(
+            and_(valid_row, MarketSnapshotORM.fetched_at >= now - timedelta(weeks=52))
+        ).label("w52_high"),
+        func.min(gold_price).filter(
+            and_(valid_row, MarketSnapshotORM.fetched_at >= now - timedelta(weeks=52))
+        ).label("w52_low"),
+        func.min(MarketSnapshotORM.fetched_at).filter(valid_row).label("tracking_since"),
+    )
+    result = await session.execute(q)
+    row = result.one()
+
+    # Prior close = most recent valid row (can't compose with aggregates above)
+    prior_q = (
+        select(gold_price)
+        .where(valid_row)
+        .order_by(MarketSnapshotORM.fetched_at.desc())
+        .limit(1)
+    )
+    prior_result = await session.execute(prior_q)
+    prior_close = prior_result.scalar_one_or_none()
+
+    # Strict-equality at_52w_high (Decision 4)
+    at_52w_high: Optional[bool]
+    if row.w52_high is None or current_spot is None:
+        at_52w_high = None
+    else:
+        at_52w_high = current_spot >= row.w52_high
+
+    tracking_since_str: Optional[str] = None
+    if row.tracking_since is not None:
+        try:
+            tracking_since_str = row.tracking_since.date().isoformat()
+        except AttributeError:
+            tracking_since_str = None
+
+    return {
+        "gold_24h_high": row.h24_high,
+        "gold_24h_low": row.h24_low,
+        "gold_prior_close": prior_close,
+        "gold_52w_high": row.w52_high,
+        "gold_52w_low": row.w52_low,
+        "at_52w_high": at_52w_high,
+        "tracking_since": tracking_since_str,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -382,6 +491,18 @@ async def fetch_market_snapshot(
     if fred_failed and "fred" not in errors:
         errors["fred"] = "one or more FRED series failed"
 
+    # --- Compute gold temporal anchors (ep9) — MUST run before session.add below ---
+    anchors: dict = {k: None for k in _ANCHOR_KEYS}
+    if session is not None:
+        try:
+            anchors = await _compute_gold_anchors(session, gold)
+        except Exception as exc:
+            logger.error(
+                "ContentAgent: market snapshot anchor compute failed (%s: %s) — "
+                "continuing without anchors.",
+                type(exc).__name__, str(exc)[:120],
+            )
+
     now = datetime.now(timezone.utc)
     snap: MarketSnapshot = {
         "fetched_at": now,
@@ -393,6 +514,7 @@ async def fetch_market_snapshot(
         "fed_funds": fed_funds,
         "cpi_yoy": cpi_yoy,
         "cpi_observation_date": cpi_observation_date,
+        **anchors,  # 7 anchor fields spread into the TypedDict
         "errors": errors,
     }
 
@@ -469,6 +591,57 @@ def render_snapshot_block(snap: MarketSnapshot | dict) -> str:
                 return pct_str
         return pct_str
 
+    def _fmt_gold_range(window: str) -> str:
+        """Format 'Gold {window} range:' line. window ∈ {'24h', '52w'}.
+
+        Populated → '$lo – $hi/oz (suffix)' where suffix is prior_close (24h) or
+        at_52w_high binary (52w).
+        Empty (hi & lo both None): '[UNAVAILABLE — first snapshot]' if no
+        tracking_since, else '[UNAVAILABLE — tracking since YYYY-MM-DD, N day(s) of history]'.
+        """
+        if window == "24h":
+            hi = snap.get("gold_24h_high")
+            lo = snap.get("gold_24h_low")
+            suffix_val = snap.get("gold_prior_close")
+            suffix_label = "prior close"
+        else:  # 52w
+            hi = snap.get("gold_52w_high")
+            lo = snap.get("gold_52w_low")
+            suffix_val = snap.get("at_52w_high")
+            suffix_label = "at_52w_high"
+
+        tracking_since = snap.get("tracking_since")
+
+        # Both hi and lo None → [UNAVAILABLE] branch
+        if hi is None and lo is None:
+            if tracking_since:
+                try:
+                    ts_date = datetime.strptime(tracking_since, "%Y-%m-%d").date()
+                    now_source = snap.get("fetched_at") or datetime.now(timezone.utc)
+                    now_date = now_source.date()
+                    days = (now_date - ts_date).days
+                    day_word = "day" if days == 1 else "days"
+                    return (
+                        f"[UNAVAILABLE — tracking since {tracking_since}, "
+                        f"{days} {day_word} of history]"
+                    )
+                except (ValueError, AttributeError):
+                    return f"[UNAVAILABLE — tracking since {tracking_since}]"
+            return "[UNAVAILABLE — first snapshot]"
+
+        # Populated case
+        range_str = f"${lo:,.2f} – ${hi:,.2f}/oz"
+        if window == "24h":
+            if suffix_val is not None:
+                return f"{range_str} ({suffix_label}: ${suffix_val:,.2f}/oz)"
+            return range_str
+        # 52w
+        if suffix_val is None:
+            suffix_render = "[UNAVAILABLE]"
+        else:
+            suffix_render = "true" if suffix_val else "false"
+        return f"{range_str} ({suffix_label}: {suffix_render})"
+
     gold = snap.get("gold_usd_per_oz")
     silver = snap.get("silver_usd_per_oz")
     ust_10y = snap.get("ust_10y_nominal")
@@ -481,6 +654,8 @@ def render_snapshot_block(snap: MarketSnapshot | dict) -> str:
         header,
         f"- Spot gold: {_fmt_price(gold)}",
         f"- Spot silver: {_fmt_price(silver)}",
+        f"- Gold 24h range: {_fmt_gold_range('24h')}",
+        f"- Gold 52w range: {_fmt_gold_range('52w')}",
         f"- 10Y Treasury yield: {_fmt_pct(ust_10y)}",
         f"- 10Y TIPS (real) yield: {_fmt_pct(ust_real)}",
         f"- Fed funds effective rate: {_fmt_pct(ff)}",
