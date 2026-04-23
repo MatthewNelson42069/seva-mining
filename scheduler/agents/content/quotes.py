@@ -192,11 +192,22 @@ Respond in valid JSON with this structure:
 
 
 async def run_draft_cycle() -> None:
-    """Single-tick pipeline: fetch → filter → reputable-only → top-1 → draft (quality-gated) → review → write."""
+    """Single-tick pipeline: fetch → filter → reputable-only → top-1 → draft (quality-gated) → review → write.
+
+    Configured per quick-260423-d30:
+    - max_count=1: produce the single best reputable-source quote per cycle (vxg)
+    - source_whitelist=REPUTABLE_SOURCES: tier-1 financial + gold-specialist
+      + institutional sources only (mos)
+    - dedup_scope="same_type": allow reuse of stories already drafted by
+      breaking_news / threads / long_form; dedup only against other quotes
+      within the same day (d30). Mirrors the independence model already
+      applied to sub_infographics (of3), sub_gold_media, and sub_gold_history.
+    """
     await run_text_story_cycle(
         agent_name=AGENT_NAME,
         content_type=CONTENT_TYPE,
         draft_fn=_draft,
         max_count=1,
         source_whitelist=REPUTABLE_SOURCES,
+        dedup_scope="same_type",
     )

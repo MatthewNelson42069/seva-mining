@@ -128,3 +128,34 @@ async def test_run_draft_cycle_passes_filters():
     assert kwargs["max_count"] == 1
     assert kwargs["source_whitelist"] is quotes.REPUTABLE_SOURCES
     assert callable(kwargs["draft_fn"])
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_passes_dedup_scope():
+    """Covers d30: run_draft_cycle passes dedup_scope="same_type" to
+    run_text_story_cycle so quotes runs independently — mirrors the
+    independence model applied to sub_infographics (of3).
+    Also re-asserts the vxg (max_count=1) + mos (source_whitelist) kwargs
+    as a belt-and-suspenders guard against accidental regressions.
+    """
+    call_kwargs: dict = {}
+
+    async def fake_cycle(**kwargs):
+        call_kwargs.update(kwargs)
+
+    with patch("agents.content.quotes.run_text_story_cycle",
+               new=AsyncMock(side_effect=fake_cycle)):
+        await quotes.run_draft_cycle()
+
+    assert call_kwargs.get("agent_name") == "sub_quotes"
+    assert call_kwargs.get("content_type") == "quote"
+    assert callable(call_kwargs.get("draft_fn"))
+    assert call_kwargs.get("max_count") == 1, (
+        f"Expected max_count=1 (vxg), got {call_kwargs.get('max_count')}"
+    )
+    assert call_kwargs.get("source_whitelist") is quotes.REPUTABLE_SOURCES, (
+        "Expected source_whitelist is REPUTABLE_SOURCES (mos)"
+    )
+    assert call_kwargs.get("dedup_scope") == "same_type", (
+        f"Expected dedup_scope='same_type' (d30), got {call_kwargs.get('dedup_scope')}"
+    )
