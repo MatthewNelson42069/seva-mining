@@ -4,7 +4,7 @@ type: quick
 title: Remove sub_long_form Sub-Agent Entirely (Topology 7→6)
 completed: 2026-04-23
 duration: ~90m
-commits: ["<pending>"]
+commits: ["337fdf5"]
 tags: [sub-agent-removal, topology, 7-to-6, long_form-purge, cleanup]
 subsystem: scheduler + backend + frontend + docs
 ---
@@ -158,4 +158,4 @@ None. All changes are complete removals or tombstone documentation. The `long_fo
 - Gate 4.2: `grep -c "6-sub-agent" CLAUDE.md` → 2; `grep -c "Historical note (2026-04-23)" CLAUDE.md` → 1
 - Gate 4.3: `grep -c "260423-k8n" .planning/STATE.md` → ≥3
 
-**Commit SHA:** `<pending>` — update after commit lands
+**Commit SHA:** `337fdf5` — worktree-agent-a73441f7 branch
