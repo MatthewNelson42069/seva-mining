@@ -86,3 +86,150 @@ async def test_run_draft_cycle_completes_with_stories():
         await infographics.run_draft_cycle()
 
     assert session.commit.await_count >= 2
+
+
+# ---------------------------------------------------------------------------
+# New tests for quick-260422-of3: kwargs propagation + notes telemetry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_passes_new_kwargs():
+    """Covers D-04 + D-01 + D-02: run_draft_cycle passes max_count=2,
+    sort_by='score', dedup_scope='same_type' to run_text_story_cycle.
+    """
+    call_kwargs: dict = {}
+
+    async def fake_cycle(**kwargs):
+        call_kwargs.update(kwargs)
+
+    with patch("agents.content.infographics.run_text_story_cycle",
+               new=AsyncMock(side_effect=fake_cycle)):
+        await infographics.run_draft_cycle()
+
+    assert call_kwargs.get("agent_name") == "sub_infographics"
+    assert call_kwargs.get("content_type") == "infographic"
+    assert callable(call_kwargs.get("draft_fn"))
+    assert call_kwargs.get("max_count") == 2, (
+        f"Expected max_count=2, got {call_kwargs.get('max_count')}"
+    )
+    assert call_kwargs.get("sort_by") == "score", (
+        f"Expected sort_by='score', got {call_kwargs.get('sort_by')}"
+    )
+    assert call_kwargs.get("dedup_scope") == "same_type", (
+        f"Expected dedup_scope='same_type', got {call_kwargs.get('dedup_scope')}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_writes_structured_notes():
+    """Covers D-04: end-to-end run populates AgentRun.notes with the 5-field
+    structured payload {candidates, top_by_score, drafted, compliance_blocked,
+    queued} when content_type == 'infographic'.
+
+    3 stories all pass the gate; draft_fn returns a non-None draft for both of
+    the 2 top-by-score stories (the 3rd is trimmed by max_count=2). Review
+    returns compliance_passed=True for 1 and False for 1 → drafted=2,
+    compliance_blocked=1, queued=1.
+    """
+    import json as _json  # noqa: PLC0415
+
+    stories = [
+        {"title": "Top A", "link": "http://a", "source_name": "Reuters",
+         "predicted_format": "infographic", "score": 9.0,
+         "published_at": "2026-04-21T12:00:00Z", "summary": "a"},
+        {"title": "Top B", "link": "http://b", "source_name": "Reuters",
+         "predicted_format": "infographic", "score": 8.0,
+         "published_at": "2026-04-21T11:00:00Z", "summary": "b"},
+        {"title": "Trimmed", "link": "http://c", "source_name": "Reuters",
+         "predicted_format": "infographic", "score": 3.0,
+         "published_at": "2026-04-21T13:00:00Z", "summary": "c"},
+    ]
+
+    captured_agent_runs: list = []
+    session = AsyncMock()
+
+    def _record_add(obj):
+        # AgentRun is the first object added; ContentBundle/DraftItem come later.
+        # Record them all so we can pluck the AgentRun at the end.
+        captured_agent_runs.append(obj)
+
+    session.add = MagicMock(side_effect=_record_add)
+
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    # Alternate compliance_passed: first story True, second False
+    review_results = iter([
+        {"compliance_passed": True, "rationale": "ok"},
+        {"compliance_passed": False, "rationale": "blocked"},
+    ])
+
+    async def fake_review(_draft):
+        return next(review_results)
+
+    async def fake_draft(story, deep_research, market_snapshot, *, client):
+        return {"format": "infographic", "twitter_caption": "cap",
+                "_rationale": "r", "_key_data_points": []}
+
+    with patch("agents.content.AsyncSessionLocal", return_value=ctx), \
+         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)), \
+         patch("agents.content._is_already_covered_today", new=AsyncMock(return_value=False)), \
+         patch("agents.content.infographics._draft", new=fake_draft), \
+         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)), \
+         patch.object(content_agent, "is_gold_relevant_or_systemic_shock",
+                      new=AsyncMock(return_value={"keep": True})), \
+         patch.object(content_agent, "fetch_article",
+                      new=AsyncMock(return_value=("body", True))), \
+         patch.object(content_agent, "search_corroborating",
+                      new=AsyncMock(return_value=[])), \
+         patch.object(content_agent, "review", new=fake_review), \
+         patch.object(content_agent, "build_draft_item",
+                      new=MagicMock(return_value=MagicMock())):
+        await infographics.run_draft_cycle()
+
+    # The first add() call is the AgentRun; later adds are bundles/items.
+    agent_run = captured_agent_runs[0]
+    assert agent_run.notes, "Expected agent_run.notes to be populated"
+    payload = _json.loads(agent_run.notes)
+    assert payload == {
+        "candidates": 2,          # 3 stories → capped to top 2 by score
+        "top_by_score": 2,        # max_count value
+        "drafted": 2,             # both top-2 stories produced a non-None draft
+        "compliance_blocked": 1,  # 1 of the 2 drafts failed review
+        "queued": 1,              # 1 draft passed review and got a DraftItem
+    }, f"Unexpected notes payload: {payload}"
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_writes_notes_on_empty_candidates():
+    """Covers D-04 (empty-candidates branch): when fetch_stories returns no
+    stories, the early-return path still writes zero-filled notes for
+    infographics so the no4 UI subtitle has something to render.
+    """
+    import json as _json  # noqa: PLC0415
+
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("agents.content.AsyncSessionLocal", return_value=ctx), \
+         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)), \
+         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=[])):
+        await infographics.run_draft_cycle()
+
+    agent_run = captured[0]
+    assert agent_run.notes, "Expected agent_run.notes even on empty-candidates run"
+    payload = _json.loads(agent_run.notes)
+    assert payload == {
+        "candidates": 0,
+        "top_by_score": 2,
+        "drafted": 0,
+        "compliance_blocked": 0,
+        "queued": 0,
+    }, f"Unexpected zero-filled notes payload: {payload}"

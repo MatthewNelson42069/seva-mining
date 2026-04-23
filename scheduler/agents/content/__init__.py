@@ -18,6 +18,7 @@ import difflib
 import json
 import logging
 from datetime import date, datetime, timezone
+from typing import Literal
 
 from anthropic import AsyncAnthropic
 from sqlalchemy import func, select
@@ -32,19 +33,35 @@ from services.market_snapshot import fetch_market_snapshot
 logger = logging.getLogger(__name__)
 
 
-async def _is_already_covered_today(session, story_url: str, story_headline: str) -> bool:
+async def _is_already_covered_today(
+    session,
+    story_url: str,
+    story_headline: str,
+    *,
+    content_type: str | None = None,
+) -> bool:
     """Cross-run dedup — skip stories already covered earlier today.
 
     Mirrors the pre-split ContentAgent._is_already_covered_today check so
     functional parity holds after the split.
+
+    Args:
+        session: Async SQLAlchemy session.
+        story_url: Exact URL of the story to check.
+        story_headline: Headline to fuzzy-match against existing bundles.
+        content_type: When set, scope the SELECT to only ContentBundles of this
+                      content_type (same-type dedup). When None (default), the
+                      SELECT is cross-type — blocking the story regardless of
+                      which sub-agent previously drafted it (existing behavior).
     """
     today_utc = date.today()
-    result = await session.execute(
-        select(ContentBundle).where(
-            func.date(ContentBundle.created_at) == today_utc,
-            ContentBundle.no_story_flag.is_(False),
-        )
+    query = select(ContentBundle).where(
+        func.date(ContentBundle.created_at) == today_utc,
+        ContentBundle.no_story_flag.is_(False),
     )
+    if content_type is not None:
+        query = query.where(ContentBundle.content_type == content_type)
+    result = await session.execute(query)
     existing_bundles = result.scalars().all()
 
     headline_lower = story_headline.lower()
@@ -67,6 +84,8 @@ async def run_text_story_cycle(
     draft_fn,
     max_count: int | None = None,
     source_whitelist: frozenset[str] | None = None,
+    sort_by: Literal["published_at", "score"] = "published_at",
+    dedup_scope: Literal["cross_agent", "same_type"] = "cross_agent",
 ) -> None:
     """Shared fetch → filter → draft → review → persist pipeline.
 
@@ -81,12 +100,27 @@ async def run_text_story_cycle(
                   that returns a draft_content dict or None on failure. The
                   drafter may stash ``_rationale`` and ``_key_data_points`` on
                   the returned dict; the pipeline pops these before persistence.
-        max_count: If not None, cap candidates to the top N by published_at desc
-                   AFTER the predicted_format filter and AFTER the whitelist filter.
+        max_count: If not None, cap candidates to the top N AFTER the whitelist
+                   filter. Sort order is determined by ``sort_by``.
                    None (default) = no cap — existing behavior.
         source_whitelist: If not None, drop candidates whose source_name does not
                           contain (case-insensitive) any pattern in the set.
                           None (default) = no filter — existing behavior.
+        sort_by: Determines the sort key used when ``max_count`` trims candidates.
+                 "published_at" (default) = most recent first — preserves existing
+                 behavior for breaking_news, threads, long_form, quotes.
+                 "score" = composite (score desc, published_at desc) so the
+                 highest-quality stories win and ties break toward recency (D-01).
+                 Default preserves byte-for-byte identical behavior for the 4
+                 other callers that do not pass this kwarg.
+        dedup_scope: Controls which existing bundles block re-drafting of a story.
+                     "cross_agent" (default) = block if ANY sub-agent drafted the
+                     story today — existing behavior.
+                     "same_type" = block only if THIS content_type drafted the
+                     story today — allows infographics to reuse stories already
+                     drafted by breaking_news (D-02).
+                     Default preserves byte-for-byte identical behavior for the 4
+                     other callers that do not pass this kwarg.
     """
     settings = get_settings()
     anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -138,20 +172,38 @@ async def run_text_story_cycle(
                     agent_name, before, len(candidates), before - len(candidates),
                 )
 
-            # Cap to top max_count by published_at desc (after whitelist).
-            # Opt-in via max_count kwarg; None (default) = no cap.
+            # Cap to top max_count after whitelist. Opt-in via max_count kwarg;
+            # None (default) = no cap. Sort key picked by sort_by kwarg (D-01/D-03).
             if max_count is not None and len(candidates) > max_count:
-                candidates.sort(key=lambda s: s.get("published_at", ""), reverse=True)
+                if sort_by == "score":
+                    # D-01: composite sort — score desc, published_at desc tiebreaker.
+                    candidates.sort(
+                        key=lambda s: (
+                            float(s.get("score", 0.0)),
+                            s.get("published_at", ""),
+                        ),
+                        reverse=True,
+                    )
+                else:
+                    candidates.sort(key=lambda s: s.get("published_at", ""), reverse=True)
                 candidates = candidates[:max_count]
                 logger.info(
-                    "%s: max_count cap: trimmed to top %d by recency",
-                    agent_name, max_count,
+                    "%s: max_count cap: trimmed to top %d by %s",
+                    agent_name, max_count, sort_by,
                 )
 
             if not candidates:
                 logger.info(
                     "%s: no %s candidates this cycle", agent_name, content_type,
                 )
+                if content_type == "infographic":
+                    agent_run.notes = json.dumps({
+                        "candidates": 0,
+                        "top_by_score": max_count if max_count is not None else 0,
+                        "drafted": 0,
+                        "compliance_blocked": 0,
+                        "queued": 0,
+                    })
                 agent_run.status = "completed"
                 return
 
@@ -160,10 +212,18 @@ async def run_text_story_cycle(
                 "content_gold_gate_model": "claude-haiku-4-5",
             }
 
+            drafted_count = 0
+            compliance_blocked_count = 0
+
             for story in candidates:
                 try:
                     if await _is_already_covered_today(
-                        session, story["link"], story["title"]
+                        session,
+                        story["link"],
+                        story["title"],
+                        content_type=(
+                            content_type if dedup_scope == "same_type" else None
+                        ),
                     ):
                         logger.info(
                             "%s: skipping (already covered today): %r",
@@ -208,12 +268,15 @@ async def run_text_story_cycle(
                         session.add(bundle)
                         continue
 
+                    drafted_count += 1
                     rationale = draft_content.pop("_rationale", "")
                     key_data_points = draft_content.pop("_key_data_points", [])
                     deep_research["key_data_points"] = key_data_points
 
                     review_result = await content_agent.review(draft_content)
                     compliance_ok = bool(review_result.get("compliance_passed", False))
+                    if not compliance_ok:
+                        compliance_blocked_count += 1
 
                     bundle = ContentBundle(
                         story_headline=story["title"],
@@ -251,7 +314,18 @@ async def run_text_story_cycle(
                     )
 
             agent_run.items_queued = items_queued
-            agent_run.notes = json.dumps({"candidates": len(candidates)})
+            # D-04: richer telemetry for infographics (consumed by no4 UI subtitle);
+            # D-05: other callers retain their existing minimal payload.
+            if content_type == "infographic":
+                agent_run.notes = json.dumps({
+                    "candidates": len(candidates),
+                    "top_by_score": max_count if max_count is not None else 0,
+                    "drafted": drafted_count,
+                    "compliance_blocked": compliance_blocked_count,
+                    "queued": items_queued,
+                })
+            else:
+                agent_run.notes = json.dumps({"candidates": len(candidates)})
             agent_run.status = "completed"
         except Exception as exc:
             agent_run.status = "failed"
