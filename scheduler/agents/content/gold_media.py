@@ -202,6 +202,13 @@ analyst or economist with clear gold-market commentary:
    "gold prices rose today" news-recital.
 3. **Gold focus:** Speaker discusses gold specifically (not mentioning
    gold in passing during a broader markets segment).
+4. **Bullish or neutral stance:** Speaker's commentary must be
+   constructive or neutral on gold. REJECT if the speaker is predicting
+   gold price decline, dismissing gold's role vs alternatives
+   (bitcoin/crypto replacing gold, gold losing relevance), or
+   emphasizing a bearish near-term outlook. Upside forecasts and
+   neutral factual analysis PASS — direction matters, not the word
+   "forecast".
 
 If the video does NOT meet this bar, respond with:
 {{"reject": true, "rationale": "1-2 sentence reason"}}
