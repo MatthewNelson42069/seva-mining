@@ -131,3 +131,51 @@ async def test_draft_gold_media_caption_returns_none_on_reject(caplog):
     assert draft is None
     assert "rejected" in caplog.text
     assert "anonymous" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_draft_rejects_bearish_analyst_clip(caplog):
+    """_draft_gold_media_caption returns None when Sonnet rejects for bearish stance (criterion #4)."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"reject": true, "rationale": "Speaker is predicting near-term gold price decline — violates Bullish or neutral stance criterion"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    with caplog.at_level("INFO"):
+        draft = await gold_media._draft_gold_media_caption(
+            tweet_text="Analyst: expect gold to pull back to $2100 as dollar strengthens",
+            author_username="Kitco",
+            author_name="Kitco News",
+            tweet_url="https://twitter.com/Kitco/status/99",
+            market_snapshot=None,
+            client=client,
+        )
+    # caplog assertion verifies the reject-log code path fires;
+    # rationale wording is mocked, not tested against real model output.
+    # (Real Sonnet rationales will vary — the phrase "Bullish or neutral"
+    # appears here only because the mocked response string is authored
+    # to contain it. This test asserts the logging wiring, not the
+    # natural-language content of production rationales.)
+    assert draft is None
+    assert "rejected" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_draft_accepts_bullish_analyst_clip():
+    """_draft_gold_media_caption returns a draft dict for bullish analyst clips (criterion #4 sanity)."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"twitter_caption":"Central banks keep buying at these levels — structural tailwind.","instagram_caption":"Central bank gold buying remains strong..."}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    draft = await gold_media._draft_gold_media_caption(
+        tweet_text="Central banks added record gold reserves in Q1 — structural demand intact.",
+        author_username="Bloomberg",
+        author_name="Bloomberg News",
+        tweet_url="https://twitter.com/Bloomberg/status/100",
+        market_snapshot=None,
+        client=client,
+    )
+    assert draft is not None
+    assert draft["format"] == "gold_media"
+    assert draft["twitter_caption"] != ""

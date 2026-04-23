@@ -277,3 +277,145 @@ def test_build_draft_item_stores_bundle_id_in_engagement_snapshot():
     item = content_agent.build_draft_item(bundle, "test rationale")
     assert item.platform == "content"
     assert item.engagement_snapshot == {"content_bundle_id": str(bundle.id)}
+
+
+# ---------------------------------------------------------------------------
+# is_gold_relevant_or_systemic_shock — gold gate bearish filter (quick-260423-j7x)
+# ---------------------------------------------------------------------------
+
+GATE_CONFIG = {
+    "content_gold_gate_enabled": "true",
+    "content_gold_gate_model": "claude-haiku-4-5",
+    "content_bearish_filter_enabled": "true",
+}
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_rejects_price_bearish_forecast():
+    """Gate rejects price-bearish analyst forecasts with reject_reason='bearish_toward_gold'."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    story = {"title": "Morgan Stanley cuts gold price forecast by almost 10%", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+
+    assert result["keep"] is False
+    assert result["reject_reason"] == "bearish_toward_gold"
+    assert result["sentiment"] == "bearish"
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_rejects_anti_gold_narrative():
+    """Gate rejects anti-gold narrative (bitcoin replacing gold) with bearish_toward_gold."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    story = {"title": "Bitcoin replaces gold as reserve asset of choice", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+
+    assert result["keep"] is False
+    assert result["reject_reason"] == "bearish_toward_gold"
+    assert result["sentiment"] == "bearish"
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_rejects_factual_price_decline():
+    """Gate rejects factual-negative price movement stories with bearish_toward_gold."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    story = {"title": "Gold fell 1.2% today on stronger dollar", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+
+    assert result["keep"] is False
+    assert result["reject_reason"] == "bearish_toward_gold"
+    assert result["sentiment"] == "bearish"
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_keeps_bullish_central_bank_buying():
+    """Gate keeps bullish stories (central bank buying) with keep=True."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    story = {"title": "Central banks added 800t of gold in Q1", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["sentiment"] == "bullish"
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_keeps_bullish_price_forecast():
+    """Gate keeps bullish upside forecasts (Goldman $4K) — direction matters, not the word 'forecast'."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    story = {"title": "Goldman sees gold at $4K by year-end", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["sentiment"] == "bullish"
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_keeps_neutral_record_high():
+    """Gate keeps neutral factual stories (record high) with keep=True."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "neutral"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    story = {"title": "Gold hits new record high", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["sentiment"] == "neutral"
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_fail_open_on_parse_error():
+    """Gate fails open (keep=True, sentiment=None) when Haiku returns non-JSON."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text="not valid json at all")]
+    client.messages.create = AsyncMock(return_value=response)
+
+    story = {"title": "Some gold story", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+
+    assert result["keep"] is True
+    assert result["reject_reason"] is None
+    assert result["sentiment"] is None
+
+
+@pytest.mark.asyncio
+async def test_gold_gate_flag_disabled():
+    """When content_bearish_filter_enabled='false', bearish stories are NOT rejected."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    client.messages.create = AsyncMock(return_value=response)
+
+    config_flag_off = {
+        "content_gold_gate_enabled": "true",
+        "content_gold_gate_model": "claude-haiku-4-5",
+        "content_bearish_filter_enabled": "false",
+    }
+    story = {"title": "Morgan Stanley cuts gold price forecast by almost 10%", "summary": "..."}
+    result = await content_agent.is_gold_relevant_or_systemic_shock(story, config_flag_off, client=client)
+
+    assert result["keep"] is True
