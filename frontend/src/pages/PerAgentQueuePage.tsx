@@ -43,14 +43,37 @@ function groupByRun(
   const result: Array<{ run: AgentRunResponse | null; items: DraftItemResponse[] }> = []
   for (const run of sorted) {
     const key = run.id.toString()
-    if (groups.has(key)) {
-      result.push(groups.get(key)!)
-    }
+    result.push(groups.get(key) ?? { run, items: [] })
   }
   if (groups.has(NO_RUN_KEY)) {
     result.push(groups.get(NO_RUN_KEY)!)
   }
   return result
+}
+
+/** Parse structured run telemetry added in debug-260422-gmb for sub_gold_media.
+ *  Shape: {x_candidates, llm_accepted, compliance_blocked, queued}.
+ *  Returns formatted subtitle string, or null if notes is absent/malformed/has no known fields.
+ *  Format: "N candidates · N accepted · N queued" (blocked suppressed when 0 per D-02).
+ */
+function parseRunNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(notes)
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object') return null
+  const n = parsed as Record<string, unknown>
+  const parts: string[] = []
+  if (typeof n.x_candidates === 'number') parts.push(`${n.x_candidates} candidates`)
+  if (typeof n.llm_accepted === 'number') parts.push(`${n.llm_accepted} accepted`)
+  if (typeof n.compliance_blocked === 'number' && n.compliance_blocked > 0) {
+    parts.push(`${n.compliance_blocked} blocked`)
+  }
+  if (typeof n.queued === 'number') parts.push(`${n.queued} queued`)
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 function RunHeader({
@@ -134,7 +157,7 @@ function PerAgentQueueBody({ tab }: { tab: ReturnType<typeof findTabBySlug> & ob
           <div className="flex items-center justify-center py-16">
             <p className="text-sm text-muted-foreground">Loading...</p>
           </div>
-        ) : items.length === 0 ? (
+        ) : items.length === 0 && runs.length === 0 ? (
           <EmptyState />
         ) : showRunGroups ? (
           <div className="max-w-2xl space-y-6">
@@ -143,12 +166,24 @@ function PerAgentQueueBody({ tab }: { tab: ReturnType<typeof findTabBySlug> & ob
                 ? new Date(group.run.started_at)
                 : new Date(group.items[0].created_at)
               const displayTime = `${format(sourceDate, 'h:mm a')} · ${format(sourceDate, 'MMM d')}`
+              const telemetry = parseRunNotes(group.run?.notes)
               return (
                 <div key={gi} className="space-y-3">
                   <RunHeader displayTime={displayTime} itemsQueued={group.run?.items_queued} />
-                  {group.items.map((item) => (
-                    <ContentSummaryCard key={item.id} item={item} />
-                  ))}
+                  {telemetry && (
+                    <p className="text-xs text-muted-foreground -mt-2">
+                      {telemetry}
+                    </p>
+                  )}
+                  {group.items.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-1">
+                      No content found
+                    </p>
+                  ) : (
+                    group.items.map((item) => (
+                      <ContentSummaryCard key={item.id} item={item} />
+                    ))
+                  )}
                 </div>
               )
             })}
