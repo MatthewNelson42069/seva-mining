@@ -127,10 +127,11 @@ async def test_run_draft_cycle_writes_structured_notes():
     structured payload {candidates, top_by_score, drafted, compliance_blocked,
     queued} when content_type == 'infographic'.
 
-    3 stories all pass the gate; draft_fn returns a non-None draft for both of
-    the 2 top-by-score stories (the 3rd is trimmed by max_count=2). Review
-    returns compliance_passed=True for 1 and False for 1 → drafted=2,
-    compliance_blocked=1, queued=1.
+    3 stories, max_count=2. With quick-260423-hq7 break-after-N semantics, all
+    3 candidates are in the iteration list (no pre-loop trim). Draft_fn returns
+    a non-None draft for all 3. Review: Top A passes, Top B fails (compliance
+    blocked), Trimmed passes → items_queued=2 → break. Result: candidates=3,
+    drafted=3, compliance_blocked=1, queued=2.
     """
     import json as _json  # noqa: PLC0415
 
@@ -160,10 +161,13 @@ async def test_run_draft_cycle_writes_structured_notes():
     ctx.__aenter__ = AsyncMock(return_value=session)
     ctx.__aexit__ = AsyncMock(return_value=False)
 
-    # Alternate compliance_passed: first story True, second False
+    # Review sequence (3 stories reach draft_fn post-fix):
+    # Top A (score=9): True → queued=1; Top B (score=8): False → compliance_blocked;
+    # Trimmed (score=3): True → queued=2 → break (max_count=2 reached).
     review_results = iter([
         {"compliance_passed": True, "rationale": "ok"},
         {"compliance_passed": False, "rationale": "blocked"},
+        {"compliance_passed": True, "rationale": "ok"},
     ])
 
     async def fake_review(_draft):
@@ -194,11 +198,11 @@ async def test_run_draft_cycle_writes_structured_notes():
     assert agent_run.notes, "Expected agent_run.notes to be populated"
     payload = _json.loads(agent_run.notes)
     assert payload == {
-        "candidates": 2,          # 3 stories → capped to top 2 by score
+        "candidates": 3,          # all 3 stories in list (no pre-loop trim, quick-260423-hq7)
         "top_by_score": 2,        # max_count value
-        "drafted": 2,             # both top-2 stories produced a non-None draft
-        "compliance_blocked": 1,  # 1 of the 2 drafts failed review
-        "queued": 1,              # 1 draft passed review and got a DraftItem
+        "drafted": 3,             # all 3 reached draft_fn (no dedup blocks)
+        "compliance_blocked": 1,  # Top B failed review
+        "queued": 2,              # Top A + Trimmed passed; break after 2nd success
     }, f"Unexpected notes payload: {payload}"
 
 

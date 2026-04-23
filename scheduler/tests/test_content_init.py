@@ -2,7 +2,7 @@
 
 Covers the 4 filter-logic states:
 - source_whitelist drops non-whitelisted sources
-- max_count caps candidates to top N by published_at desc
+- max_count = "break after N successful drafts" (quick-260423-hq7 fix)
 - source_whitelist=None is a no-op (all stories reach drafter)
 - max_count=None is a no-op (all whitelist-matches reach drafter)
 
@@ -10,6 +10,16 @@ Also covers new kwargs from quick-260422-of3:
 - sort_by="score" picks top N by composite (score desc, published_at desc) — D-01
 - dedup_scope="same_type" passes content_type into _is_already_covered_today — D-02/D-03
 - SELECT scoping when content_type arg is provided to _is_already_covered_today — D-02
+
+quick-260423-hq7: max_count semantics changed from "trim candidates to top N before
+the dedup loop" to "break out of the for-loop after N compliance-passing persists."
+The 4 sort/cap tests below are rewritten to assert the break semantics rather than
+the trim semantics; observable output is the same for the all-succeed case.
+
+Three new tests assert the iterate-past-dedup behavior (the actual fix):
+- test_max_count_iterates_past_dedup_hits: loop continues past dedup-blocked stories
+- test_max_count_exhausts_if_insufficient_successes: full list consumed when not enough successes
+- test_max_count_none_still_iterates_all: max_count=None regression guard for breaking_news
 
 Note (debug 260422-zid): predicted_format is no longer used as a routing gate
 — candidates = list(stories). The predicted_format field on story fixtures here
@@ -72,7 +82,11 @@ async def _run_with_stories(
     sort_by="published_at",
     dedup_scope="cross_agent",
 ):
-    """Drive stories through run_text_story_cycle and return the list the drafter saw."""
+    """Drive stories through run_text_story_cycle and return the list the drafter saw.
+
+    draft_fn returns None → stub-bundle path; avoids review/build_draft_item coupling.
+    Use _run_with_stories_succeeding() when you need the compliance+persist path to run.
+    """
     drafter_saw: list[dict] = []
 
     async def draft_fn(story, deep_research, market_snapshot, *, client):
@@ -104,6 +118,89 @@ async def _run_with_stories(
     return drafter_saw
 
 
+async def _run_with_stories_succeeding(
+    stories,
+    *,
+    max_count=None,
+    source_whitelist=None,
+    sort_by="published_at",
+    dedup_scope="cross_agent",
+    dedup_returns_true_for: frozenset[str] | None = None,
+    stories_draft_returns_none: frozenset[str] | None = None,
+    content_type: str = "quote",
+):
+    """Drive stories through run_text_story_cycle in drafter-succeeds mode.
+
+    Unlike _run_with_stories, this helper:
+    - draft_fn returns a real draft dict so the compliance+persist+items_queued path runs
+    - Mocks content_agent.review() to pass compliance
+    - Mocks content_agent.build_draft_item() to return a sentinel
+    - Supports per-story dedup overrides (dedup_returns_true_for: set of story titles)
+    - Supports per-story draft_fn=None overrides (stories_draft_returns_none: set of titles)
+
+    Returns (drafter_saw, items_queued) where drafter_saw is the list of stories
+    that actually reached draft_fn (after dedup/gold-gate), and items_queued is
+    the final count of successfully persisted drafts.
+    """
+    drafter_saw: list[dict] = []
+    dedup_true_set = dedup_returns_true_for or frozenset()
+    draft_none_set = stories_draft_returns_none or frozenset()
+
+    async def draft_fn(story, deep_research, market_snapshot, *, client):
+        drafter_saw.append(story)
+        if story["title"] in draft_none_set:
+            return None
+        return {
+            "format": content_type,
+            "_rationale": "r",
+            "_key_data_points": [],
+            "post": "test draft content",
+        }
+
+    async def fake_dedup(session, url, headline, *, content_type=None):
+        return headline in dedup_true_set
+
+    ctx, session = _session_ctx()
+    # session.flush() must be awaitable but return nothing
+    session.flush = AsyncMock(return_value=None)
+
+    with patch("agents.content.AsyncSessionLocal", return_value=ctx), \
+         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)), \
+         patch("agents.content._is_already_covered_today", side_effect=fake_dedup), \
+         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)), \
+         patch.object(content_agent, "is_gold_relevant_or_systemic_shock",
+                      new=AsyncMock(return_value={"keep": True})), \
+         patch.object(content_agent, "fetch_article",
+                      new=AsyncMock(return_value=("body", True))), \
+         patch.object(content_agent, "search_corroborating",
+                      new=AsyncMock(return_value=[])), \
+         patch.object(content_agent, "review",
+                      new=AsyncMock(return_value={"compliance_passed": True, "rationale": "ok"})), \
+         patch.object(content_agent, "build_draft_item",
+                      new=MagicMock(return_value=MagicMock())):
+
+        # We need to capture items_queued — patch AgentRun to a spy
+        agent_run_instance = MagicMock()
+        agent_run_instance.items_queued = 0
+        # Track items_queued by wrapping: after run completes, pull from agent_run.items_queued
+        # Simpler approach: count calls to build_draft_item (each call = 1 successful persist)
+        build_draft_item_mock = content_agent.build_draft_item
+
+        await run_text_story_cycle(
+            agent_name="test_agent",
+            content_type=content_type,
+            draft_fn=draft_fn,
+            max_count=max_count,
+            source_whitelist=source_whitelist,
+            sort_by=sort_by,
+            dedup_scope=dedup_scope,
+        )
+
+        items_queued = build_draft_item_mock.call_count
+
+    return drafter_saw, items_queued
+
+
 @pytest.mark.asyncio
 async def test_source_whitelist_filters_stories():
     """Only stories whose source_name substring-matches the whitelist reach the drafter."""
@@ -121,7 +218,11 @@ async def test_source_whitelist_filters_stories():
 
 @pytest.mark.asyncio
 async def test_max_count_caps_candidates():
-    """With 5 whitelist-matching stories, max_count=2 keeps only the top 2 by published_at desc."""
+    """With 5 whitelist-matching stories, max_count=2 breaks after the top 2 by published_at desc succeed.
+
+    Rewritten for quick-260423-hq7: sort controls iteration order, break-after-N-successes
+    stops the loop. When all drafts succeed (mock returns real draft), only 2 are seen.
+    """
     whitelist = frozenset({"reuters"})
     stories = [
         _story(1, "Reuters", "2026-04-21T09:00:00Z"),
@@ -130,11 +231,14 @@ async def test_max_count_caps_candidates():
         _story(4, "Reuters", "2026-04-21T11:00:00Z"),  # 2nd newest
         _story(5, "Reuters", "2026-04-21T10:00:00Z"),
     ]
-    drafter_saw = await _run_with_stories(stories, source_whitelist=whitelist, max_count=2)
+    drafter_saw, items_queued = await _run_with_stories_succeeding(
+        stories, source_whitelist=whitelist, max_count=2
+    )
     # Top 2 by published_at desc are story 2 (12:00) + story 4 (11:00).
+    # Sort puts them first; break fires after 2 successes so only those 2 are seen.
     titles = {s["title"] for s in drafter_saw}
-    assert titles == {"Headline 2", "Headline 4"}
-    assert len(drafter_saw) == 2
+    assert titles == {"Headline 2", "Headline 4"}, f"Expected top-2-by-recency, got {titles}"
+    assert items_queued == 2
 
 
 @pytest.mark.asyncio
@@ -159,16 +263,117 @@ async def test_max_count_none_is_noop():
 
 
 # ---------------------------------------------------------------------------
+# New tests for quick-260423-hq7: break-after-N-successes / iterate-past-dedup
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_text_story_cycle_max_count_iterates_past_dedup_hits():
+    """Core regression test for quick-260423-hq7 bug fix.
+
+    The top 3 most-recent stories are dedup-blocked (_is_already_covered_today=True).
+    Stories 4+5 are fresh. With max_count=2, the loop must continue past the
+    dedup hits and draft stories 4+5.
+
+    CURRENT BEHAVIOR (pre-fix): trim keeps stories 1+2 only → loop exits with
+    items_queued=0. This test MUST FAIL before the fix.
+
+    POST-FIX BEHAVIOR: all 5 candidates in list; loop skips 1-3 (dedup blocked),
+    drafts 4+5, breaks after 2nd success.
+    """
+    stories = [
+        _story(1, "Reuters", "2026-04-21T12:00:00Z"),  # newest — dedup blocked
+        _story(2, "Reuters", "2026-04-21T11:00:00Z"),  # 2nd newest — dedup blocked
+        _story(3, "Reuters", "2026-04-21T10:00:00Z"),  # 3rd newest — dedup blocked
+        _story(4, "Reuters", "2026-04-21T09:00:00Z"),  # 4th — fresh
+        _story(5, "Reuters", "2026-04-21T08:00:00Z"),  # 5th — fresh
+    ]
+    # Top 3 (by recency) are dedup-blocked
+    dedup_blocked = frozenset({"Headline 1", "Headline 2", "Headline 3"})
+
+    drafter_saw, items_queued = await _run_with_stories_succeeding(
+        stories,
+        max_count=2,
+        dedup_returns_true_for=dedup_blocked,
+    )
+
+    # draft_fn must have been called only for stories 4 and 5 (the fresh ones)
+    drafted_titles = {s["title"] for s in drafter_saw}
+    assert drafted_titles == {"Headline 4", "Headline 5"}, (
+        f"Expected loop to skip dedup hits and draft stories 4+5, got {drafted_titles}"
+    )
+    assert items_queued == 2, (
+        f"Expected items_queued=2 after iterating past 3 dedup hits, got {items_queued}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_max_count_exhausts_if_insufficient_successes():
+    """When draft_fn returns None for 9/10 stories, the full list is consumed.
+
+    Validates the "no infinite-retry, no artificial padding" exit condition:
+    all 10 stories are attempted, only 1 succeeded, items_queued=1 (not 2).
+    """
+    stories = [
+        _story(i, "Reuters", f"2026-04-21T{i:02d}:00:00Z") for i in range(1, 11)
+    ]
+    # Only Headline 5 returns a real draft; all others return None
+    draft_none_set = frozenset(
+        f"Headline {i}" for i in range(1, 11) if i != 5
+    )
+
+    drafter_saw, items_queued = await _run_with_stories_succeeding(
+        stories,
+        max_count=2,
+        stories_draft_returns_none=draft_none_set,
+    )
+
+    # draft_fn should have been called for all 10 stories (no trim, full exhaust)
+    assert len(drafter_saw) == 10, (
+        f"Expected draft_fn called for all 10 stories, got {len(drafter_saw)}"
+    )
+    # Only 1 draft succeeded — items_queued should be 1, not 2
+    assert items_queued == 1, (
+        f"Expected items_queued=1 (only 1 success out of 10), got {items_queued}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_max_count_none_still_iterates_all():
+    """Regression guard for breaking_news (max_count=None): all 10 stories are drafted.
+
+    With max_count=None, no break is injected. All 10 candidates should reach
+    the drafter and be persisted.
+    """
+    stories = [
+        _story(i, "Reuters", f"2026-04-21T{i:02d}:00:00Z") for i in range(1, 11)
+    ]
+
+    drafter_saw, items_queued = await _run_with_stories_succeeding(
+        stories,
+        max_count=None,  # breaking_news shape
+    )
+
+    assert len(drafter_saw) == 10, (
+        f"max_count=None should draft all 10 candidates, got {len(drafter_saw)}"
+    )
+    assert items_queued == 10, (
+        f"Expected all 10 to be persisted when max_count=None, got {items_queued}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # New tests for quick-260422-of3: sort_by + dedup_scope kwargs
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_sort_by_score_picks_top_by_score():
-    """Covers D-01: sort_by="score" picks top 2 by score desc, not recency.
+    """Covers D-01: sort_by="score" iterates top-2-by-score first and breaks after 2 successes.
 
+    Rewritten for quick-260423-hq7: break-after-N-successes semantics.
     5 stories with scores [3, 9, 5, 9, 7], max_count=2 → drafter sees the two
-    stories with score=9 (indices 2 and 4 here, both with score=9.0).
+    stories with score=9 first (loop breaks after 2nd success).
     """
     stories = [
         _story(1, "Reuters", "2026-04-21T10:00:00Z", score=3.0),
@@ -177,35 +382,42 @@ async def test_sort_by_score_picks_top_by_score():
         _story(4, "Reuters", "2026-04-21T08:00:00Z", score=9.0),
         _story(5, "Reuters", "2026-04-21T12:00:00Z", score=7.0),
     ]
-    drafter_saw = await _run_with_stories(stories, max_count=2, sort_by="score")
+    drafter_saw, items_queued = await _run_with_stories_succeeding(
+        stories, max_count=2, sort_by="score"
+    )
     titles = {s["title"] for s in drafter_saw}
     assert titles == {"Headline 2", "Headline 4"}, f"Expected score=9 stories, got {titles}"
-    assert len(drafter_saw) == 2
+    assert items_queued == 2
 
 
 @pytest.mark.asyncio
 async def test_sort_by_score_breaks_ties_by_recency():
     """Covers D-01 (composite sort): tied scores → fresher published_at wins.
 
+    Rewritten for quick-260423-hq7: break-after-N-successes semantics.
     Two stories both score=9. Story A at 12:00, story B at 09:00. With
-    max_count=1 and sort_by="score", the 12:00 story (more recent) should win.
+    max_count=1 and sort_by="score", the 12:00 story (more recent) should win and break.
     """
     stories = [
         _story(1, "Reuters", "2026-04-21T09:00:00Z", score=9.0),  # older
         _story(2, "Reuters", "2026-04-21T12:00:00Z", score=9.0),  # newer → should win
     ]
-    drafter_saw = await _run_with_stories(stories, max_count=1, sort_by="score")
-    assert len(drafter_saw) == 1
+    drafter_saw, items_queued = await _run_with_stories_succeeding(
+        stories, max_count=1, sort_by="score"
+    )
+    assert len(drafter_saw) == 1, f"Expected break after 1 success, drafter_saw={[s['title'] for s in drafter_saw]}"
     assert drafter_saw[0]["title"] == "Headline 2", (
         "Fresher story (12:00) should win the tie-break — "
         f"got {drafter_saw[0]['title']}"
     )
+    assert items_queued == 1
 
 
 @pytest.mark.asyncio
 async def test_sort_by_default_is_published_at():
     """Covers D-03: omitting sort_by yields identical output to sort_by='published_at'.
 
+    Rewritten for quick-260423-hq7: break-after-N-successes semantics.
     Both calls with 5 stories should produce the same top-2 by recency.
     """
     stories = [
@@ -216,11 +428,15 @@ async def test_sort_by_default_is_published_at():
         _story(5, "Reuters", "2026-04-21T10:00:00Z", score=9.0),
     ]
     # Default (no sort_by) should pick the 2 most recent
-    default_saw = await _run_with_stories(stories, max_count=2)
-    explicit_saw = await _run_with_stories(stories, max_count=2, sort_by="published_at")
+    default_saw, default_queued = await _run_with_stories_succeeding(stories, max_count=2)
+    explicit_saw, explicit_queued = await _run_with_stories_succeeding(
+        stories, max_count=2, sort_by="published_at"
+    )
     assert {s["title"] for s in default_saw} == {s["title"] for s in explicit_saw}
     # Both should be the 2 newest by published_at: story 2 (12:00) + story 4 (11:00)
     assert {s["title"] for s in default_saw} == {"Headline 2", "Headline 4"}
+    assert default_queued == 2
+    assert explicit_queued == 2
 
 
 @pytest.mark.asyncio

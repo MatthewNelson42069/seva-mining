@@ -100,9 +100,12 @@ async def run_text_story_cycle(
                   that returns a draft_content dict or None on failure. The
                   drafter may stash ``_rationale`` and ``_key_data_points`` on
                   the returned dict; the pipeline pops these before persistence.
-        max_count: If not None, cap candidates to the top N AFTER the whitelist
-                   filter. Sort order is determined by ``sort_by``.
-                   None (default) = no cap — existing behavior.
+        max_count: If not None, break out of the draft loop after N successful
+                   compliance-passing persists. Iteration order is set by
+                   ``sort_by`` so the loop evaluates best-first. None (default)
+                   = iterate all candidates (existing breaking_news behavior).
+                   (quick-260423-hq7: changed from pre-loop trim to post-persist
+                   break so dedup-blocked stories do not consume the cap.)
         source_whitelist: If not None, drop candidates whose source_name does not
                           contain (case-insensitive) any pattern in the set.
                           None (default) = no filter — existing behavior.
@@ -172,9 +175,13 @@ async def run_text_story_cycle(
                     agent_name, before, len(candidates), before - len(candidates),
                 )
 
-            # Cap to top max_count after whitelist. Opt-in via max_count kwarg;
-            # None (default) = no cap. Sort key picked by sort_by kwarg (D-01/D-03).
-            if max_count is not None and len(candidates) > max_count:
+            # When max_count is set, sort candidates so the loop processes best-first
+            # (per sort_by). The break-after-N-successes is applied INSIDE the loop
+            # after a successful persist — no pre-loop slice. This ensures that if
+            # the top N are dedup-blocked, the loop continues to candidates N+1, N+2,
+            # ... until max_count successes OR the candidate list is exhausted
+            # (quick-260423-hq7).
+            if max_count is not None and len(candidates) > 1:
                 if sort_by == "score":
                     # D-01: composite sort — score desc, published_at desc tiebreaker.
                     candidates.sort(
@@ -186,10 +193,9 @@ async def run_text_story_cycle(
                     )
                 else:
                     candidates.sort(key=lambda s: s.get("published_at", ""), reverse=True)
-                candidates = candidates[:max_count]
                 logger.info(
-                    "%s: max_count cap: trimmed to top %d by %s",
-                    agent_name, max_count, sort_by,
+                    "%s: sorted %d candidates by %s (max_count=%d, break-after-N)",
+                    agent_name, len(candidates), sort_by, max_count,
                 )
 
             if not candidates:
@@ -301,6 +307,12 @@ async def run_text_story_cycle(
                             agent_name, content_type, story["title"][:60],
                             float(story.get("score", 0.0)),
                         )
+                        if max_count is not None and items_queued >= max_count:
+                            logger.info(
+                                "%s: reached max_count=%d successful drafts — exiting loop",
+                                agent_name, max_count,
+                            )
+                            break
                     else:
                         logger.warning(
                             "%s: compliance blocked %s '%s' — reason=%s",
