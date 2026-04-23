@@ -47,6 +47,7 @@ CONFIG_DEFAULTS = [
     ("gold_history_used_topics",          "[]"),
     ("content_gold_gate_enabled",            "true"),
     ("content_gold_gate_model",              "claude-haiku-4-5"),
+    ("content_bearish_filter_enabled",       "true"),
 ]
 
 

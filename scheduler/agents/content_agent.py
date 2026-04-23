@@ -378,22 +378,30 @@ async def is_gold_relevant_or_systemic_shock(
     Bucket A: Directly about gold/precious metals/gold mining macro/sector → keep.
     Bucket B: Systemic financial/geopolitical shock plausibly moving gold → keep.
     Bucket C: Primary subject is a specific gold/mining company → reject (nnh rule).
+    Bucket D: Gold-relevant but bearish-toward-gold sentiment → reject (new J7X rule).
     Everything else (off-topic, listicles, stock picks) → reject.
 
     Return shape:
-        {"keep": bool, "reject_reason": str | None, "company": str | None}
+        {"keep": bool, "reject_reason": str | None, "company": str | None, "sentiment": str | None}
+
+    New reject_reason value:
+        - "bearish_toward_gold"  (sentiment="bearish" from Haiku, when bearish filter on)
 
     Fail-open: API errors or malformed JSON return {"keep": True, ...} so infra
     blips never silence real gold stories.
     Bypassed when config key content_gold_gate_enabled is False.
+    Bearish check alone bypassed when content_bearish_filter_enabled is False.
 
-    Requirements: NNH-01, NNH-02, NNH-03, NNH-04, NNH-05.
+    Requirements: NNH-01, NNH-02, NNH-03, NNH-04, NNH-05, J7X-01, J7X-02, J7X-03, J7X-04, J7X-05, J7X-06.
     """
-    _KEEP = {"keep": True, "reject_reason": None, "company": None}
+    _KEEP = {"keep": True, "reject_reason": None, "company": None, "sentiment": None}
 
     enabled_str = config.get("content_gold_gate_enabled", "true")
     if str(enabled_str).lower() in ("false", "0", "no"):
         return _KEEP
+
+    bearish_enabled_str = config.get("content_bearish_filter_enabled", "true")
+    bearish_filter_on = str(bearish_enabled_str).lower() not in ("false", "0", "no")
 
     title = story.get("title", "")
     summary = story.get("summary", "")
@@ -417,7 +425,7 @@ async def is_gold_relevant_or_systemic_shock(
                 "- A story that CITES a financial institution (Goldman Sachs, BlackRock, "
                 "JPMorgan, Morgan Stanley, World Gold Council, IMF, Federal Reserve, "
                 "central banks) as a SOURCE providing a forecast, data, or analysis — "
-                "these are sources, not subjects. Their presence does NOT trigger rejection.\n\n"
+                "these are sources, not subjects. Their presence does NOT trigger is_gold_relevant=false rejection — but the forecast's direction still determines sentiment (a bearish forecast from Goldman/Morgan Stanley yields sentiment=bearish and is rejected by the bearish filter).\n\n"
                 "REJECT — primary_subject_is_specific_miner "
                 "(is_gold_relevant=true but primary_subject_is_specific_miner=true) if the story "
                 "is primarily about a single gold/mining company's own news: drilling results, "
@@ -430,6 +438,22 @@ async def is_gold_relevant_or_systemic_shock(
                 "'Barrick acquires Kinross in $8B deal' (Barrick+Kinross), "
                 "'Newmont posts record Q2, raises guidance' (Newmont), "
                 "'Seva Mining hits 12g/t gold at Timmins drill hole 42' (Seva Mining).\n\n"
+                "REJECT — bearish_toward_gold\n"
+                "(is_gold_relevant=true but sentiment=\"bearish\") if the story's angle\n"
+                "is negative toward gold or its price. Three categories:\n"
+                "  1. Price-bearish forecasts or predictions: analyst cuts gold price\n"
+                "     target, bank downgrades gold outlook, \"expect pullback/correction\"\n"
+                "     framing. Example: \"Morgan Stanley cuts gold price forecast by ~10%\".\n"
+                "  2. Anti-gold narrative: gold dismissed in favor of alternatives,\n"
+                "     gold losing relevance/appeal, bitcoin/crypto replacing gold.\n"
+                "     Example: \"Bitcoin replaces gold as reserve asset of choice\".\n"
+                "  3. Factual-negative price movement: gold fell / dropped / slumped /\n"
+                "     pulled back. Example: \"Gold fell 1.2% today on stronger dollar\".\n"
+                "DIRECTION matters, not the word \"forecast\": upside forecasts\n"
+                "(\"Goldman sees gold at $4K\") are sentiment=\"bullish\" and KEPT.\n"
+                "Neutral factual (\"gold hits new record high\") is sentiment=\"neutral\"\n"
+                "and KEPT.\n"
+                "Mixed or flat movement stories (\"gold holds steady\", \"gold flat\", \"gold mixed\") are sentiment=\"neutral\" and KEPT.\n\n"
                 "REJECT — not_gold_relevant "
                 "(is_gold_relevant=false) for:\n"
                 "- Listicles or rankings of gold stocks "
@@ -448,7 +472,8 @@ async def is_gold_relevant_or_systemic_shock(
                 "Respond with ONLY a compact JSON object, no other text:\n"
                 '{"is_gold_relevant": true|false, '
                 '"primary_subject_is_specific_miner": true|false, '
-                '"company": null|"<company name if primary_subject_is_specific_miner is true>"}'
+                '"company": null|"<company name if primary_subject_is_specific_miner is true>", '
+                '"sentiment": "bullish"|"neutral"|"bearish"}'
             ),
             messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
         )
@@ -474,15 +499,32 @@ async def is_gold_relevant_or_systemic_shock(
         if not company:
             company = None
 
+        sentiment_raw = parsed.get("sentiment")
+        sentiment = str(sentiment_raw).strip().lower() if sentiment_raw else None
+        if sentiment not in ("bullish", "neutral", "bearish"):
+            sentiment = None  # defensive: unknown → treat as missing (fail-open on this axis)
+
         if not is_gold:
-            return {"keep": False, "reject_reason": "not_gold_relevant", "company": None}
+            return {"keep": False, "reject_reason": "not_gold_relevant", "company": None, "sentiment": sentiment}
         if is_specific_miner:
             return {
                 "keep": False,
                 "reject_reason": "primary_subject_is_specific_miner",
                 "company": company,
+                "sentiment": sentiment,
             }
-        return _KEEP
+        if bearish_filter_on and sentiment == "bearish":
+            logger.info(
+                "Gold gate rejected bearish-toward-gold: %r (sentiment=bearish)",
+                title[:60],
+            )
+            return {
+                "keep": False,
+                "reject_reason": "bearish_toward_gold",
+                "company": None,
+                "sentiment": "bearish",
+            }
+        return {"keep": True, "reject_reason": None, "company": None, "sentiment": sentiment}
 
     except Exception as exc:  # noqa: BLE001
         logger.warning(

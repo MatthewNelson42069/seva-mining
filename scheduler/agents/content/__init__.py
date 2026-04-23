@@ -216,6 +216,7 @@ async def run_text_story_cycle(
             gate_config = {
                 "content_gold_gate_enabled": "true",
                 "content_gold_gate_model": "claude-haiku-4-5",
+                "content_bearish_filter_enabled": "true",
             }
 
             drafted_count = 0
