@@ -60,7 +60,7 @@ async def list_queue(
     Filterable by:
     - platform (e.g. "content")
     - status (pending, approved, rejected, ...)
-    - content_type (breaking_news, thread, long_form, quote, infographic,
+    - content_type (breaking_news, thread, quote, infographic,
       gold_media, gold_history) — filters via the JSONB link
       draft_items.engagement_snapshot->>'content_bundle_id' ↔
       content_bundles.id::text (there is no direct FK, see

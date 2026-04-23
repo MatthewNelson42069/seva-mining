@@ -223,12 +223,13 @@ async def test_classify_format_lightweight_clamps_invalid_output():
 
 
 def test_classify_format_lightweight_returns_sub_agent_filter_strings():
-    """The classifier's valid_formats set MUST match the 5 CONTENT_TYPE strings
-    that text-story sub-agents filter on (per RESEARCH pitfall #6)."""
+    """The classifier's valid_formats set MUST match the 4 CONTENT_TYPE strings
+    that text-story sub-agents filter on (quick-260423-k8n: long_form removed)."""
     import inspect
     source = inspect.getsource(content_agent.classify_format_lightweight)
-    for expected in ("breaking_news", "thread", "long_form", "infographic", "quote"):
+    for expected in ("breaking_news", "thread", "infographic", "quote"):
         assert f'"{expected}"' in source, f"missing classifier label {expected}"
+    assert '"long_form"' not in source, "long_form should have been removed from classifier"
 
 
 # ---------------------------------------------------------------------------

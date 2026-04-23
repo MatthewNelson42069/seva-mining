@@ -199,7 +199,7 @@ async def run_draft_cycle() -> None:
     - source_whitelist=REPUTABLE_SOURCES: tier-1 financial + gold-specialist
       + institutional sources only (mos)
     - dedup_scope="same_type": allow reuse of stories already drafted by
-      breaking_news / threads / long_form; dedup only against other quotes
+      breaking_news / threads; dedup only against other quotes
       within the same day (d30). Mirrors the independence model already
       applied to sub_infographics (of3), sub_gold_media, and sub_gold_history.
     """

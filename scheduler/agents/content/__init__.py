@@ -1,8 +1,8 @@
 """Content sub-agents package — one module per content_type (quick-260421-eoe).
 
-The 7 sub-agents (breaking_news, threads, long_form, quotes, infographics,
+The 6 sub-agents (breaking_news, threads, quotes, infographics,
 gold_media, gold_history) each expose ``run_draft_cycle()`` and a
-``CONTENT_TYPE`` constant. 5 of the 7 text-story sub-agents share the same
+``CONTENT_TYPE`` constant. 4 of the 6 text-story sub-agents share the same
 fetch → filter → gold-gate → deep-research → draft → review → persist flow,
 factored here into ``run_text_story_cycle(...)`` so each sub-agent module
 only needs to supply a single-format drafter.
@@ -11,6 +11,8 @@ only needs to supply a single-format drafter.
 tweepy client, and historical-story picker with used-topics guard,
 respectively) and implement ``run_draft_cycle()`` directly without calling
 into this helper.
+
+quick-260423-k8n: sub_long_form removed — topology reduced from 7 to 6 sub-agents.
 """
 from __future__ import annotations
 
@@ -89,7 +91,7 @@ async def run_text_story_cycle(
 ) -> None:
     """Shared fetch → filter → draft → review → persist pipeline.
 
-    Used by 5 of the 7 sub-agents (breaking_news, threads, long_form, quotes,
+    Used by 4 of the 6 sub-agents (breaking_news, threads, quotes,
     infographics). The other 2 (gold_media, gold_history) implement
     ``run_draft_cycle()`` directly.
 
@@ -111,7 +113,7 @@ async def run_text_story_cycle(
                           None (default) = no filter — existing behavior.
         sort_by: Determines the sort key used when ``max_count`` trims candidates.
                  "published_at" (default) = most recent first — preserves existing
-                 behavior for breaking_news, threads, long_form, quotes.
+                 behavior for breaking_news, threads, quotes.
                  "score" = composite (score desc, published_at desc) so the
                  highest-quality stories win and ties break toward recency (D-01).
                  Default preserves byte-for-byte identical behavior for the 4

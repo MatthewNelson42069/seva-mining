@@ -87,16 +87,6 @@ describe('PerAgentQueuePage', () => {
     })
   })
 
-  it('renders the Long-form tab and queries with contentType=long_form', async () => {
-    renderAt('/agents/long-form')
-    await screen.findByText('Long-form Queue')
-    await waitFor(() => {
-      expect(mockGetQueue).toHaveBeenCalledWith(
-        expect.objectContaining({ platform: 'content', contentType: 'long_form' })
-      )
-    })
-  })
-
   it('renders the Gold Media tab (slug gold-media) and queries with contentType=gold_media', async () => {
     renderAt('/agents/gold-media')
     await screen.findByText('Gold Media Queue')

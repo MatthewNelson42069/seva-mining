@@ -9,7 +9,6 @@ import type { DraftItemResponse, DraftAlternative } from '@/api/types'
 import { useContentBundle } from '@/hooks/useContentBundle'
 import { InfographicPreview } from '@/components/content/InfographicPreview'
 import { ThreadPreview } from '@/components/content/ThreadPreview'
-import { LongFormPreview } from '@/components/content/LongFormPreview'
 import { BreakingNewsPreview } from '@/components/content/BreakingNewsPreview'
 import { QuotePreview } from '@/components/content/QuotePreview'
 import { GoldMediaPreview } from '@/components/content/GoldMediaPreview'
@@ -24,7 +23,6 @@ interface ContentDetailModalProps {
 const FORMAT_RENDERERS: Record<string, true> = {
   infographic: true,
   thread: true,
-  long_form: true,
   breaking_news: true,
   quote: true,
   gold_media: true,
@@ -123,8 +121,6 @@ function renderForFormat(contentType: string, bundle: BundleData) {
       return <InfographicPreview draft={draft} />
     case 'thread':
       return <ThreadPreview draft={draft} />
-    case 'long_form':
-      return <LongFormPreview draft={draft} />
     case 'breaking_news':
       return <BreakingNewsPreview draft={draft} />
     case 'quote':

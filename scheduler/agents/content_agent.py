@@ -13,7 +13,7 @@ call into. It exposes:
 - ``review(draft)``: Haiku compliance gate. Pure function over a draft dict;
   no DB I/O. Returns ``{"compliance_passed": bool, "rationale": str}``.
 - ``classify_format_lightweight(story, *, client)``: Retained helper export.
-  Returns one of ``breaking_news | thread | long_form | infographic | quote``.
+  Returns one of ``breaking_news | thread | infographic | quote``.
 
 Sub-agents are responsible for the per-story deep research + drafting + persistence.
 This module also keeps a handful of shared helpers the sub-agents call directly:
@@ -211,11 +211,11 @@ async def classify_format_lightweight(story: dict, *, client) -> str:
     Uses claude-haiku-4-5 (cheap) — full Sonnet format+draft call happens
     later only for the top-N selected stories.
 
-    Returns one of: breaking_news | thread | long_form | infographic | quote.
+    Returns one of: breaking_news | thread | infographic | quote.
     Fail-open: returns "thread" (current ambiguous default) on any error or
     unexpected output.
     """
-    valid_formats = {"breaking_news", "thread", "long_form", "infographic", "quote"}
+    valid_formats = {"breaking_news", "thread", "infographic", "quote"}
     try:
         response = await client.messages.create(
             model="claude-haiku-4-5",
@@ -228,7 +228,7 @@ async def classify_format_lightweight(story: dict, *, client) -> str:
                     f"Summary: {story.get('summary', '')[:500]}\n"
                     f"Published: {story.get('published', '')}\n\n"
                     "Which content format best fits? Choose exactly one: "
-                    "breaking_news | thread | long_form | infographic | quote. "
+                    "breaking_news | thread | infographic | quote. "
                     "Reply with ONLY the format name."
                 ),
             }],
@@ -583,9 +583,6 @@ def build_draft_item(content_bundle, rationale: str):
         else:
             draft_text = str(tweets)
 
-    elif fmt == "long_form":
-        draft_text = draft.get("post", "")
-
     elif fmt == "infographic":
         caption = draft.get("twitter_caption", "")
         if not caption:
@@ -677,8 +674,6 @@ def _extract_check_text(draft_content: dict) -> str:
     elif fmt == "thread":
         parts.extend(draft_content.get("tweets", []))
         parts.append(draft_content.get("long_form_post", ""))
-    elif fmt == "long_form":
-        parts.append(draft_content.get("post", ""))
     elif fmt == "infographic":
         parts.append(draft_content.get("twitter_caption", ""))
         parts.append(draft_content.get("suggested_headline", ""))
@@ -875,7 +870,7 @@ async def fetch_stories() -> list[dict]:
         6. Lightweight format classification (``classify_format_lightweight``)
 
     Each story returned includes ``score`` (0-10) and ``predicted_format``
-    (one of breaking_news/thread/long_form/infographic/quote). Sub-agents
+    (one of breaking_news/thread/infographic/quote). Sub-agents
     filter this list by ``predicted_format`` (or by content-type specific
     eligibility rules) before drafting.
 

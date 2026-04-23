@@ -25,9 +25,10 @@ Note (debug 260422-zid): predicted_format is no longer used as a routing gate
 — candidates = list(stories). The predicted_format field on story fixtures here
 is inert / for realism only.
 
-Does NOT re-test the 4 other sub-agents using run_text_story_cycle
-(breaking_news, threads, long_form, infographics) — they pass neither whitelist
+Does NOT re-test the 3 other sub-agents using run_text_story_cycle
+(breaking_news, threads, infographics) — they pass neither whitelist
 kwarg so the None-default no-op tests here cover them by construction.
+quick-260423-k8n: long_form removed from this list (sub_long_form purged).
 """
 import os
 import sys

@@ -1,10 +1,11 @@
 /**
- * Single source of truth for the 7 content sub-agent tabs.
+ * Single source of truth for the 6 content sub-agent tabs.
  *
  * Introduced in quick-260421-eoe when the monolithic Content Agent was
- * split into 7 sub-agents (see scheduler/agents/content/). Sidebar,
+ * split into sub-agents (see scheduler/agents/content/). Sidebar,
  * Router, PerAgentQueuePage, and useQueueCounts all read from this
- * array — adding an 8th sub-agent is a single-line change here.
+ * array — adding a sub-agent is a single-line change here.
+ * quick-260423-k8n: sub_long_form removed, reducing from 7 to 6 sub-agents.
  *
  *  - `slug`          — URL slug used in /agents/:slug
  *  - `contentType`   — DB-native value on content_bundles.content_type
@@ -26,7 +27,6 @@ export interface AgentTab {
 export const CONTENT_AGENT_TABS: AgentTab[] = [
   { slug: 'breaking-news', contentType: 'breaking_news', label: 'Breaking News', priority: 1, agentName: 'sub_breaking_news' },
   { slug: 'threads',       contentType: 'thread',        label: 'Threads',       priority: 2, agentName: 'sub_threads' },
-  { slug: 'long-form',     contentType: 'long_form',     label: 'Long-form',     priority: 3, agentName: 'sub_long_form' },
   { slug: 'quotes',        contentType: 'quote',         label: 'Quotes',        priority: 4, agentName: 'sub_quotes' },
   { slug: 'infographics',  contentType: 'infographic',   label: 'Infographics',  priority: 5, agentName: 'sub_infographics' },
   { slug: 'gold-media',    contentType: 'gold_media',    label: 'Gold Media',    priority: 6, agentName: 'sub_gold_media' },

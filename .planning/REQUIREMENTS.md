@@ -71,7 +71,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CONT-06**: Quality threshold: only the single highest-scoring story above 7.0/10 is selected
 - [x] **CONT-07**: "No story today" flag sent to Senior Agent if nothing clears the threshold
 - [x] **CONT-08**: Deep research pass on selected story: pull full article, find 2-3 corroborating sources via web search, extract key data points
-- [x] **CONT-09**: Format decision logic: long-form article (600-900 words) for complex/data stories, short post/thread for fast-moving news, infographic brief for data-heavy visual stories
+- [x] **CONT-09**: Format decision logic: long-form article (600-900 words) for complex/data stories, short post/thread for fast-moving news, infographic brief for data-heavy visual stories **(long_form format retired 2026-04-23 — see quick 260423-k8n; longer content now rides under threads)**
 - [x] **CONT-10**: Thread format drafted as both a tweet thread (3-5 tweets, each under 280 chars) AND a single long-form X post
 - [x] **CONT-11**: Infographic brief includes headline, 5-8 key stats with sources, suggested visual structure, and full caption text
 - [x] **CONT-12**: Infographic generation using HTML templates for data-heavy pieces and AI image generation for creative/editorial pieces
@@ -121,7 +121,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CREV-03**: All sources listed with links
 - [x] **CREV-04**: Infographic preview when applicable
 - [x] **CREV-05**: Approve to queue for posting
-- [x] **CREV-06**: Content detail modal displays full structured brief for all content formats (infographic, thread, long_form, breaking_news, quote, video_clip) with format-aware rendering
+- [x] **CREV-06**: Content detail modal displays full structured brief for all content formats (infographic, thread, breaking_news, quote, video_clip) with format-aware rendering *(long_form removed 2026-04-23 per quick 260423-k8n — historical rows render via FlatTextFallback)*
 - [x] **CREV-07**: Infographic and quote ContentBundles automatically generate AI-rendered images (4 and 2 respectively) stored in Cloudflare R2
 - [x] **CREV-08**: Rendered images appear in the Content detail modal with skeleton+poll UX and graceful fallback on render failure
 - [x] **CREV-09**: Operator can trigger a fresh image render via a "Regenerate images" button in the modal

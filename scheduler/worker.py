@@ -2,12 +2,12 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-Post quick-260422-vxg, it starts AsyncIOScheduler with 8 jobs:
+Post quick-260423-k8n, it starts AsyncIOScheduler with 7 jobs:
 
 - morning_digest (daily cron, 08:00 UTC)
-- 3 interval sub-agents on IntervalTrigger — sub_breaking_news every 2h,
-  sub_threads + sub_long_form every 4h — staggered across the 4h window
-  with offsets [0, 17, 34] minutes.
+- 2 interval sub-agents on IntervalTrigger — sub_breaking_news every 2h,
+  sub_threads every 4h — staggered across the 4h window
+  with offsets [0, 17] minutes.
 - 4 cron sub-agents — sub_quotes / sub_infographics / sub_gold_media all
   daily at 12:00 America/Los_Angeles; sub_gold_history every other day
   (``day='*/2'``) at 12:00 America/Los_Angeles.
@@ -45,7 +45,6 @@ from models.config import Config
 from agents.content import (
     breaking_news,
     threads,
-    long_form,
     quotes,
     infographics,
     gold_media,
@@ -83,7 +82,6 @@ JOB_LOCK_IDS: dict[str, int] = {
     "morning_digest":    1005,
     "sub_breaking_news": 1010,
     "sub_threads":       1011,
-    "sub_long_form":     1012,
     "sub_quotes":        1013,
     "sub_infographics":  1014,
     "sub_gold_media":    1015,
@@ -93,15 +91,16 @@ JOB_LOCK_IDS: dict[str, int] = {
 
 # Content sub-agent registration table — interval-scheduled (quick-260422-vxg).
 # Tuple shape: (job_id, run_fn, name, lock_id, offset_minutes, interval_hours).
-# Only 3 news-responsive agents run on interval now: sub_breaking_news every 2h,
-# sub_threads + sub_long_form every 4h. Stagger offsets [0, 17, 34] minutes
-# spread the three across the first 34 minutes of each hour to avoid thundering
+# Only 2 news-responsive agents run on interval now: sub_breaking_news every 2h,
+# sub_threads every 4h. Stagger offsets [0, 17] minutes
+# spread the two across the first 17 minutes of each hour to avoid thundering
 # herds on SerpAPI + Anthropic. The other 4 sub-agents moved to
 # CONTENT_CRON_AGENTS (daily / every-other-day).
+# quick-260423-k8n: sub_long_form removed — topology reduced from 7 to 6 sub-agents.
+# Lock ID 1012 (sub_long_form) retired, not reassigned. Stagger offsets [0,17,34] → [0,17].
 CONTENT_INTERVAL_AGENTS: list[tuple[str, object, str, int, int, int]] = [
     ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0, 2),
     ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17, 4),
-    ("sub_long_form",     long_form.run_draft_cycle,      "Long-form",      1012,  34, 4),
 ]
 
 # Cron-scheduled sub-agents (quick-260422-vxg).
@@ -254,15 +253,17 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 
 
 async def build_scheduler(engine) -> AsyncIOScheduler:
-    """Build the APScheduler instance with 8 jobs registered.
+    """Build the APScheduler instance with 7 jobs registered.
 
     - morning_digest: cron at morning_digest_schedule_hour (default 08:00 UTC).
-    - 3 interval sub-agents: IntervalTrigger with per-agent hours
-      (sub_breaking_news=2, sub_threads=4, sub_long_form=4) and staggered
-      start_date offsets [0, 17, 34] minutes.
+    - 2 interval sub-agents: IntervalTrigger with per-agent hours
+      (sub_breaking_news=2, sub_threads=4) and staggered
+      start_date offsets [0, 17] minutes.
     - 4 cron sub-agents: sub_quotes / sub_infographics / sub_gold_media daily
       at 12:00 America/Los_Angeles; sub_gold_history every other day at
       12:00 America/Los_Angeles.
+
+    quick-260423-k8n: sub_long_form removed; 8 jobs → 7 jobs.
 
     Config keys:
     - morning_digest_schedule_hour (default: 8)
@@ -272,7 +273,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     digest_hour = int(cfg["morning_digest_schedule_hour"])
 
     logger.info(
-        "Schedule config: digest=cron(%d:00 UTC), interval_sub_agents=%d jobs (sub_breaking_news=2h, sub_threads=4h, sub_long_form=4h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
+        "Schedule config: digest=cron(%d:00 UTC), interval_sub_agents=%d jobs (sub_breaking_news=2h, sub_threads=4h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
         digest_hour, len(CONTENT_INTERVAL_AGENTS), len(CONTENT_CRON_AGENTS),
     )
 

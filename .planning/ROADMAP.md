@@ -22,12 +22,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **~~Phase 4: Twitter Agent~~** - **DEPRECATED 2026-04-20 — see quick task `260420-sn9`.** Originally shipped 2026-04-02 as X API v2 monitoring with engagement scoring, dual-format drafting, and monthly quota counter. Purged because X API Basic tier ($100/mo) spend was not justified when Content Agent's news pipeline produced higher-signal drafts.
 - [ ] **~~Phase 5: Senior Agent Core~~** - **DEPRECATED 2026-04-20 — see quick task `260420-sn9`.** Never fully executed. Story fingerprint dedup + 15-item queue cap + expiry sweep are no longer relevant in a single-agent system; the Content Agent has its own cross-run dedup. The `morning_digest` slice is retained under Phase 10 as a trimmed cron job.
 - [ ] **~~Phase 6: Instagram Agent~~** - **DEPRECATED 2026-04-19. Never executed. Retained for historical context only.** Apify scraper integration, per-hashtag baseline tracking, retry/health logic, comment draft alternatives with compliance checker
-- [x] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), dual-platform output (Twitter + Instagram), cross-run dedup, 12pm midday run, bi-weekly Gold History agent, compliance checker (completed 2026-04-07)
+- [x] **Phase 7: Content Agent** - RSS and SerpAPI ingest, multi-step deep research, 7 content formats (thread, long_form, breaking_news, infographic, video_clip, quote, gold_history), dual-platform output (Twitter + Instagram), cross-run dedup, 12pm midday run, bi-weekly Gold History agent, compliance checker (completed 2026-04-07) — `long_form` format retired 2026-04-23 (quick 260423-k8n)
 - [ ] **Phase 8: Dashboard Views and Digest** - Daily digest view, content review page, full Settings page wired to live DB config
 - [ ] **Phase 9: Agent Execution Polish** - All scoring weights DB-driven and configurable, agent schedule config from Settings, run logs, quota display, graceful failure handling
 
 <!-- Milestone v1.0.1 — Content preview & rendered images -->
-- [x] **Phase 11: Content Preview and Rendered Images** - Full structured content brief rendering in dashboard modal (infographic, thread, long_form, breaking_news, quote, video_clip) via new `/content-bundles/{id}` endpoint, AI-generated rendered images (Nano Banana/Gemini) for infographic + quote formats stored in Cloudflare R2, background render job so agent cron stays fast, modal displays brief + rendered images inline
+- [x] **Phase 11: Content Preview and Rendered Images** - Full structured content brief rendering in dashboard modal (infographic, thread, long_form, breaking_news, quote, video_clip) via new `/content-bundles/{id}` endpoint, AI-generated rendered images (Nano Banana/Gemini) for infographic + quote formats stored in Cloudflare R2, background render job so agent cron stays fast, modal displays brief + rendered images inline — long_form retired 2026-04-23 (quick 260423-k8n)
 
 ## Phase Details
 
@@ -160,7 +160,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Agent runs at 6am and 12pm, pulls content from 8 RSS feeds and 10 SerpAPI keywords, deduplicates by URL and 85% headline similarity, cross-run dedup against today's earlier ContentBundles, and processes all qualifying stories above 7.0/10
   2. When nothing clears 7.0/10 and no video clips or quotes surface, the agent sends a "no story today" flag — no subthreshold story is surfaced
-  3. Each qualifying story undergoes deep research and is drafted in the best-fit format (thread, long_form, breaking_news, infographic, quote) with dual-platform output where applicable
+  3. Each qualifying story undergoes deep research and is drafted in the best-fit format (thread, breaking_news, infographic, quote) with dual-platform output where applicable — historical long_form format retired 2026-04-23 per quick 260423-k8n
   4. Video clips from credible Twitter accounts produce video_clip ContentBundles with quote-tweet captions for both Twitter and Instagram
   5. A separate compliance checker Claude call validates no Seva Mining mention and no financial advice across all content
   6. Gold History Agent runs bi-weekly Sunday, picks an unused story, verifies facts via SerpAPI, produces a 5-7 tweet thread and 4-7 slide Instagram carousel
@@ -244,7 +244,7 @@ Phase 11 opens the v1.0.1 milestone. Scope: upgrade the Content queue detail mod
 **Requirements**: CREV-02 (expansion), plus new requirements to be captured in REQUIREMENTS.md during the phase
 **Success Criteria** (what must be TRUE):
   1. `GET /content-bundles/{id}` returns the full ContentBundle (draft_content JSONB, deep_research, story_headline, sources, rendered_images) for an authenticated operator
-  2. ContentDetailModal fetches the bundle via `engagement_snapshot.content_bundle_id` and renders a format-aware preview: infographic (InfographicPreview — Twitter + Instagram side-by-side, including carousel slides), thread (tweets list + long_form_post), long_form (single post), breaking_news (tweet + optional infographic_brief), quote (twitter_post + instagram_post), video_clip (twitter_caption + instagram_caption); falls back to plain text if bundle fetch fails
+  2. ContentDetailModal fetches the bundle via `engagement_snapshot.content_bundle_id` and renders a format-aware preview: infographic (InfographicPreview — Twitter + Instagram side-by-side, including carousel slides), thread (tweets list + long_form_post), breaking_news (tweet + optional infographic_brief), quote (twitter_post + instagram_post), video_clip (twitter_caption + instagram_caption); falls back to plain text if bundle fetch fails — long_form (single post) [retired 2026-04-23 per quick 260423-k8n]
   3. After the Content Agent commits a bundle whose format is infographic or quote, a background job generates AI-rendered images (3 Instagram carousel slides + 1 Twitter visual = up to 4 images per bundle) via the Nano Banana / Gemini image API and uploads them to Cloudflare R2 under a public URL
   4. Rendered image URLs persist on ContentBundle (new column `rendered_images` JSONB — array of `{url, role}` objects where role ∈ `{instagram_slide_1, instagram_slide_2, instagram_slide_3, twitter_visual}`) via an Alembic migration, and the modal displays them inline alongside the brief
   5. Background render job is independent from the Content Agent cron — agent commits the bundle and returns in <5s; render completes asynchronously within ~2 minutes and the modal auto-refreshes/polls to pick up rendered images
@@ -254,7 +254,7 @@ Phase 11 opens the v1.0.1 milestone. Scope: upgrade the Content queue detail mod
 **Scope decisions locked (from discuss phase):**
 - Image generation: AI (Nano Banana / Gemini), not template-based
 - Storage: Cloudflare R2 (S3-compatible, free egress, public URLs, ~$0.015/GB-mo)
-- Formats rendered: infographic first (3 IG slides + 1 Twitter = 4 images), quote second (1 IG + 1 Twitter = 2 images). Thread, long_form, breaking_news, video_clip skip image rendering (text-only or externally sourced)
+- Formats rendered: infographic first (3 IG slides + 1 Twitter = 4 images), quote second (1 IG + 1 Twitter = 2 images). Thread, breaking_news, video_clip skip image rendering (text-only or externally sourced) — long_form retired 2026-04-23 (quick 260423-k8n)
 - Rendering latency: background job separate from the 2-hour agent cron, so agent throughput stays fast
 
 Plans:

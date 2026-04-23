@@ -74,28 +74,27 @@ async def test_job_exception_does_not_propagate():
 # quick-260421-eoe: 8-job topology
 # ---------------------------------------------------------------------------
 
-def test_sub_agents_total_seven():
-    """Interval + cron sub-agent lists together must still cover all 7 sub-agents (post-vxg: 3 interval + 4 cron)."""
-    assert len(CONTENT_INTERVAL_AGENTS) + len(CONTENT_CRON_AGENTS) == 7
-    assert len(CONTENT_INTERVAL_AGENTS) == 3
+def test_sub_agents_total_six():
+    """Interval + cron sub-agent lists together must cover all 6 sub-agents (post-k8n: 2 interval + 4 cron)."""
+    assert len(CONTENT_INTERVAL_AGENTS) + len(CONTENT_CRON_AGENTS) == 6
+    assert len(CONTENT_INTERVAL_AGENTS) == 2
     assert len(CONTENT_CRON_AGENTS) == 4
 
 
 def test_sub_agent_staggering():
-    """Post quick-260422-vxg: only 3 interval agents remain. Offsets are [0, 17, 34] minutes — Breaking News (2h), Threads + Long-form (4h each)."""
+    """Post quick-260423-k8n: only 2 interval agents remain. Offsets are [0, 17] minutes — Breaking News (2h), Threads (4h)."""
     offsets = [t[4] for t in CONTENT_INTERVAL_AGENTS]
-    assert offsets == [0, 17, 34]
+    assert offsets == [0, 17]
 
 
 def test_sub_agent_lock_ids():
-    """Lock IDs cover 1010-1016 (inclusive) mapped to the sub_* job IDs across both schedule shapes."""
+    """Lock IDs cover active sub_* job IDs across both schedule shapes (sub_long_form/1012 retired per quick-260423-k8n)."""
     sub_entries = {job_id: lock_id for job_id, _, _, lock_id, *_ in CONTENT_INTERVAL_AGENTS}
     for job_id, _, _, lock_id, *_ in CONTENT_CRON_AGENTS:
         sub_entries[job_id] = lock_id
     assert sub_entries == {
         "sub_breaking_news": 1010,
         "sub_threads":       1011,
-        "sub_long_form":     1012,
         "sub_quotes":        1013,
         "sub_infographics":  1014,
         "sub_gold_media":    1015,
@@ -116,23 +115,24 @@ def test_quotes_is_daily_cron():
 
 
 def test_retired_crons_absent_from_job_lock_ids():
-    """content_agent (1003) and gold_history_agent (1009) must NOT appear."""
+    """content_agent (1003), gold_history_agent (1009), and sub_long_form (1012) must NOT appear."""
     assert "content_agent" not in JOB_LOCK_IDS
     assert "gold_history_agent" not in JOB_LOCK_IDS
     assert "twitter_agent" not in JOB_LOCK_IDS
     assert "expiry_sweep" not in JOB_LOCK_IDS
-    # Exactly 8 keys total: morning_digest + 7 sub-agents.
-    assert len(JOB_LOCK_IDS) == 8
+    assert "sub_long_form" not in JOB_LOCK_IDS  # retired per quick-260423-k8n
+    # Exactly 7 keys total: morning_digest + 6 sub-agents.
+    assert len(JOB_LOCK_IDS) == 7
     assert set(JOB_LOCK_IDS.keys()) == {
         "morning_digest",
-        "sub_breaking_news", "sub_threads", "sub_long_form", "sub_quotes",
+        "sub_breaking_news", "sub_threads", "sub_quotes",
         "sub_infographics", "sub_gold_media", "sub_gold_history",
     }
 
 
 @pytest.mark.asyncio
-async def test_scheduler_registers_8_jobs():
-    """build_scheduler() registers exactly 8 jobs with the expected IDs."""
+async def test_scheduler_registers_7_jobs():
+    """build_scheduler() registers exactly 7 jobs with the expected IDs (quick-260423-k8n: sub_long_form removed)."""
     mock_engine = MagicMock()
     with patch("worker._read_schedule_config",
                new=AsyncMock(return_value={"morning_digest_schedule_hour": "8"})):
@@ -143,11 +143,11 @@ async def test_scheduler_registers_8_jobs():
         ids = sorted(j.id for j in jobs)
         expected = sorted([
             "morning_digest",
-            "sub_breaking_news", "sub_threads", "sub_long_form", "sub_quotes",
+            "sub_breaking_news", "sub_threads", "sub_quotes",
             "sub_infographics", "sub_gold_media", "sub_gold_history",
         ])
         assert ids == expected, f"expected {expected}, got {ids}"
-        assert len(jobs) == 8
+        assert len(jobs) == 7
     finally:
         if scheduler.running:
             scheduler.shutdown(wait=False)
@@ -166,12 +166,11 @@ def test_read_schedule_config_has_no_retired_keys():
 
 
 def test_interval_agents_cadences():
-    """Post-vxg interval cadences: BN=2h, Threads=4h, Long-form=4h."""
+    """Post-k8n interval cadences: BN=2h, Threads=4h (sub_long_form removed per quick-260423-k8n)."""
     cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
     assert cadences == {
         "sub_breaking_news": 2,
         "sub_threads":       4,
-        "sub_long_form":     4,
     }
 
 

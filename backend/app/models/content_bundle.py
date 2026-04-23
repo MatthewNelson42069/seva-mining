@@ -14,7 +14,7 @@ class ContentBundle(Base):
     story_headline = Column(Text, nullable=False)
     story_url = Column(Text)
     source_name = Column(String(255))
-    # thread, long_form, infographic, breaking_news, gold_media, quote, gold_history
+    # thread, infographic, breaking_news, gold_media, quote, gold_history
     content_type = Column(String(50))
     score = Column(Numeric(5, 2))
     quality_score = Column(Numeric(5, 2))

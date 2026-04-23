@@ -150,28 +150,6 @@ describe('ContentDetailModal format-aware (mfy pivot)', () => {
     expect(screen.queryByRole('button', { name: /Regenerate images/i })).not.toBeInTheDocument()
   })
 
-  // Test 3 — long_form
-  it('renders LongFormPreview when bundle.content_type === "long_form"', () => {
-    const bundle = makeBundle({
-      content_type: 'long_form',
-      draft_content: {
-        format: 'long_form',
-        post: 'A detailed long-form post about gold markets.',
-      },
-    })
-    mockUseContentBundle.mockReturnValue({
-      data: bundle,
-      isError: false,
-      isLoading: false,
-    } as ReturnType<typeof useContentBundle>)
-
-    renderModal()
-
-    const labels = screen.getAllByText(/LONG-FORM POST/i)
-    expect(labels.length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('A detailed long-form post about gold markets.')).toBeInTheDocument()
-  })
-
   // Test 4 — breaking_news
   it('renders BreakingNewsPreview when bundle.content_type === "breaking_news"', () => {
     const bundle = makeBundle({
