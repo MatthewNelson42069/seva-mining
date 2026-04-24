@@ -558,3 +558,137 @@ async def test_run_notes_captures_skip_reason_when_creds_missing():
     assert isinstance(mock_run.notes, str)
     assert "whatsapp_skipped" in mock_run.notes
     assert "credentials" in mock_run.notes.lower()
+
+
+# ---------------------------------------------------------------------------
+# quick-260424-i8b: _assemble_digest must exclude firehose content types
+# ---------------------------------------------------------------------------
+
+
+def test_assemble_digest_excludes_firehose_content_types():
+    """_assemble_digest with excluded_content_types filters out breaking_news and thread items.
+
+    Seeds mock DB with:
+    - 3 DraftItem rows paired with ContentBundle content_type IN
+      ('breaking_news', 'thread', 'breaking_news') — should be EXCLUDED
+    - 2 DraftItem rows paired with ContentBundle content_type IN
+      ('infographic', 'quote') — should be INCLUDED
+
+    Asserts that yesterday_approved["count"] == 2 (not 5) and top_stories
+    contains only the 2 non-firehose items.
+    """
+    import asyncio
+    import uuid
+    from decimal import Decimal
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, MagicMock
+    from agents.senior_agent import SeniorAgent
+
+    now = datetime.now(timezone.utc)
+
+    # The _assemble_digest method uses mock session.execute() calls in order:
+    # 1. approved count
+    # 2. rejected count
+    # 3. expired count
+    # 4. top_stories
+    # 5. queue snapshot
+    # 6. priority alert
+    #
+    # The filter test: when SeniorAgent is instantiated with
+    # excluded_content_types=frozenset({"breaking_news", "thread"}), the queries
+    # must NOT include breaking_news/thread items. We verify this by checking the
+    # SQL generated includes a subquery/join filtering on content_type.
+    #
+    # Strategy: use a real session mock but capture the SQL statements to assert
+    # the exclusion filter is present in the approved/rejected/expired/top_stories
+    # queries.
+
+    def make_item(item_id, status, score, platform, source_account, rationale, source_url):
+        item = MagicMock()
+        item.id = item_id
+        item.status = status
+        item.score = Decimal(str(score))
+        item.platform = platform
+        item.source_account = source_account
+        item.rationale = rationale
+        item.source_url = source_url
+        item.created_at = now
+        item.expires_at = now
+        item.source_text = None
+        return item
+
+    infographic_item = make_item(
+        uuid.uuid4(), "approved", 8.0, "content", "@InfographicDesk",
+        "Gold mining output up 12% QoQ. Strong performance.", "https://ex.com/infographic1"
+    )
+    quote_item = make_item(
+        uuid.uuid4(), "approved", 7.5, "content", "@QuoteDesk",
+        "Central banks added 100t gold in Q1. Record pace.", "https://ex.com/quote1"
+    )
+
+    mock_session = AsyncMock()
+
+    # Capture which SQL statements are executed so we can verify the filter
+    executed_stmts: list = []
+
+    async def capturing_execute(stmt, *args, **kwargs):
+        executed_stmts.append(stmt)
+        # Return appropriate mock results based on call order
+        call_n = len(executed_stmts)
+        if call_n == 1:  # approved count — should return 2 (only non-firehose)
+            r = MagicMock()
+            r.scalar_one.return_value = 2
+            return r
+        elif call_n == 2:  # rejected count
+            r = MagicMock()
+            r.scalar_one.return_value = 0
+            return r
+        elif call_n == 3:  # expired count
+            r = MagicMock()
+            r.scalar_one.return_value = 0
+            return r
+        elif call_n == 4:  # top_stories
+            r = MagicMock()
+            r.scalars.return_value.all.return_value = [infographic_item, quote_item]
+            return r
+        elif call_n == 5:  # queue snapshot
+            r = MagicMock()
+            r.all.return_value = [("content", 2)]
+            return r
+        else:  # priority alert
+            r = MagicMock()
+            r.scalar_one_or_none.return_value = None
+            return r
+
+    mock_session.execute = capturing_execute
+
+    async def run_test():
+        agent = SeniorAgent(excluded_content_types=frozenset({"breaking_news", "thread"}))
+        return await agent._assemble_digest(mock_session)
+
+    digest = asyncio.run(run_test())
+
+    # The mock returns what the FILTERED DB would return (2 approved, not 5).
+    # The real test is that the SeniorAgent.__init__ accepts the kwarg and
+    # that the SQL statements include the content_type exclusion filter.
+    assert digest["yesterday_approved"]["count"] == 2, (
+        f"Expected approved count 2 (firehose excluded), got {digest['yesterday_approved']['count']}"
+    )
+    assert len(digest["top_stories"]) == 2, (
+        f"Expected 2 top stories (only non-firehose), got {len(digest['top_stories'])}"
+    )
+
+    # Verify filter was applied to SQL — all executed statements should reference
+    # content_type or contain a subquery that excludes firehose content types.
+    # Compile all statements and check for content_type references in the approved/
+    # rejected/expired/top_stories queries (indices 0, 1, 2, 3).
+    assert len(executed_stmts) >= 4, (
+        f"Expected at least 4 execute() calls, got {len(executed_stmts)}"
+    )
+    for i, stmt in enumerate(executed_stmts[:4]):
+        compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+        assert "content_type" in compiled.lower() or "content_bundles" in compiled.lower(), (
+            f"Query {i+1} (approved/rejected/expired/top_stories) must reference "
+            f"content_type or content_bundles for the exclusion filter. "
+            f"Compiled SQL: {compiled[:300]}"
+        )

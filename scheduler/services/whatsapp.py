@@ -99,3 +99,100 @@ async def send_whatsapp_message(message: str) -> str | None:
                 getattr(e2, "msg", str(e2)),
             )
             raise
+
+
+# ---------------------------------------------------------------------------
+# quick-260424-i8b: per-run firehose helpers
+# ---------------------------------------------------------------------------
+
+
+def build_chunks(
+    agent_name: str,
+    items: list[str],
+    max_chunk_chars: int = 1500,
+) -> list[str]:
+    """Build WhatsApp message chunks from a list of approved tweet texts.
+
+    Packs items greedily into chunks up to max_chunk_chars. Never splits an
+    individual item across chunks. Single-chunk output has NO continuation prefix.
+    Multi-chunk output prefixes every chunk with ``[<short_name> X/N]``.
+
+    Args:
+        agent_name: Agent name, e.g. "sub_breaking_news" or "sub_threads".
+            The "sub_" prefix is stripped to produce the short name used in headers.
+        items: List of approved tweet/thread text strings. Empty list → [].
+        max_chunk_chars: Per-chunk character budget (default 1500 — 100-char safety
+            margin below Twilio's 1600-char hard cap).
+
+    Returns:
+        List of message strings ready to send. May be empty if items is empty.
+    """
+    short_name = agent_name.removeprefix("sub_")
+    n = len(items)
+    if n == 0:
+        return []
+
+    header = f"[{short_name}] {n} approved:"
+    blocks = [f"{i}. {text}" for i, text in enumerate(items, start=1)]
+
+    chunks: list[str] = []
+    current = header
+    for block in blocks:
+        tentative = current + "\n\n" + block
+        if len(tentative) <= max_chunk_chars:
+            current = tentative
+        else:
+            chunks.append(current)
+            current = block  # new chunk starts with the block (no repeated header)
+    chunks.append(current)
+
+    if len(chunks) == 1:
+        return chunks
+
+    # Multi-chunk: prefix every chunk with [short_name X/N]
+    total = len(chunks)
+    return [f"[{short_name} {i}/{total}]\n{c}" for i, c in enumerate(chunks, start=1)]
+
+
+async def send_agent_run_notification(
+    agent_name: str,
+    items: list[str],
+    run_id: int,
+) -> list[str]:
+    """Per-run firehose dispatcher for sub_breaking_news and sub_threads.
+
+    Sends one or more WhatsApp messages listing all approved items from this run.
+    Returns a list of Twilio SIDs (one per chunk sent). Empty list if items is
+    empty OR if the first chunk returns None (credentials missing).
+
+    Twilio exceptions propagate to the caller's try/except (content/__init__.py
+    hook) which records failure into agent_run.notes.
+
+    Args:
+        agent_name: Agent name, e.g. "sub_breaking_news".
+        items: List of approved tweet/thread text strings from this run.
+        run_id: The agent_run.id for this run (for logging/tracing).
+
+    Returns:
+        List of Twilio message SIDs, one per chunk dispatched.
+    """
+    if not items:
+        return []
+
+    chunks = build_chunks(agent_name, items)
+    sids: list[str] = []
+    for chunk in chunks:
+        sid = await send_whatsapp_message(chunk)
+        if sid is None:
+            # Credentials missing — don't attempt remaining chunks; return what we have.
+            logger.warning(
+                "send_agent_run_notification: credentials missing for run_id=%s "
+                "(agent=%s), stopping after chunk %d/%d",
+                run_id,
+                agent_name,
+                len(sids) + 1,
+                len(chunks),
+            )
+            return sids
+        sids.append(sid)
+    return sids

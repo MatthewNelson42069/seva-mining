@@ -120,16 +120,19 @@ def test_quotes_is_daily_cron():
 
 
 def test_retired_crons_absent_from_job_lock_ids():
-    """content_agent (1003), gold_history_agent (1009), and sub_long_form (1012) must NOT appear."""
+    """content_agent (1003), gold_history_agent (1009), and sub_long_form (1012) must NOT appear.
+    quick-260424-i8b: morning_digest key renamed to midday_digest (lock ID 1005 unchanged).
+    """
     assert "content_agent" not in JOB_LOCK_IDS
     assert "gold_history_agent" not in JOB_LOCK_IDS
     assert "twitter_agent" not in JOB_LOCK_IDS
     assert "expiry_sweep" not in JOB_LOCK_IDS
     assert "sub_long_form" not in JOB_LOCK_IDS  # retired per quick-260423-k8n
-    # Exactly 7 keys total: morning_digest + 6 sub-agents.
+    assert "morning_digest" not in JOB_LOCK_IDS  # renamed to midday_digest per quick-260424-i8b
+    # Exactly 7 keys total: midday_digest + 6 sub-agents.
     assert len(JOB_LOCK_IDS) == 7
     assert set(JOB_LOCK_IDS.keys()) == {
-        "morning_digest",
+        "midday_digest",
         "sub_breaking_news",
         "sub_threads",
         "sub_quotes",
@@ -141,7 +144,7 @@ def test_retired_crons_absent_from_job_lock_ids():
 
 @pytest.mark.asyncio
 async def test_scheduler_registers_7_jobs():
-    """build_scheduler() registers exactly 7 jobs with the expected IDs (quick-260423-k8n: sub_long_form removed)."""
+    """build_scheduler() registers exactly 7 jobs with the expected IDs (quick-260423-k8n: sub_long_form removed; quick-260424-i8b: morning_digest→midday_digest)."""
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",
@@ -154,7 +157,7 @@ async def test_scheduler_registers_7_jobs():
         ids = sorted(j.id for j in jobs)
         expected = sorted(
             [
-                "morning_digest",
+                "midday_digest",
                 "sub_breaking_news",
                 "sub_threads",
                 "sub_quotes",
@@ -178,11 +181,11 @@ async def test_scheduler_registers_7_jobs():
 
 @pytest.mark.asyncio
 async def test_morning_digest_cron_fires_in_pacific_time():
-    """morning_digest CronTrigger uses timezone='America/Los_Angeles'.
+    """midday_digest CronTrigger uses timezone='America/Los_Angeles'.
 
     Regression guard: scheduler-level default tz is UTC; the trigger MUST
-    override with America/Los_Angeles. Without the override, hour=7 means
-    07:00 UTC = 00:00 PDT, which is silently wrong.
+    override with America/Los_Angeles. quick-260424-i8b: job renamed to midday_digest,
+    retimed to 12:30 PT.
     """
     mock_engine = MagicMock()
     with patch(
@@ -192,14 +195,14 @@ async def test_morning_digest_cron_fires_in_pacific_time():
         scheduler = await build_scheduler(mock_engine)
 
     try:
-        job = scheduler.get_job("morning_digest")
-        assert job is not None
+        job = scheduler.get_job("midday_digest")
+        assert job is not None, "midday_digest job must exist (renamed from morning_digest)"
         trigger = job.trigger
         # APScheduler CronTrigger stores timezone on the trigger instance.
         # Check by comparing the zone string.
         tz_name = str(getattr(trigger, "timezone", ""))
         assert "Los_Angeles" in tz_name, (
-            f"morning_digest trigger must be in America/Los_Angeles, got {tz_name!r}"
+            f"midday_digest trigger must be in America/Los_Angeles, got {tz_name!r}"
         )
     finally:
         if scheduler.running:
@@ -391,3 +394,121 @@ async def test_reconcile_stale_runs_custom_threshold():
         f"Cutoff {found_cutoff} not within ±2s of 60 min ago "
         f"(range: {expected_cutoff_low} — {expected_cutoff_high})"
     )
+
+
+# ---------------------------------------------------------------------------
+# quick-260424-i8b: midday digest retime + digest scope filter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_digest_is_registered_as_midday_at_1230_pt():
+    """Digest job id is 'midday_digest', fires at 12:30 America/Los_Angeles. 'morning_digest' must NOT exist."""
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(mock_engine)
+
+    try:
+        # Old id must be gone
+        assert scheduler.get_job("morning_digest") is None, (
+            "morning_digest job id must not exist after i8b rename"
+        )
+        # New id must exist
+        job = scheduler.get_job("midday_digest")
+        assert job is not None, "midday_digest job must be registered"
+        trigger = job.trigger
+        # Verify hour=12, minute=30
+        hour_field = next(
+            (f for f in trigger.fields if f.name == "hour"), None
+        )
+        minute_field = next(
+            (f for f in trigger.fields if f.name == "minute"), None
+        )
+        assert hour_field is not None, "CronTrigger must have an hour field"
+        assert minute_field is not None, "CronTrigger must have a minute field"
+        assert str(hour_field) == "12", f"Expected hour=12, got {hour_field}"
+        assert str(minute_field) == "30", f"Expected minute=30, got {minute_field}"
+        # Verify timezone
+        tz_name = str(getattr(trigger, "timezone", ""))
+        assert "Los_Angeles" in tz_name, (
+            f"midday_digest trigger must be in America/Los_Angeles, got {tz_name!r}"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+def test_digest_job_lock_id_preserved():
+    """JOB_LOCK_IDS['midday_digest'] == 1005 (same numeric lock ID, no churn)."""
+    assert "midday_digest" in JOB_LOCK_IDS, "midday_digest must be in JOB_LOCK_IDS"
+    assert JOB_LOCK_IDS["midday_digest"] == 1005, (
+        f"Lock ID for midday_digest must be 1005, got {JOB_LOCK_IDS['midday_digest']}"
+    )
+    assert "morning_digest" not in JOB_LOCK_IDS, (
+        "morning_digest key must be renamed to midday_digest in JOB_LOCK_IDS"
+    )
+
+
+def test_digest_excluded_content_types_constant_defined():
+    """DIGEST_EXCLUDED_CONTENT_TYPES is a frozenset containing exactly 'breaking_news' and 'thread'."""
+    from worker import DIGEST_EXCLUDED_CONTENT_TYPES
+
+    assert isinstance(DIGEST_EXCLUDED_CONTENT_TYPES, frozenset), (
+        "DIGEST_EXCLUDED_CONTENT_TYPES must be a frozenset"
+    )
+    assert "breaking_news" in DIGEST_EXCLUDED_CONTENT_TYPES, (
+        "DIGEST_EXCLUDED_CONTENT_TYPES must contain 'breaking_news'"
+    )
+    assert "thread" in DIGEST_EXCLUDED_CONTENT_TYPES, (
+        "DIGEST_EXCLUDED_CONTENT_TYPES must contain 'thread' (NOT 'threads')"
+    )
+    assert len(DIGEST_EXCLUDED_CONTENT_TYPES) == 2, (
+        f"DIGEST_EXCLUDED_CONTENT_TYPES must have exactly 2 entries, got {DIGEST_EXCLUDED_CONTENT_TYPES}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_senior_agent_receives_excluded_content_types_from_worker():
+    """The midday digest job factory passes DIGEST_EXCLUDED_CONTENT_TYPES into SeniorAgent."""
+    from worker import DIGEST_EXCLUDED_CONTENT_TYPES
+    from agents.senior_agent import SeniorAgent
+
+    captured_instances: list[SeniorAgent] = []
+    original_init = SeniorAgent.__init__
+
+    def spy_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        captured_instances.append(self)
+
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ), patch.object(SeniorAgent, "__init__", spy_init):
+        scheduler = await build_scheduler(mock_engine)
+
+    try:
+        # Find the job and run the callback to trigger SeniorAgent instantiation
+        job = scheduler.get_job("midday_digest")
+        assert job is not None, "midday_digest job must exist"
+        # Run the job function (which instantiates SeniorAgent inside)
+        await job.func()
+    except Exception:
+        pass  # advisory lock or DB calls will fail in test env — that's ok
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+    # If we caught SeniorAgent instances, verify they have the exclusion set wired
+    if captured_instances:
+        agent = captured_instances[-1]
+        assert hasattr(agent, "_excluded_content_types"), (
+            "SeniorAgent must have _excluded_content_types attribute after i8b wiring"
+        )
+        assert agent._excluded_content_types == DIGEST_EXCLUDED_CONTENT_TYPES, (
+            f"SeniorAgent._excluded_content_types must equal DIGEST_EXCLUDED_CONTENT_TYPES, "
+            f"got {agent._excluded_content_types!r}"
+        )

@@ -22,6 +22,7 @@ from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.config import Config
+from models.content_bundle import ContentBundle
 from models.daily_digest import DailyDigest
 from models.draft_item import DraftItem
 from services.whatsapp import send_whatsapp_message
@@ -32,8 +33,12 @@ logger = logging.getLogger(__name__)
 class SeniorAgent:
     """Runs the daily morning WhatsApp digest."""
 
-    def __init__(self) -> None:
+    def __init__(self, excluded_content_types: frozenset[str] | None = None) -> None:
         self.settings = get_settings()
+        # quick-260424-i8b: filter breaking_news + thread from digest queries so
+        # the 12:30 PT midday digest does not duplicate the per-run firehose.
+        # Empty frozenset = no filter (back-compat for callers that pass no args).
+        self._excluded_content_types: frozenset[str] = excluded_content_types or frozenset()
 
     # ------------------------------------------------------------------
     # Config helper
@@ -98,8 +103,26 @@ class SeniorAgent:
         )
         yesterday_end = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
 
+        # quick-260424-i8b: build the content_type exclusion subquery once and reuse
+        # across all 4 DraftItem queries. The subquery correlates DraftItem to
+        # ContentBundle via DraftItem.source_url == ContentBundle.story_url (Path A).
+        # Guard: when _excluded_content_types is empty, skip the filter entirely
+        # so existing test code that instantiates SeniorAgent() without args keeps
+        # passing without any SQL change.
+        _firehose_exists_subq = None
+        if self._excluded_content_types:
+            _firehose_exists_subq = (
+                select(1)
+                .select_from(ContentBundle)
+                .where(
+                    ContentBundle.story_url == DraftItem.source_url,
+                    ContentBundle.content_type.in_(self._excluded_content_types),
+                )
+                .exists()
+            )
+
         # --- Yesterday approved count (SENR-08) ---
-        approved_result = await session.execute(
+        _approved_q = (
             select(func.count())
             .select_from(DraftItem)
             .where(
@@ -108,10 +131,13 @@ class SeniorAgent:
                 DraftItem.decided_at < yesterday_end,
             )
         )
+        if _firehose_exists_subq is not None:
+            _approved_q = _approved_q.where(~_firehose_exists_subq)
+        approved_result = await session.execute(_approved_q)
         approved_count = approved_result.scalar_one()
 
         # --- Yesterday rejected count (SENR-08) ---
-        rejected_result = await session.execute(
+        _rejected_q = (
             select(func.count())
             .select_from(DraftItem)
             .where(
@@ -120,10 +146,13 @@ class SeniorAgent:
                 DraftItem.decided_at < yesterday_end,
             )
         )
+        if _firehose_exists_subq is not None:
+            _rejected_q = _rejected_q.where(~_firehose_exists_subq)
+        rejected_result = await session.execute(_rejected_q)
         rejected_count = rejected_result.scalar_one()
 
         # --- Yesterday expired count ---
-        expired_result = await session.execute(
+        _expired_q = (
             select(func.count())
             .select_from(DraftItem)
             .where(
@@ -132,11 +161,14 @@ class SeniorAgent:
                 DraftItem.updated_at < yesterday_end,
             )
         )
+        if _firehose_exists_subq is not None:
+            _expired_q = _expired_q.where(~_firehose_exists_subq)
+        expired_result = await session.execute(_expired_q)
         expired_count = expired_result.scalar_one()
 
         # --- Top 15 gold news stories from last 24 hours (content platform only) ---
         lookback_24h = datetime.now(timezone.utc) - timedelta(hours=24)
-        top_stories_result = await session.execute(
+        _top_stories_q = (
             select(DraftItem)
             .where(
                 DraftItem.platform == "content",
@@ -145,6 +177,9 @@ class SeniorAgent:
             .order_by(DraftItem.score.desc().nullslast())
             .limit(15)
         )
+        if _firehose_exists_subq is not None:
+            _top_stories_q = _top_stories_q.where(~_firehose_exists_subq)
+        top_stories_result = await session.execute(_top_stories_q)
         top_items = top_stories_result.scalars().all()
         top_stories = [
             {
