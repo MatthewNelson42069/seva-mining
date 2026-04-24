@@ -38,6 +38,7 @@ from agents.content import gold_history  # noqa: E402
 # Module surface
 # ---------------------------------------------------------------------------
 
+
 def test_module_surface():
     assert gold_history.CONTENT_TYPE == "gold_history"
     assert gold_history.AGENT_NAME == "sub_gold_history"
@@ -274,3 +275,51 @@ async def test_draft_gold_history_returns_none_on_bad_json():
     }
     draft = await gold_history._draft_gold_history(fact_sheet, client=client)
     assert draft is None
+
+
+# ---------------------------------------------------------------------------
+# T2: pure helpers (no I/O, no async)
+# ---------------------------------------------------------------------------
+
+
+def test_canonicalize_url_lowercases_strips_query_and_trailing_slash():
+    from agents.content.gold_history import _canonicalize_url
+
+    assert _canonicalize_url("https://EXAMPLE.com/Story/") == "https://example.com/story"
+    assert _canonicalize_url("https://example.com/story?utm=abc&x=1") == "https://example.com/story"
+    assert _canonicalize_url("HTTPS://Example.COM/Article?ref=tw/") == "https://example.com/article"
+    # Already canonical: idempotent
+    assert _canonicalize_url("https://example.com/a") == "https://example.com/a"
+
+
+def test_select_historical_gold_queries_deterministic_and_rotates():
+    import random as _random
+    from datetime import date as _date
+
+    from agents.content.gold_history import (
+        HISTORICAL_GOLD_QUERIES,
+        _select_historical_gold_queries,
+    )
+
+    # Length is exactly count (no buffer; CONTEXT locks count=3, buffer=0)
+    result_a = _select_historical_gold_queries(count=3)
+    result_b = _select_historical_gold_queries(count=3)
+    assert result_a == result_b, "Same-day calls must return identical lists"
+    assert len(result_a) == 3
+    assert all(q in HISTORICAL_GOLD_QUERIES for q in result_a)
+    # Rotation across days
+    rng1 = _random.Random(_date(2026, 4, 23).toordinal())
+    s1 = list(HISTORICAL_GOLD_QUERIES)
+    rng1.shuffle(s1)
+    rng2 = _random.Random(_date(2026, 4, 24).toordinal())
+    s2 = list(HISTORICAL_GOLD_QUERIES)
+    rng2.shuffle(s2)
+    assert s1[:3] != s2[:3], "Different days must produce different orderings"
+
+
+def test_historical_gold_queries_list_shape():
+    from agents.content.gold_history import HISTORICAL_GOLD_QUERIES
+
+    assert isinstance(HISTORICAL_GOLD_QUERIES, list)
+    assert len(HISTORICAL_GOLD_QUERIES) >= 10, "Need enough queries for meaningful rotation"
+    assert all(isinstance(q, str) and q.strip() for q in HISTORICAL_GOLD_QUERIES)

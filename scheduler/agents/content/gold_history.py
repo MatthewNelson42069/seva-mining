@@ -48,6 +48,58 @@ AGENT_NAME: str = "sub_gold_history"
 # Gold History is curated content — fixed baseline score (parity with pre-split).
 GOLD_HISTORY_SCORE = 8.0
 
+# ---------------------------------------------------------------------------
+# Online-fetch plumbing (quick-260424-e37) — replaces curated JSON pool.
+# ---------------------------------------------------------------------------
+
+HISTORICAL_GOLD_QUERIES: list[str] = [
+    "famous gold rushes in history",
+    "gold standard history Bretton Woods Nixon",
+    "biggest gold mining discoveries historical",
+    "historical gold price cycles 1970s 1980s",
+    "central bank gold repatriation Germany Venezuela history",
+    "gold mining disasters historical events",
+    "Hunt brothers silver gold corner 1980",
+    "Klondike Yukon gold rush history",
+    "Witwatersrand South Africa gold discovery 1886",
+    "gold confiscation Roosevelt executive order 6102",
+    "SPDR Gold ETF GLD launch history",
+    "LBMA gold fix scandal history",
+]
+
+
+def _canonicalize_url(url: str) -> str:
+    """Canonicalize a URL for all-time dedup.
+
+    Rule (quick-260424-e37): lowercase, strip the query string (and fragment),
+    strip any trailing slash. Idempotent. Pure function — easy to unit test.
+    """
+    lowered = url.lower()
+    # split off query + fragment at the first '?' or '#'
+    for sep in ("?", "#"):
+        if sep in lowered:
+            lowered = lowered.split(sep, 1)[0]
+    return lowered.rstrip("/")
+
+
+def _select_historical_gold_queries(count: int = 3) -> list[str]:
+    """Pick `count` queries with a day-seeded deterministic shuffle.
+
+    Rotation strategy (quick-260424-e37): seed random.Random with
+    date.today().toordinal() so every invocation on the same day returns the
+    same list, but the list differs across consecutive days. Clamped to
+    len(HISTORICAL_GOLD_QUERIES). Mirrors sub_infographics._select_analytical_queries
+    (quick-260423-lvp) — same day-seeded pattern, zero shared state.
+    """
+    import random as _random  # noqa: PLC0415 — local import keeps module surface minimal
+    from datetime import date as _date  # noqa: PLC0415
+
+    count = min(count, len(HISTORICAL_GOLD_QUERIES))
+    rng = _random.Random(_date.today().toordinal())
+    shuffled = list(HISTORICAL_GOLD_QUERIES)
+    rng.shuffle(shuffled)
+    return shuffled[:count]
+
 
 async def _get_used_topics(session: AsyncSession) -> list[str]:
     """Read used Gold History story slugs from Config.
