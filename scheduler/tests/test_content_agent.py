@@ -54,16 +54,24 @@ def test_rss_feeds_constant_preserved():
 
 
 def test_serpapi_keywords_constant_preserved():
-    """SERPAPI_KEYWORDS is preserved (CONT-03)."""
-    assert len(content_agent.SERPAPI_KEYWORDS) == 18
+    """SERPAPI_KEYWORDS is preserved (CONT-03).
+
+    quick-260424-j5i D8: count drops 18 → 17 after removing the unhyphenated
+    rare-earth keyword.
+    """
+    assert len(content_agent.SERPAPI_KEYWORDS) == 17
     assert "gold price" in content_agent.SERPAPI_KEYWORDS
 
 
 def test_serpapi_keywords_critical_minerals_coverage():
-    """New keywords for critical-minerals + sovereign-gold coverage (htu)."""
+    """New keywords for critical-minerals + sovereign-gold coverage (htu).
+
+    quick-260424-j5i D8: the unhyphenated rare-earth keyword was removed because
+    it pulled too many off-theme policy pieces. Remaining 7 htu additions still
+    cover critical-minerals + sovereign-gold without that noise.
+    """
     required = [
         "critical minerals",
-        "rare earth restrictions",
         "strategic metals",
         "sovereign wealth fund gold",
         "treasury gold sale",
@@ -94,9 +102,9 @@ def test_serpapi_keywords_existing_preserved():
 
 
 def test_serpapi_keywords_total_count_and_unique():
-    """Total = 18, no duplicates (htu)."""
-    assert len(content_agent.SERPAPI_KEYWORDS) == 18
-    assert len(set(content_agent.SERPAPI_KEYWORDS)) == 18
+    """Total = 17, no duplicates (quick-260424-j5i D8 dropped one from htu's 18)."""
+    assert len(content_agent.SERPAPI_KEYWORDS) == 17
+    assert len(set(content_agent.SERPAPI_KEYWORDS)) == 17
 
 
 def test_rss_feeds_reuters_dropped_bnn_added():
@@ -597,3 +605,26 @@ async def test_fetch_analytical_historical_stories_handles_no_client():
         stories = await content_agent.fetch_analytical_historical_stories(["gold during wars"])
 
     assert stories == []
+
+
+# ---------------------------------------------------------------------------
+# recency_score — quick-260424-j5i D3: new <48h=0.3 bucket
+# ---------------------------------------------------------------------------
+
+
+def test_recency_score_48h_bucket():
+    """D3 (j5i): recency_score grows a <48h=0.3 bucket between <24h=0.4 and >=48h=0.2.
+
+    - 25h old  → 0.3 (previously 0.2 — new softer bucket)
+    - 47h old  → 0.3 (inside new bucket)
+    - 49h old  → 0.2 (floor unchanged)
+    Bucket-below (22h) and bucket-above (>=48h) assertions lock both edges.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    assert content_agent.recency_score(now - timedelta(hours=25)) == 0.3
+    assert content_agent.recency_score(now - timedelta(hours=47)) == 0.3
+    assert content_agent.recency_score(now - timedelta(hours=49)) == 0.2
+    # Sanity-preserve <24h edge unaffected by the new bucket.
+    assert content_agent.recency_score(now - timedelta(hours=22)) == 0.4

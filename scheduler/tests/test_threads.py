@@ -86,3 +86,46 @@ async def test_run_draft_cycle_completes_with_stories():
         await threads.run_draft_cycle()
 
     assert session.commit.await_count >= 2
+
+
+# ---------------------------------------------------------------------------
+# quick-260424-j5i — min_score constant + selection kwargs propagation
+# ---------------------------------------------------------------------------
+
+
+def test_threads_min_score_constant():
+    """j5i D2: THREADS_MIN_SCORE is a module-level tunable at 6.5."""
+    assert threads.THREADS_MIN_SCORE == 6.5
+
+
+@pytest.mark.asyncio
+async def test_threads_passes_selection_kwargs():
+    """j5i D1+D2: run_draft_cycle passes max_count=2, sort_by='score',
+    min_score=THREADS_MIN_SCORE (=6.5) through to run_text_story_cycle.
+    max_count=2 is preserved from the zid cap; sort_by flips from the default
+    published_at to score; min_score is new.
+    """
+    call_kwargs: dict = {}
+
+    async def fake_cycle(**kwargs):
+        call_kwargs.update(kwargs)
+        return 0
+
+    with patch(
+        "agents.content.threads.run_text_story_cycle",
+        new=AsyncMock(side_effect=fake_cycle),
+    ):
+        await threads.run_draft_cycle()
+
+    assert call_kwargs.get("agent_name") == "sub_threads"
+    assert call_kwargs.get("content_type") == "thread"
+    assert callable(call_kwargs.get("draft_fn"))
+    assert call_kwargs.get("max_count") == 2, (
+        f"Expected max_count=2, got {call_kwargs.get('max_count')}"
+    )
+    assert call_kwargs.get("sort_by") == "score", (
+        f"Expected sort_by='score', got {call_kwargs.get('sort_by')}"
+    )
+    assert call_kwargs.get("min_score") == 6.5, (
+        f"Expected min_score=6.5, got {call_kwargs.get('min_score')}"
+    )

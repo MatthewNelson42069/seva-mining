@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 CONTENT_TYPE: str = "thread"
 AGENT_NAME: str = "sub_threads"
 
+# quick-260424-j5i D2: composite-score floor for the "top-of-top" cut. Mirror of
+# BREAKING_NEWS_MIN_SCORE — see sibling module for rationale. 50% retention on
+# live DB over a 7-day compliance_passed sample (j5i research Q5).
+THREADS_MIN_SCORE: float = 6.5
+
 
 async def _draft(
     story: dict,
@@ -115,13 +120,17 @@ Respond in valid JSON with this structure:
 async def run_draft_cycle() -> None:
     """Single-tick pipeline: fetch → draft → review → write.
 
-    max_count=2: now that all stories are eligible (no predicted_format gate),
-    cap at top 2 by recency to avoid excessive Claude spend per cycle
-    (debug 260422-zid fix).
+    max_count=2: the zid cap is preserved — threads remain a lower-cadence
+    surface than breaking_news. quick-260424-j5i D1+D2: sort flipped from
+    published_at (recency) to "score" (composite) so the best 2 stories win
+    by quality, not just freshness; THREADS_MIN_SCORE=6.5 floor applied so
+    floored items persist a bundle but skip the DraftItem.
     """
     await run_text_story_cycle(
         agent_name=AGENT_NAME,
         content_type=CONTENT_TYPE,
         draft_fn=_draft,
         max_count=2,
+        sort_by="score",
+        min_score=THREADS_MIN_SCORE,
     )

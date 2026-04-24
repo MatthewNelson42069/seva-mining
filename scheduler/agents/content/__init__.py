@@ -90,6 +90,7 @@ async def run_text_story_cycle(
     source_whitelist: frozenset[str] | None = None,
     sort_by: Literal["published_at", "score"] = "published_at",
     dedup_scope: Literal["cross_agent", "same_type"] = "cross_agent",
+    min_score: float | None = None,
 ) -> int:
     """Shared fetch → filter → draft → review → persist pipeline.
 
@@ -134,6 +135,16 @@ async def run_text_story_cycle(
                      drafted by breaking_news (D-02).
                      Default preserves byte-for-byte identical behavior for the 4
                      other callers that do not pass this kwarg.
+        min_score: quick-260424-j5i D2/D6. If not None, stories whose composite
+                   ``story["score"]`` is below this threshold skip DraftItem
+                   creation but still persist a ContentBundle row (for forensics
+                   and so the breaking_news+threads rich-telemetry payload can
+                   surface the "floored_by_min_score" counter). Check fires AFTER
+                   Haiku gate + compliance review pass (cost of those calls is
+                   negligible relative to the observability gain). Default None
+                   = disabled — preserves byte-for-byte behavior for every caller
+                   that does not opt in. Opted in by sub_breaking_news (6.5) and
+                   sub_threads (6.5); other callers remain untouched.
     """
     settings = get_settings()
     anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
@@ -243,6 +254,7 @@ async def run_text_story_cycle(
 
             drafted_count = 0
             compliance_blocked_count = 0
+            floored_by_min_score = 0  # quick-260424-j5i D7
 
             for story in candidates:
                 try:
@@ -322,6 +334,23 @@ async def run_text_story_cycle(
                     await session.flush()
 
                     if compliance_ok:
+                        # quick-260424-j5i D2/D6: min_score floor — evaluated AFTER
+                        # Haiku+compliance, BEFORE DraftItem persist. The ContentBundle
+                        # row above is already written (compliance_passed=True) for
+                        # forensics; only the DraftItem (what actually surfaces to
+                        # the approval dashboard) is skipped for floored stories.
+                        if min_score is not None and float(
+                            story.get("score", 0.0)
+                        ) < min_score:
+                            floored_by_min_score += 1
+                            logger.info(
+                                "%s: floored (score %.2f < min_score %.2f): %r",
+                                agent_name,
+                                float(story.get("score", 0.0)),
+                                min_score,
+                                story["title"][:60],
+                            )
+                            continue
                         item = content_agent.build_draft_item(bundle, rationale)
                         session.add(item)
                         await session.flush()
@@ -366,9 +395,12 @@ async def run_text_story_cycle(
                     )
 
             agent_run.items_queued = items_queued
-            # D-04: richer telemetry for infographics (consumed by no4 UI subtitle);
-            # D-05: other callers retain their existing minimal payload.
-            if content_type == "infographic":
+            # D-04: richer telemetry for infographics (consumed by no4 UI subtitle).
+            # quick-260424-j5i D7: extended to breaking_news + thread so the new
+            # floored_by_min_score counter is observable without touching the
+            # minimal {"candidates": N} shape the other 3 callers (quotes,
+            # gold_media, gold_history) still emit.
+            if content_type in ("infographic", "breaking_news", "thread"):
                 agent_run.notes = json.dumps(
                     {
                         "candidates": len(candidates),
@@ -376,6 +408,7 @@ async def run_text_story_cycle(
                         "drafted": drafted_count,
                         "compliance_blocked": compliance_blocked_count,
                         "queued": items_queued,
+                        "floored_by_min_score": floored_by_min_score,
                     }
                 )
             else:
