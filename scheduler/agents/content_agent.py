@@ -74,9 +74,10 @@ SERPAPI_KEYWORDS = [
     "Fed gold",
     "dollar gold",
     "recession gold",
-    # Expansion (htu) — critical minerals + sovereign gold coverage
+    # Expansion (htu) — critical minerals + sovereign gold coverage.
+    # quick-260424-j5i D8 removed the unhyphenated rare-earth keyword (pulled too
+    # many off-theme rare-earth policy pieces that did not map to gold). 8 → 7.
     "critical minerals",
-    "rare earth restrictions",
     "strategic metals",
     "sovereign wealth fund gold",
     "treasury gold sale",
@@ -112,7 +113,10 @@ def recency_score(published: datetime) -> float:
     """CONT-05: Return recency score based on story age.
 
     Returns:
-        1.0 for <3h, 0.8 for <6h, 0.6 for <12h, 0.4 for <24h, 0.2 for >=24h
+        1.0 for <3h, 0.8 for <6h, 0.6 for <12h, 0.4 for <24h,
+        0.3 for <48h (quick-260424-j5i D3 — softens the 24h cliff so
+        high-credibility late-catch stories retain one more day of signal),
+        0.2 for >=48h.
     """
     now = datetime.now(timezone.utc)
     if published.tzinfo is None:
@@ -126,6 +130,8 @@ def recency_score(published: datetime) -> float:
         return 0.6
     if age_hours < 24:
         return 0.4
+    if age_hours < 48:
+        return 0.3
     return 0.2
 
 

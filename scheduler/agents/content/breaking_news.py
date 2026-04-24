@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 CONTENT_TYPE: str = "breaking_news"
 AGENT_NAME: str = "sub_breaking_news"
 
+# quick-260424-j5i D2: composite-score floor for the "top-of-top" cut. Stories
+# whose (relevance*0.4 + recency*0.3 + credibility*0.3)*10 score is below this
+# value skip DraftItem creation (ContentBundle row is still persisted for
+# forensics). Per-agent tunable — raise to tighten, lower to loosen. 41%
+# retention on live DB over a 7-day compliance_passed sample (j5i research Q5).
+BREAKING_NEWS_MIN_SCORE: float = 6.5
+
 
 async def _draft(
     story: dict,
@@ -121,9 +128,20 @@ Respond in valid JSON with this structure:
 
 
 async def run_draft_cycle() -> None:
-    """Single-tick pipeline: fetch → filter → draft → review → write."""
+    """Single-tick pipeline: fetch → filter → draft → review → write.
+
+    quick-260424-j5i D1+D2: tighten selection to "top-of-top" — cap at
+    max_count=3 successful persists per run, sort candidates by composite score
+    (desc, recency tiebreaker) so the best stories win, and apply a
+    BREAKING_NEWS_MIN_SCORE=6.5 floor so floored items persist a bundle but
+    skip the DraftItem (silent firehose on quiet runs is preferred over
+    forcing mediocre content into the top-N slots).
+    """
     await run_text_story_cycle(
         agent_name=AGENT_NAME,
         content_type=CONTENT_TYPE,
         draft_fn=_draft,
+        max_count=3,
+        sort_by="score",
+        min_score=BREAKING_NEWS_MIN_SCORE,
     )
