@@ -240,10 +240,10 @@ def test_read_schedule_config_has_no_retired_keys():
 
 
 def test_interval_agents_cadences():
-    """Post-j5i interval cadences: BN=2h, Threads=3h (sub_long_form removed per quick-260423-k8n)."""
+    """Post-kqa interval cadences: BN=1h (kqa reverts vxg's 2h), Threads=3h (j5i flipped 4h→3h)."""
     cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
     assert cadences == {
-        "sub_breaking_news": 2,
+        "sub_breaking_news": 1,
         "sub_threads": 3,
     }
 
@@ -530,5 +530,5 @@ def test_sub_threads_interval_is_three_hours():
     assert cadences["sub_threads"] == 3, (
         f"Expected sub_threads interval=3h, got {cadences.get('sub_threads')}"
     )
-    # sub_breaking_news stays at 2h — locked invariant.
-    assert cadences["sub_breaking_news"] == 2
+    # sub_breaking_news cadence asserted in test_interval_agents_cadences above
+    # (1h post-kqa — revert of vxg's 2h).

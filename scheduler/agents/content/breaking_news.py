@@ -1,8 +1,12 @@
 """Breaking News sub-agent — self-contained drafter.
 
-Part of the 7-agent split (quick-260421-eoe). Runs every 2 hours on its own
-APScheduler cron (reverted from m9k's 1h experiment in quick-260422-vxg — 1h
-was producing too much duplicate-story churn for the upside in urgency).
+Part of the 7-agent split (quick-260421-eoe). Runs every 1 hour on its own
+APScheduler cron (history: m9k introduced 1h → vxg reverted 1h→2h citing
+duplicate-story churn → kqa restored 1h per user directive after observing a
+perceived ~30 min cadence in prod logs; post-j5i the quality gate at
+BREAKING_NEWS_MIN_SCORE=6.5 + max_count=3 + composite-score sort plus
+fetch_stories()'s 30-min TTL cache keep duplicate-story churn bounded even
+at 1h cadence).
 Filters ``content_agent.fetch_stories()`` to the breaking_news predicted_format
 and drafts short, urgency-first tweets. Writes a ContentBundle row with
 ``content_type="breaking_news"`` in a single transaction after running
