@@ -31,6 +31,7 @@ from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.content_bundle import ContentBundle
+from services import whatsapp
 from services.market_snapshot import fetch_market_snapshot
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,7 @@ async def run_text_story_cycle(
         await session.commit()
 
         items_queued = 0
+        _persisted_items: list[str] = []  # quick-260424-i8b: accumulator for per-run firehose
         try:
             try:
                 market_snapshot = await fetch_market_snapshot(session=session)
@@ -324,6 +326,14 @@ async def run_text_story_cycle(
                         session.add(item)
                         await session.flush()
                         items_queued += 1
+                        # quick-260424-i8b: accumulate approved item text for per-run firehose.
+                        # Only breaking_news and threads are sent via WhatsApp; other agents skip.
+                        if agent_name in {"sub_breaking_news", "sub_threads"}:
+                            if content_type == "breaking_news":
+                                _persisted_items.append(str(draft_content.get("tweet", "")))
+                            elif content_type == "thread":
+                                tweets = draft_content.get("tweets", [])
+                                _persisted_items.append("\n\n".join(str(t) for t in tweets if t))
                         logger.info(
                             "%s: queued %s '%s' (score=%.1f)",
                             agent_name,
@@ -371,6 +381,39 @@ async def run_text_story_cycle(
             else:
                 agent_run.notes = json.dumps({"candidates": len(candidates)})
             agent_run.status = "completed"
+            # ---- Per-run WhatsApp firehose (quick-260424-i8b) ----
+            # Fires for sub_breaking_news + sub_threads only, and only when items
+            # were persisted this run. Silent on empty runs. Failures are recorded
+            # into agent_run.notes (JSON-merged) and never fail the agent_run.
+            if agent_name in {"sub_breaking_news", "sub_threads"} and items_queued > 0:
+                whatsapp_status_key: str
+                whatsapp_status_val: str
+                try:
+                    sids = await whatsapp.send_agent_run_notification(
+                        agent_name=agent_name,
+                        items=_persisted_items,
+                        run_id=agent_run.id,
+                    )
+                    if not sids:
+                        whatsapp_status_key = "whatsapp_per_run_skipped"
+                        whatsapp_status_val = "credentials missing"
+                    else:
+                        whatsapp_status_key = "whatsapp_per_run_sent"
+                        whatsapp_status_val = ",".join(sids)
+                except Exception as wa_exc:  # noqa: BLE001
+                    logger.error(
+                        "%s: per-run WhatsApp dispatch failed: %s",
+                        agent_name,
+                        wa_exc,
+                    )
+                    whatsapp_status_key = "whatsapp_per_run_failed"
+                    whatsapp_status_val = f"{type(wa_exc).__name__}: {wa_exc}"
+
+                # MERGE into existing JSON notes — never string-concatenate.
+                existing_notes = json.loads(agent_run.notes) if agent_run.notes else {}
+                existing_notes[whatsapp_status_key] = whatsapp_status_val
+                agent_run.notes = json.dumps(existing_notes)
+            # ---- end per-run firehose ----
         except Exception as exc:
             agent_run.status = "failed"
             agent_run.errors = str(exc)

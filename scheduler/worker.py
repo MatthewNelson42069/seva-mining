@@ -4,7 +4,8 @@ APScheduler worker process for Seva Mining AI agents.
 This module is the entry point for Railway service 2 (scheduler worker).
 Post quick-260423-k8n, it starts AsyncIOScheduler with 7 jobs:
 
-- morning_digest (daily cron, 08:00 UTC)
+- midday_digest (daily cron, 12:30 America/Los_Angeles — retimed in quick-260424-i8b
+  from 07:00 PT; scope filtered to non-firehose content types via DIGEST_EXCLUDED_CONTENT_TYPES)
 - 2 interval sub-agents on IntervalTrigger — sub_breaking_news every 2h,
   sub_threads every 4h — staggered across the 4h window
   with offsets [0, 17] minutes.
@@ -28,6 +29,9 @@ Infographics/Gold Media/Gold History moved off interval onto cron (daily noon PT
 except Gold History every-other-day noon PT via ``day='*/2'``).
 CONTENT_CRON_AGENTS tuple shape changed to (job_id, run_fn, name, lock_id,
 cron_kwargs: dict).
+quick-260424-i8b: morning_digest → midday_digest (job id), retimed 07:00→12:30 PT,
+digest scope filter added (DIGEST_EXCLUDED_CONTENT_TYPES excludes breaking_news +
+thread content types already covered by the per-run firehose in content/__init__.py).
 """
 
 import asyncio
@@ -66,6 +70,12 @@ logger = logging.getLogger(__name__)
 # Initialized to None; set to the running AsyncIOScheduler instance in main().
 _scheduler: AsyncIOScheduler | None = None
 
+# Digest scope filter — quick-260424-i8b: breaking_news + threads are covered by the
+# per-run WhatsApp firehose in scheduler/agents/content/__init__.py. They MUST be
+# excluded from the 12:30 PT midday digest to avoid duplicate notifications.
+# Matches ContentBundle.content_type values verbatim (singular: "thread" not "threads").
+DIGEST_EXCLUDED_CONTENT_TYPES: frozenset[str] = frozenset({"breaking_news", "thread"})
+
 
 def get_scheduler() -> AsyncIOScheduler:
     """Return the running module-level scheduler. Raises RuntimeError if not started yet.
@@ -83,7 +93,7 @@ def get_scheduler() -> AsyncIOScheduler:
 # quick-260421-eoe: retired content_agent(1003) + gold_history_agent(1009);
 # added sub_*(1010-1016) for the 7 content sub-agents.
 JOB_LOCK_IDS: dict[str, int] = {
-    "morning_digest": 1005,
+    "midday_digest": 1005,  # renamed from morning_digest in quick-260424-i8b; lock ID 1005 unchanged
     "sub_breaking_news": 1010,
     "sub_threads": 1011,
     "sub_quotes": 1013,
@@ -211,20 +221,24 @@ async def with_advisory_lock(
             )
 
 
-def _make_morning_digest_job(engine):
-    """Create the morning_digest job callback (advisory-lock wrapped).
+def _make_midday_digest_job(engine):
+    """Create the midday_digest job callback (advisory-lock wrapped).
 
-    Retained as a dedicated factory for clarity — morning_digest is the
+    Retained as a dedicated factory for clarity — midday_digest is the
     sole cron-scheduled job that isn't a content sub-agent.
+
+    quick-260424-i8b: renamed from _make_morning_digest_job; SeniorAgent is now
+    instantiated with DIGEST_EXCLUDED_CONTENT_TYPES so _assemble_digest filters
+    out breaking_news + thread content (already in the per-run firehose).
     """
 
     async def job():
         async with engine.connect() as conn:
-            agent = SeniorAgent()
+            agent = SeniorAgent(excluded_content_types=DIGEST_EXCLUDED_CONTENT_TYPES)
             await with_advisory_lock(
                 conn,
-                JOB_LOCK_IDS["morning_digest"],
-                "morning_digest",
+                JOB_LOCK_IDS["midday_digest"],
+                "midday_digest",
                 agent.run_morning_digest,
             )
 
@@ -293,7 +307,8 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 async def build_scheduler(engine) -> AsyncIOScheduler:
     """Build the APScheduler instance with 7 jobs registered.
 
-    - morning_digest: cron at morning_digest_schedule_hour (default 08:00 UTC).
+    - midday_digest: cron at 12:30 America/Los_Angeles (retimed in quick-260424-i8b;
+      scope filtered to non-firehose content via DIGEST_EXCLUDED_CONTENT_TYPES).
     - 2 interval sub-agents: IntervalTrigger with per-agent hours
       (sub_breaking_news=2, sub_threads=4) and staggered
       start_date offsets [0, 17] minutes.
@@ -302,17 +317,15 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
       12:00 America/Los_Angeles.
 
     quick-260423-k8n: sub_long_form removed; 8 jobs → 7 jobs.
-
-    Config keys:
-    - morning_digest_schedule_hour (default: 8)
+    quick-260424-i8b: morning_digest → midday_digest (job id), retimed 07:00→12:30 PT.
+    The digest CronTrigger now uses hardcoded hour=12, minute=30 literals; _read_schedule_config
+    is still called but its morning_digest_schedule_hour value is no longer consumed
+    (midday digest time is not DB-configurable — quick-260424-i8b locked it at 12:30 PT).
     """
-    cfg = await _read_schedule_config(engine)
-
-    digest_hour = int(cfg["morning_digest_schedule_hour"])
+    await _read_schedule_config(engine)  # reads DB config; morning_digest_schedule_hour no longer used
 
     logger.info(
-        "Schedule config: digest=cron(%d:00 America/Los_Angeles), interval_sub_agents=%d jobs (sub_breaking_news=2h, sub_threads=4h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
-        digest_hour,
+        "Schedule config: digest=cron(12:30 America/Los_Angeles), interval_sub_agents=%d jobs (sub_breaking_news=2h, sub_threads=4h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
         len(CONTENT_INTERVAL_AGENTS),
         len(CONTENT_CRON_AGENTS),
     )
@@ -327,21 +340,20 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     )
 
     # CronTrigger takes an explicit timezone arg — do NOT rely on the scheduler
-    # default (UTC). Without this arg the job would fire at 07:00 UTC (midnight
-    # PT) which is silently wrong for "daily morning digest at 7am local".
-    # Fixed during debug session twilio-morning-digest-not-delivering
-    # (2026-04-24). The matching default in _read_schedule_config was also moved
-    # from "8" to "7" so the PT-interpretation of the value matches the
-    # user-facing promise ("~7am America/Los_Angeles each day").
+    # default (UTC). quick-260424-i8b: retimed from 07:00 PT → 12:30 PT so the
+    # digest fires after the 12:00 noon sub-agent batch (quotes, infographics,
+    # gold_media, gold_history) has had ~30 min to complete. Breaking_news and
+    # threads are excluded from this digest (per DIGEST_EXCLUDED_CONTENT_TYPES)
+    # because they already send per-run firehose notifications.
     scheduler.add_job(
-        _make_morning_digest_job(engine),
+        _make_midday_digest_job(engine),
         trigger=CronTrigger(
-            hour=digest_hour,
-            minute=0,
+            hour=12,
+            minute=30,
             timezone="America/Los_Angeles",
         ),
-        id="morning_digest",
-        name=f"Morning Digest — daily at {digest_hour}:00 America/Los_Angeles",
+        id="midday_digest",
+        name="Midday Digest — daily at 12:30 America/Los_Angeles",
     )
 
     now = datetime.now(timezone.utc)
