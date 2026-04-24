@@ -22,11 +22,11 @@ module. DOES call ``content_agent.review()`` inline before writing each bundle.
 
 Requirements: CONT-07, CONT-14, CONT-15, CONT-16, CONT-17.
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import random
 from datetime import datetime, timezone
 
 from anthropic import AsyncAnthropic
@@ -34,7 +34,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents import content_agent
-from agents.content.gold_history_stories import load_all_stories, load_fact_sheet
 from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
@@ -56,9 +55,7 @@ async def _get_used_topics(session: AsyncSession) -> list[str]:
     Returns a list of slug strings. Returns empty list if key is missing or
     the value cannot be parsed as JSON. (EXP-6)
     """
-    result = await session.execute(
-        select(Config).where(Config.key == "gold_history_used_topics")
-    )
+    result = await session.execute(select(Config).where(Config.key == "gold_history_used_topics"))
     row = result.scalar_one_or_none()
     if row is None:
         return []
@@ -77,46 +74,17 @@ async def _add_used_topic(session: AsyncSession, slug: str) -> None:
     topics = await _get_used_topics(session)
     if slug not in topics:
         topics.append(slug)
-    result = await session.execute(
-        select(Config).where(Config.key == "gold_history_used_topics")
-    )
+    result = await session.execute(select(Config).where(Config.key == "gold_history_used_topics"))
     row = result.scalar_one_or_none()
     if row is None:
-        session.add(Config(
-            key="gold_history_used_topics",
-            value=json.dumps(topics),
-        ))
+        session.add(
+            Config(
+                key="gold_history_used_topics",
+                value=json.dumps(topics),
+            )
+        )
     else:
         row.value = json.dumps(topics)
-
-
-def _pick_fresh_slug(used_topics: list[str], whitelist: list[dict]) -> str | None:
-    """Return a random story slug from the whitelist that has not yet been used.
-
-    Filters ``whitelist`` to entries whose ``story_slug`` is NOT in
-    ``used_topics``, then returns a random selection. Uses ``random.choice``
-    so the same story isn't always picked first — avoids deterministic
-    "always starts at the top" behaviour across repeated whitelist additions.
-
-    Returns None if every whitelisted slug has been used (whitelist exhausted).
-    Pure function — no I/O, no async. Easy to unit test.
-    """
-    fresh = [s for s in whitelist if s.get("story_slug") not in used_topics]
-    if not fresh:
-        return None
-    return random.choice(fresh)["story_slug"]
-
-
-def _load_fact_sheet(slug: str) -> dict | None:
-    """Thin wrapper around the loader's ``load_fact_sheet`` helper.
-
-    Keeps the underscore-helper pattern consistent with gold_history.py's
-    other private helpers so callers can mock ``gold_history._load_fact_sheet``
-    in tests without patching the loader module directly.
-
-    Returns the validated fact-sheet dict, or None if the slug is unknown.
-    """
-    return load_fact_sheet(slug)
 
 
 async def _draft_gold_history(
@@ -146,10 +114,7 @@ async def _draft_gold_history(
     verified_facts = fact_sheet.get("verified_facts", [])
     sources = fact_sheet.get("sources", [])
 
-    facts_block = "\n".join(
-        f"- {f['claim']}  [source: {f['source_url']}]"
-        for f in verified_facts
-    )
+    facts_block = "\n".join(f"- {f['claim']}  [source: {f['source_url']}]" for f in verified_facts)
 
     sources_block = "\n".join(
         f"  {s.get('ref', '')} {s.get('publisher', s.get('url', ''))} — {s.get('url', '')}"
@@ -165,7 +130,7 @@ async def _draft_gold_history(
         "**FACT FIDELITY (CRITICAL):** You may only use names, dates, dollar figures, "
         "place names, and other specifics that appear EXPLICITLY in the `verified_facts` "
         "list below. Do NOT invent or infer any new specifics. Narrative connective "
-        "tissue (\"this was shocking because\", \"the stakes couldn't have been higher\") "
+        'tissue ("this was shocking because", "the stakes couldn\'t have been higher") '
         "is allowed. New specifics are NOT allowed. If you need a specific detail the "
         "facts don't provide, write the sentence without it — do not fabricate."
     )
@@ -190,7 +155,7 @@ async def _draft_gold_history(
         '  "instagram_carousel": [\n'
         '    {"slide": 1, "headline": "...", "body": "...(max 15 words)...", "visual_note": "..."},\n'
         '    {"slide": 2, "headline": "...", "body": "...", "visual_note": "..."}\n'
-        '  ],\n'
+        "  ],\n"
         '  "instagram_caption": "full caption text",\n'
         '  "sources": [{"ref": "[1]", "url": "...", "publisher": "..."}]\n'
         "}\n\n"
@@ -204,10 +169,12 @@ async def _draft_gold_history(
             model="claude-sonnet-4-6",
             max_tokens=2048,
             system=system_prompt,
-            messages=[{
-                "role": "user",
-                "content": user_prompt,
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                }
+            ],
         )
         raw = response.content[0].text.strip()
         if raw.startswith("```"):
@@ -217,14 +184,19 @@ async def _draft_gold_history(
             raw = raw.strip()
         data = json.loads(raw)
         required = (
-            "format", "story_title", "story_slug",
-            "tweets", "instagram_carousel", "instagram_caption",
+            "format",
+            "story_title",
+            "story_slug",
+            "tweets",
+            "instagram_carousel",
+            "instagram_caption",
             "sources",
         )
         if not all(k in data for k in required):
             logger.warning(
                 "%s: _draft_gold_history missing required keys in response (got: %s)",
-                AGENT_NAME, list(data.keys()),
+                AGENT_NAME,
+                list(data.keys()),
             )
             return None
         return data
@@ -234,7 +206,9 @@ async def _draft_gold_history(
     except Exception as exc:
         logger.error(
             "%s: _draft_gold_history Claude call failed — %s",
-            AGENT_NAME, exc, exc_info=True,
+            AGENT_NAME,
+            exc,
+            exc_info=True,
         )
         return None
 
@@ -267,7 +241,8 @@ async def run_draft_cycle() -> None:
             used_topics = await _get_used_topics(session)
             logger.info(
                 "%s: %d stories already used, loading whitelist",
-                AGENT_NAME, len(used_topics),
+                AGENT_NAME,
+                len(used_topics),
             )
 
             whitelist = load_all_stories()
@@ -276,7 +251,9 @@ async def run_draft_cycle() -> None:
             if slug is None:
                 logger.info(
                     "%s: whitelist exhausted (%d slugs used, %d in whitelist) — no bundle created",
-                    AGENT_NAME, len(used_topics), len(whitelist),
+                    AGENT_NAME,
+                    len(used_topics),
+                    len(whitelist),
                 )
                 bundle = ContentBundle(
                     story_headline="Gold History: all curated stories used",
@@ -295,7 +272,8 @@ async def run_draft_cycle() -> None:
                 # but handle gracefully if the JSON file is missing at runtime.
                 logger.error(
                     "%s: fact sheet for slug %r not found — treating as draft failure",
-                    AGENT_NAME, slug,
+                    AGENT_NAME,
+                    slug,
                 )
                 bundle = ContentBundle(
                     story_headline=f"Gold History: {slug}",
@@ -306,14 +284,18 @@ async def run_draft_cycle() -> None:
                     compliance_passed=False,
                 )
                 session.add(bundle)
-                agent_run.notes = json.dumps({"reason": "fact_sheet_load_failed", "story_slug": slug})
+                agent_run.notes = json.dumps(
+                    {"reason": "fact_sheet_load_failed", "story_slug": slug}
+                )
                 agent_run.status = "completed"
                 return
 
             story_title = fact_sheet["story_title"]
             logger.info(
                 "%s: picked story %r (slug=%s)",
-                AGENT_NAME, story_title[:60], slug,
+                AGENT_NAME,
+                story_title[:60],
+                slug,
             )
             agent_run.items_found = 1
 
@@ -333,10 +315,12 @@ async def run_draft_cycle() -> None:
                 )
                 session.add(bundle)
                 await _add_used_topic(session, slug)
-                agent_run.notes = json.dumps({
-                    "reason": "draft_failed",
-                    "story_slug": slug,
-                })
+                agent_run.notes = json.dumps(
+                    {
+                        "reason": "draft_failed",
+                        "story_slug": slug,
+                    }
+                )
                 agent_run.status = "completed"
                 return
 
@@ -363,13 +347,17 @@ async def run_draft_cycle() -> None:
             if not compliance_ok:
                 logger.warning(
                     "%s: compliance blocked gold_history %r — reason=%s",
-                    AGENT_NAME, story_title[:60], review_result.get("rationale"),
+                    AGENT_NAME,
+                    story_title[:60],
+                    review_result.get("rationale"),
                 )
-                agent_run.notes = json.dumps({
-                    "reason": "compliance_failed",
-                    "story_slug": slug,
-                    "story_title": story_title,
-                })
+                agent_run.notes = json.dumps(
+                    {
+                        "reason": "compliance_failed",
+                        "story_slug": slug,
+                        "story_title": story_title,
+                    }
+                )
                 agent_run.status = "completed"
                 return
 
@@ -384,17 +372,21 @@ async def run_draft_cycle() -> None:
             await session.flush()
 
             agent_run.items_queued = 1
-            agent_run.notes = json.dumps({
-                "story_title": story_title,
-                "story_slug": slug,
-                "fact_count": fact_count,
-                "source_count": source_count,
-                "content_bundle_id": str(bundle.id),
-            })
+            agent_run.notes = json.dumps(
+                {
+                    "story_title": story_title,
+                    "story_slug": slug,
+                    "fact_count": fact_count,
+                    "source_count": source_count,
+                    "content_bundle_id": str(bundle.id),
+                }
+            )
             agent_run.status = "completed"
             logger.info(
                 "%s: queued gold_history story %r (bundle_id=%s)",
-                AGENT_NAME, story_title[:60], bundle.id,
+                AGENT_NAME,
+                story_title[:60],
+                bundle.id,
             )
         except Exception as exc:
             agent_run.status = "failed"
