@@ -14,6 +14,7 @@ into this helper.
 
 quick-260423-k8n: sub_long_form removed — topology reduced from 7 to 6 sub-agents.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -88,12 +89,18 @@ async def run_text_story_cycle(
     source_whitelist: frozenset[str] | None = None,
     sort_by: Literal["published_at", "score"] = "published_at",
     dedup_scope: Literal["cross_agent", "same_type"] = "cross_agent",
-) -> None:
+) -> int:
     """Shared fetch → filter → draft → review → persist pipeline.
 
     Used by 4 of the 6 sub-agents (breaking_news, threads, quotes,
     infographics). The other 2 (gold_media, gold_history) implement
     ``run_draft_cycle()`` directly.
+
+    Returns:
+        int — items_queued (0 if no candidates, fetch failure, or all
+        candidates filtered/compliance-blocked). Callers other than
+        sub_infographics may ignore this value; it is preserved for
+        sub_infographics' two-phase fallback (quick-260423-lvp).
 
     Args:
         agent_name: agent_run.agent_name value (e.g. "sub_breaking_news").
@@ -149,7 +156,8 @@ async def run_text_story_cycle(
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "%s: market snapshot fetch failed (%s) — continuing without",
-                    agent_name, type(exc).__name__,
+                    agent_name,
+                    type(exc).__name__,
                 )
                 market_snapshot = None
 
@@ -174,7 +182,10 @@ async def run_text_story_cycle(
                 candidates = [s for s in candidates if _is_reputable(s)]
                 logger.info(
                     "%s: reputable filter: %d -> %d (dropped %d non-whitelisted sources)",
-                    agent_name, before, len(candidates), before - len(candidates),
+                    agent_name,
+                    before,
+                    len(candidates),
+                    before - len(candidates),
                 )
 
             # When max_count is set, sort candidates so the loop processes best-first
@@ -197,23 +208,30 @@ async def run_text_story_cycle(
                     candidates.sort(key=lambda s: s.get("published_at", ""), reverse=True)
                 logger.info(
                     "%s: sorted %d candidates by %s (max_count=%d, break-after-N)",
-                    agent_name, len(candidates), sort_by, max_count,
+                    agent_name,
+                    len(candidates),
+                    sort_by,
+                    max_count,
                 )
 
             if not candidates:
                 logger.info(
-                    "%s: no %s candidates this cycle", agent_name, content_type,
+                    "%s: no %s candidates this cycle",
+                    agent_name,
+                    content_type,
                 )
                 if content_type == "infographic":
-                    agent_run.notes = json.dumps({
-                        "candidates": 0,
-                        "top_by_score": max_count if max_count is not None else 0,
-                        "drafted": 0,
-                        "compliance_blocked": 0,
-                        "queued": 0,
-                    })
+                    agent_run.notes = json.dumps(
+                        {
+                            "candidates": 0,
+                            "top_by_score": max_count if max_count is not None else 0,
+                            "drafted": 0,
+                            "compliance_blocked": 0,
+                            "queued": 0,
+                        }
+                    )
                 agent_run.status = "completed"
-                return
+                return items_queued
 
             gate_config = {
                 "content_gold_gate_enabled": "true",
@@ -230,13 +248,12 @@ async def run_text_story_cycle(
                         session,
                         story["link"],
                         story["title"],
-                        content_type=(
-                            content_type if dedup_scope == "same_type" else None
-                        ),
+                        content_type=(content_type if dedup_scope == "same_type" else None),
                     ):
                         logger.info(
                             "%s: skipping (already covered today): %r",
-                            agent_name, story["title"][:60],
+                            agent_name,
+                            story["title"][:60],
                         )
                         continue
 
@@ -246,7 +263,9 @@ async def run_text_story_cycle(
                     if not gate["keep"]:
                         logger.info(
                             "%s: gold gate rejected: %r (reason=%s)",
-                            agent_name, story["title"][:60], gate.get("reject_reason"),
+                            agent_name,
+                            story["title"][:60],
+                            gate.get("reject_reason"),
                         )
                         continue
 
@@ -307,38 +326,48 @@ async def run_text_story_cycle(
                         items_queued += 1
                         logger.info(
                             "%s: queued %s '%s' (score=%.1f)",
-                            agent_name, content_type, story["title"][:60],
+                            agent_name,
+                            content_type,
+                            story["title"][:60],
                             float(story.get("score", 0.0)),
                         )
                         if max_count is not None and items_queued >= max_count:
                             logger.info(
                                 "%s: reached max_count=%d successful drafts — exiting loop",
-                                agent_name, max_count,
+                                agent_name,
+                                max_count,
                             )
                             break
                     else:
                         logger.warning(
                             "%s: compliance blocked %s '%s' — reason=%s",
-                            agent_name, content_type, story["title"][:60],
+                            agent_name,
+                            content_type,
+                            story["title"][:60],
                             review_result.get("rationale"),
                         )
                 except Exception as exc:
                     logger.error(
                         "%s: error processing story %r: %s",
-                        agent_name, story.get("title", "")[:60], exc, exc_info=True,
+                        agent_name,
+                        story.get("title", "")[:60],
+                        exc,
+                        exc_info=True,
                     )
 
             agent_run.items_queued = items_queued
             # D-04: richer telemetry for infographics (consumed by no4 UI subtitle);
             # D-05: other callers retain their existing minimal payload.
             if content_type == "infographic":
-                agent_run.notes = json.dumps({
-                    "candidates": len(candidates),
-                    "top_by_score": max_count if max_count is not None else 0,
-                    "drafted": drafted_count,
-                    "compliance_blocked": compliance_blocked_count,
-                    "queued": items_queued,
-                })
+                agent_run.notes = json.dumps(
+                    {
+                        "candidates": len(candidates),
+                        "top_by_score": max_count if max_count is not None else 0,
+                        "drafted": drafted_count,
+                        "compliance_blocked": compliance_blocked_count,
+                        "queued": items_queued,
+                    }
+                )
             else:
                 agent_run.notes = json.dumps({"candidates": len(candidates)})
             agent_run.status = "completed"
@@ -349,3 +378,4 @@ async def run_text_story_cycle(
         finally:
             agent_run.ended_at = datetime.now(timezone.utc)
             await session.commit()
+    return items_queued
