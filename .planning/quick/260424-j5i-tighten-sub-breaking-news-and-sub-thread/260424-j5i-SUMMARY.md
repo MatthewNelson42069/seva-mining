@@ -13,7 +13,7 @@ commits:
   - hash: 2120598
     message: "test(j5i): reconcile D8/D9 breakage in existing assertions"
     phase: T3 (TEST-ADJUST)
-  - hash: (pending this commit)
+  - hash: 223cfe1
     message: "docs(j5i): SUMMARY + STATE.md update"
     phase: T4 (DOCS)
 tests_run: 175
@@ -161,7 +161,7 @@ Reference: `.planning/quick/260424-j5i-tighten-sub-breaking-news-and-sub-thread/
 | `62205bb` | T1 RED | `test(j5i): add failing tests for top-of-top tightening (RED)` | +9 tests across 5 files; all fail with clear reasons (AttributeError for constants, KeyError for `floored_by_min_score`, wrong cadence value, wrong recency bucket value) |
 | `e45fb74` | T2 GREEN | `feat(j5i): tighten breaking_news + threads selection (GREEN)` | 5 production files: content_agent.py (recency bucket + keyword removal), content/__init__.py (signature + floor check + telemetry broadening), content/breaking_news.py (constant + kwargs), content/threads.py (constant + kwargs), worker.py (cadence flip + comment updates). All T1 tests now PASS; 3 pre-existing D8/D9 tests fail as expected (T3 territory); 1 additional infographics telemetry test broke on D7 side-effect (also T3) |
 | `2120598` | T3 TEST-ADJUST | `test(j5i): reconcile D8/D9 breakage in existing assertions` | 3 files: test_content_agent.py (3 length/membership assertions), test_worker.py (cadence value + docstring), test_infographics.py (new telemetry key in expected dict). Full suite green: 175 passed |
-| _(this commit)_ | T4 DOCS | `docs(j5i): SUMMARY + STATE.md update` | This file + STATE.md Quick Tasks Completed row + frontmatter `stopped_at` / `last_activity` refresh |
+| `223cfe1` | T4 DOCS | `docs(j5i): SUMMARY + STATE.md update` | This file + planning artifacts (CONTEXT/PLAN/RESEARCH landed on main) + STATE.md Quick Tasks Completed row + frontmatter `stopped_at` / `last_updated` refresh |
 
 ## Validation Gate Results
 
