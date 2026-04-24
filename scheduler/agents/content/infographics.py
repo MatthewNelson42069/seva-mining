@@ -6,6 +6,7 @@ drafts a tweet caption plus the paste-ready claude.ai render fields
 (suggested_headline, data_facts, image_prompt). Writes a ContentBundle with
 ``content_type="infographic"``.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,43 @@ logger = logging.getLogger(__name__)
 
 CONTENT_TYPE: str = "infographic"
 AGENT_NAME: str = "sub_infographics"
+
+# ---------------------------------------------------------------------------
+# Analytical-historical fallback — quick-260423-lvp
+# ---------------------------------------------------------------------------
+
+ANALYTICAL_HISTORICAL_QUERIES: list[str] = [
+    "gold price performance during major wars historical",
+    "gold bull markets historical analysis 1970-2025",
+    "central bank gold purchases trends 2020-2025",
+    "gold inflation correlation 50 years historical",
+    "gold during recessions analysis 1973 2008 2020",
+    "gold vs dollar weakness historical pattern",
+    "safe haven asset performance gold historical",
+    "gold ETF flows historical trends 2010-2025",
+    "gold mining output decline historical analysis",
+    "gold crisis performance historical comparison",
+]
+
+
+def _select_analytical_queries(shortfall: int, *, buffer: int = 2) -> list[str]:
+    """Pick (shortfall + buffer) queries with a day-seeded deterministic shuffle.
+
+    Rotation strategy (quick-260423-lvp): seed random.Random with
+    date.today().toordinal() so every invocation on the same day returns the
+    same list, but the list differs across consecutive days. Buffer compensates
+    for fetches that return empty or get gold-gate-rejected.
+
+    Clamped to len(ANALYTICAL_HISTORICAL_QUERIES).
+    """
+    import random as _random  # noqa: PLC0415
+    from datetime import date as _date  # noqa: PLC0415
+
+    count = min(shortfall + buffer, len(ANALYTICAL_HISTORICAL_QUERIES))
+    rng = _random.Random(_date.today().toordinal())
+    shuffled = list(ANALYTICAL_HISTORICAL_QUERIES)
+    rng.shuffle(shuffled)
+    return shuffled[:count]
 
 
 async def _draft(
@@ -43,7 +81,8 @@ async def _draft(
         corr_lines = "None found."
 
     article_block = (
-        article_text if article_text
+        article_text
+        if article_text
         else "Article text unavailable — use corroborating sources and headline."
     )
 
@@ -64,8 +103,8 @@ async def _draft(
     user_prompt = f"""Based on the following research, produce an INFOGRAPHIC draft for X (Twitter).
 
 ## Story
-Headline: {story.get('title', '')}
-Source: {story.get('source_name', '')} ({story.get('link', '')})
+Headline: {story.get("title", "")}
+Source: {story.get("source_name", "")} ({story.get("link", "")})
 
 ## Full Article
 {article_block}

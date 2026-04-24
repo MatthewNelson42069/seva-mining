@@ -1,4 +1,5 @@
 """Tests for agents.content.infographics sub-agent (quick-260421-eoe)."""
+
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -7,7 +8,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require"
+)
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-fake")
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "x")
 os.environ.setdefault("TWILIO_AUTH_TOKEN", "x")
@@ -34,12 +37,19 @@ def test_module_surface():
 async def test_draft_returns_draft_content_shape():
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"format":"infographic","rationale":"r","key_data_points":["a"],"draft_content":{"format":"infographic","suggested_headline":"Gold reserves 2026","data_facts":["fact1","fact2","fact3"],"image_prompt":"minimal gold chart","twitter_caption":"cap","charts":[{"title":"Gold reserves","data":[1,2,3]}]}}')]
+    response.content = [
+        MagicMock(
+            text='{"format":"infographic","rationale":"r","key_data_points":["a"],"draft_content":{"format":"infographic","suggested_headline":"Gold reserves 2026","data_facts":["fact1","fact2","fact3"],"image_prompt":"minimal gold chart","twitter_caption":"cap","charts":[{"title":"Gold reserves","data":[1,2,3]}]}}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "T", "link": "http://x", "source_name": "kitco"}
     draft = await infographics._draft(
-        story, {"article_text": "body", "corroborating_sources": []}, None, client=client,
+        story,
+        {"article_text": "body", "corroborating_sources": []},
+        None,
+        client=client,
     )
 
     assert draft is not None
@@ -57,7 +67,9 @@ async def test_draft_returns_none_on_json_parse_failure():
 
     draft = await infographics._draft(
         {"title": "T", "link": "http://x", "source_name": "kitco"},
-        {"article_text": "body", "corroborating_sources": []}, None, client=client,
+        {"article_text": "body", "corroborating_sources": []},
+        None,
+        client=client,
     )
     assert draft is None
 
@@ -72,17 +84,26 @@ async def test_run_draft_cycle_completes_with_stories():
     here so it may error internally; the story-level try/except handles that
     gracefully and the cycle still completes.
     """
-    stories = [{"title": "A", "link": "http://a", "source_name": "x",
-                "predicted_format": "thread", "score": 5.0}]
+    stories = [
+        {
+            "title": "A",
+            "link": "http://a",
+            "source_name": "x",
+            "predicted_format": "thread",
+            "score": 5.0,
+        }
+    ]
 
     session = AsyncMock()
     ctx = AsyncMock()
     ctx.__aenter__ = AsyncMock(return_value=session)
     ctx.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("agents.content.AsyncSessionLocal", return_value=ctx), \
-         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)), \
-         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)):
+    with (
+        patch("agents.content.AsyncSessionLocal", return_value=ctx),
+        patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)),
+        patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)),
+    ):
         await infographics.run_draft_cycle()
 
     assert session.commit.await_count >= 2
@@ -103,8 +124,9 @@ async def test_run_draft_cycle_passes_new_kwargs():
     async def fake_cycle(**kwargs):
         call_kwargs.update(kwargs)
 
-    with patch("agents.content.infographics.run_text_story_cycle",
-               new=AsyncMock(side_effect=fake_cycle)):
+    with patch(
+        "agents.content.infographics.run_text_story_cycle", new=AsyncMock(side_effect=fake_cycle)
+    ):
         await infographics.run_draft_cycle()
 
     assert call_kwargs.get("agent_name") == "sub_infographics"
@@ -136,15 +158,33 @@ async def test_run_draft_cycle_writes_structured_notes():
     import json as _json  # noqa: PLC0415
 
     stories = [
-        {"title": "Top A", "link": "http://a", "source_name": "Reuters",
-         "predicted_format": "infographic", "score": 9.0,
-         "published_at": "2026-04-21T12:00:00Z", "summary": "a"},
-        {"title": "Top B", "link": "http://b", "source_name": "Reuters",
-         "predicted_format": "infographic", "score": 8.0,
-         "published_at": "2026-04-21T11:00:00Z", "summary": "b"},
-        {"title": "Trimmed", "link": "http://c", "source_name": "Reuters",
-         "predicted_format": "infographic", "score": 3.0,
-         "published_at": "2026-04-21T13:00:00Z", "summary": "c"},
+        {
+            "title": "Top A",
+            "link": "http://a",
+            "source_name": "Reuters",
+            "predicted_format": "infographic",
+            "score": 9.0,
+            "published_at": "2026-04-21T12:00:00Z",
+            "summary": "a",
+        },
+        {
+            "title": "Top B",
+            "link": "http://b",
+            "source_name": "Reuters",
+            "predicted_format": "infographic",
+            "score": 8.0,
+            "published_at": "2026-04-21T11:00:00Z",
+            "summary": "b",
+        },
+        {
+            "title": "Trimmed",
+            "link": "http://c",
+            "source_name": "Reuters",
+            "predicted_format": "infographic",
+            "score": 3.0,
+            "published_at": "2026-04-21T13:00:00Z",
+            "summary": "c",
+        },
     ]
 
     captured_agent_runs: list = []
@@ -164,33 +204,41 @@ async def test_run_draft_cycle_writes_structured_notes():
     # Review sequence (3 stories reach draft_fn post-fix):
     # Top A (score=9): True → queued=1; Top B (score=8): False → compliance_blocked;
     # Trimmed (score=3): True → queued=2 → break (max_count=2 reached).
-    review_results = iter([
-        {"compliance_passed": True, "rationale": "ok"},
-        {"compliance_passed": False, "rationale": "blocked"},
-        {"compliance_passed": True, "rationale": "ok"},
-    ])
+    review_results = iter(
+        [
+            {"compliance_passed": True, "rationale": "ok"},
+            {"compliance_passed": False, "rationale": "blocked"},
+            {"compliance_passed": True, "rationale": "ok"},
+        ]
+    )
 
     async def fake_review(_draft):
         return next(review_results)
 
     async def fake_draft(story, deep_research, market_snapshot, *, client):
-        return {"format": "infographic", "twitter_caption": "cap",
-                "_rationale": "r", "_key_data_points": []}
+        return {
+            "format": "infographic",
+            "twitter_caption": "cap",
+            "_rationale": "r",
+            "_key_data_points": [],
+        }
 
-    with patch("agents.content.AsyncSessionLocal", return_value=ctx), \
-         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)), \
-         patch("agents.content._is_already_covered_today", new=AsyncMock(return_value=False)), \
-         patch("agents.content.infographics._draft", new=fake_draft), \
-         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)), \
-         patch.object(content_agent, "is_gold_relevant_or_systemic_shock",
-                      new=AsyncMock(return_value={"keep": True})), \
-         patch.object(content_agent, "fetch_article",
-                      new=AsyncMock(return_value=("body", True))), \
-         patch.object(content_agent, "search_corroborating",
-                      new=AsyncMock(return_value=[])), \
-         patch.object(content_agent, "review", new=fake_review), \
-         patch.object(content_agent, "build_draft_item",
-                      new=MagicMock(return_value=MagicMock())):
+    with (
+        patch("agents.content.AsyncSessionLocal", return_value=ctx),
+        patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)),
+        patch("agents.content._is_already_covered_today", new=AsyncMock(return_value=False)),
+        patch("agents.content.infographics._draft", new=fake_draft),
+        patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)),
+        patch.object(
+            content_agent,
+            "is_gold_relevant_or_systemic_shock",
+            new=AsyncMock(return_value={"keep": True}),
+        ),
+        patch.object(content_agent, "fetch_article", new=AsyncMock(return_value=("body", True))),
+        patch.object(content_agent, "search_corroborating", new=AsyncMock(return_value=[])),
+        patch.object(content_agent, "review", new=fake_review),
+        patch.object(content_agent, "build_draft_item", new=MagicMock(return_value=MagicMock())),
+    ):
         await infographics.run_draft_cycle()
 
     # The first add() call is the AgentRun; later adds are bundles/items.
@@ -198,12 +246,58 @@ async def test_run_draft_cycle_writes_structured_notes():
     assert agent_run.notes, "Expected agent_run.notes to be populated"
     payload = _json.loads(agent_run.notes)
     assert payload == {
-        "candidates": 3,          # all 3 stories in list (no pre-loop trim, quick-260423-hq7)
-        "top_by_score": 2,        # max_count value
-        "drafted": 3,             # all 3 reached draft_fn (no dedup blocks)
+        "candidates": 3,  # all 3 stories in list (no pre-loop trim, quick-260423-hq7)
+        "top_by_score": 2,  # max_count value
+        "drafted": 3,  # all 3 reached draft_fn (no dedup blocks)
         "compliance_blocked": 1,  # Top B failed review
-        "queued": 2,              # Top A + Trimmed passed; break after 2nd success
+        "queued": 2,  # Top A + Trimmed passed; break after 2nd success
     }, f"Unexpected notes payload: {payload}"
+
+
+# ---------------------------------------------------------------------------
+# quick-260423-lvp T3: ANALYTICAL_HISTORICAL_QUERIES + _select_analytical_queries
+# ---------------------------------------------------------------------------
+
+
+def test_select_analytical_queries_deterministic_and_rotates():
+    """_select_analytical_queries returns a deterministic list per day and
+    rotates across consecutive days (quick-260423-lvp T3).
+    """
+    import random as _random  # noqa: PLC0415
+    from datetime import date as _date  # noqa: PLC0415
+
+    from agents.content.infographics import (
+        ANALYTICAL_HISTORICAL_QUERIES,
+        _select_analytical_queries,
+    )
+
+    shortfall = 2
+    buffer = 2
+    expected_count = min(shortfall + buffer, len(ANALYTICAL_HISTORICAL_QUERIES))
+
+    # Same-day determinism: calling twice returns identical lists.
+    result_a = _select_analytical_queries(shortfall, buffer=buffer)
+    result_b = _select_analytical_queries(shortfall, buffer=buffer)
+    assert result_a == result_b, "Same-day calls must return identical lists"
+    assert len(result_a) == expected_count
+    assert all(q in ANALYTICAL_HISTORICAL_QUERIES for q in result_a)
+
+    # Rotation check: different ordinals should produce different orderings.
+    # Simulate two consecutive days manually to verify the algorithm.
+    day1_ordinal = _date(2026, 4, 23).toordinal()
+    day2_ordinal = _date(2026, 4, 24).toordinal()
+
+    rng1 = _random.Random(day1_ordinal)
+    shuffled1 = list(ANALYTICAL_HISTORICAL_QUERIES)
+    rng1.shuffle(shuffled1)
+    expected_day1 = shuffled1[:expected_count]
+
+    rng2 = _random.Random(day2_ordinal)
+    shuffled2 = list(ANALYTICAL_HISTORICAL_QUERIES)
+    rng2.shuffle(shuffled2)
+    expected_day2 = shuffled2[:expected_count]
+
+    assert expected_day1 != expected_day2, "Different days must produce different orderings"
 
 
 @pytest.mark.asyncio
@@ -222,9 +316,11 @@ async def test_run_draft_cycle_writes_notes_on_empty_candidates():
     ctx.__aenter__ = AsyncMock(return_value=session)
     ctx.__aexit__ = AsyncMock(return_value=False)
 
-    with patch("agents.content.AsyncSessionLocal", return_value=ctx), \
-         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)), \
-         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=[])):
+    with (
+        patch("agents.content.AsyncSessionLocal", return_value=ctx),
+        patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)),
+        patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=[])),
+    ):
         await infographics.run_draft_cycle()
 
     agent_run = captured[0]
