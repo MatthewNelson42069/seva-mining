@@ -240,11 +240,11 @@ def test_read_schedule_config_has_no_retired_keys():
 
 
 def test_interval_agents_cadences():
-    """Post-k8n interval cadences: BN=2h, Threads=4h (sub_long_form removed per quick-260423-k8n)."""
+    """Post-j5i interval cadences: BN=2h, Threads=3h (sub_long_form removed per quick-260423-k8n)."""
     cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
     assert cadences == {
         "sub_breaking_news": 2,
-        "sub_threads": 4,
+        "sub_threads": 3,
     }
 
 

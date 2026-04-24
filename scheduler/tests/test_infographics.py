@@ -256,6 +256,11 @@ async def test_run_draft_cycle_writes_structured_notes():
         "drafted": 3,  # all 3 reached draft_fn (no dedup blocks)
         "compliance_blocked": 1,  # Top B failed review
         "queued": 2,  # Top A + Trimmed passed; break after 2nd success
+        # quick-260424-j5i D7: rich-telemetry branch extended to include
+        # floored_by_min_score. Infographics does not pass min_score so the
+        # counter is always 0 for this sub-agent; we still assert it explicitly
+        # so an accidental removal of the key in a future edit is caught.
+        "floored_by_min_score": 0,
     }, f"Unexpected notes payload: {payload}"
 
 
