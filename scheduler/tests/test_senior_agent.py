@@ -7,6 +7,7 @@ alongside the implementation in agents/senior_agent.py. Remaining tests cover
 SENR-06, SENR-07, SENR-08 (morning digest assembly + WhatsApp dispatch) and
 WHAT-01 (free-form digest message).
 """
+
 import os
 import sys
 import pytest
@@ -14,7 +15,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Set required env vars before any imports
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require"
+)
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-fake")
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "x")
 os.environ.setdefault("TWILIO_AUTH_TOKEN", "x")
@@ -28,6 +31,7 @@ os.environ.setdefault("FRONTEND_URL", "https://x.com")
 
 
 # --- SENR-06/SENR-07: Morning Digest ---
+
 
 def test_morning_digest_assembly():
     """SENR-06/SENR-07: Morning digest assembles correct JSONB with top stories, counts, snapshot."""
@@ -56,20 +60,100 @@ def test_morning_digest_assembly():
 
     # These items document the expected counts; the digest aggregates only via count queries,
     # so the individual objects are not referenced — keep them as documentation via `_` names.
-    _approved_1 = make_item(uuid.uuid4(), "approved", 9.0, "twitter", "@Kitco", "Gold hits high. Details here.", "https://ex.com/1")  # noqa: E501
-    _approved_2 = make_item(uuid.uuid4(), "edited_approved", 8.5, "instagram", "@GoldInvestor", "Fed signals rate cut. Market reacts.", "https://ex.com/2")  # noqa: E501
-    _approved_3 = make_item(uuid.uuid4(), "approved", 7.8, "content", "@NewsDesk", "Mining output rises quarterly. Analysts bullish.", "https://ex.com/3")  # noqa: E501
-    _rejected_1 = make_item(uuid.uuid4(), "rejected", 5.0, "twitter", "@Spam", "Not relevant. Discard.", "https://ex.com/4")  # noqa: E501
-    _expired_1 = make_item(uuid.uuid4(), "expired", 4.0, "twitter", "@Old", "Old story expired. Not shown.", "https://ex.com/5")  # noqa: E501
-    _expired_2 = make_item(uuid.uuid4(), "expired", 3.5, "twitter", "@Old2", "Another expired. Done.", "https://ex.com/6")  # noqa: E501
+    _approved_1 = make_item(
+        uuid.uuid4(),
+        "approved",
+        9.0,
+        "twitter",
+        "@Kitco",
+        "Gold hits high. Details here.",
+        "https://ex.com/1",
+    )  # noqa: E501
+    _approved_2 = make_item(
+        uuid.uuid4(),
+        "edited_approved",
+        8.5,
+        "instagram",
+        "@GoldInvestor",
+        "Fed signals rate cut. Market reacts.",
+        "https://ex.com/2",
+    )  # noqa: E501
+    _approved_3 = make_item(
+        uuid.uuid4(),
+        "approved",
+        7.8,
+        "content",
+        "@NewsDesk",
+        "Mining output rises quarterly. Analysts bullish.",
+        "https://ex.com/3",
+    )  # noqa: E501
+    _rejected_1 = make_item(
+        uuid.uuid4(),
+        "rejected",
+        5.0,
+        "twitter",
+        "@Spam",
+        "Not relevant. Discard.",
+        "https://ex.com/4",
+    )  # noqa: E501
+    _expired_1 = make_item(
+        uuid.uuid4(),
+        "expired",
+        4.0,
+        "twitter",
+        "@Old",
+        "Old story expired. Not shown.",
+        "https://ex.com/5",
+    )  # noqa: E501
+    _expired_2 = make_item(
+        uuid.uuid4(),
+        "expired",
+        3.5,
+        "twitter",
+        "@Old2",
+        "Another expired. Done.",
+        "https://ex.com/6",
+    )  # noqa: E501
 
     # Top 5 stories query: 3 items by score DESC
-    top_story_1 = make_item(uuid.uuid4(), "approved", 9.0, "twitter", "@Kitco", "Gold hits all-time high. Markets rally strongly.", "https://ex.com/t1")
-    top_story_2 = make_item(uuid.uuid4(), "approved", 8.5, "instagram", "@GoldInvestor", "Central banks buying gold. Record purchases.", "https://ex.com/t2")
-    top_story_3 = make_item(uuid.uuid4(), "pending", 7.0, "twitter", "@AuAnalyst", "Gold ETF inflows surge. Demand robust.", "https://ex.com/t3")
+    top_story_1 = make_item(
+        uuid.uuid4(),
+        "approved",
+        9.0,
+        "twitter",
+        "@Kitco",
+        "Gold hits all-time high. Markets rally strongly.",
+        "https://ex.com/t1",
+    )
+    top_story_2 = make_item(
+        uuid.uuid4(),
+        "approved",
+        8.5,
+        "instagram",
+        "@GoldInvestor",
+        "Central banks buying gold. Record purchases.",
+        "https://ex.com/t2",
+    )
+    top_story_3 = make_item(
+        uuid.uuid4(),
+        "pending",
+        7.0,
+        "twitter",
+        "@AuAnalyst",
+        "Gold ETF inflows surge. Demand robust.",
+        "https://ex.com/t3",
+    )
 
     # Priority alert: highest-scoring pending item
-    priority_item = make_item(uuid.uuid4(), "pending", 9.0, "twitter", "@Breaking", "Breaking gold news right now. Act fast.", "https://ex.com/p1")
+    priority_item = make_item(
+        uuid.uuid4(),
+        "pending",
+        9.0,
+        "twitter",
+        "@Breaking",
+        "Breaking gold news right now. Act fast.",
+        "https://ex.com/p1",
+    )
 
     mock_session = AsyncMock()
 
@@ -91,7 +175,11 @@ def test_morning_digest_assembly():
     expired_result.scalar_one.return_value = 2
 
     top_stories_result = MagicMock()
-    top_stories_result.scalars.return_value.all.return_value = [top_story_1, top_story_2, top_story_3]
+    top_stories_result.scalars.return_value.all.return_value = [
+        top_story_1,
+        top_story_2,
+        top_story_3,
+    ]
 
     queue_snapshot_result = MagicMock()
     queue_snapshot_result.all.return_value = [("twitter", 3), ("instagram", 1), ("content", 1)]
@@ -99,14 +187,16 @@ def test_morning_digest_assembly():
     priority_result = MagicMock()
     priority_result.scalar_one_or_none.return_value = priority_item
 
-    mock_session.execute = AsyncMock(side_effect=[
-        approved_result,
-        rejected_result,
-        expired_result,
-        top_stories_result,
-        queue_snapshot_result,
-        priority_result,
-    ])
+    mock_session.execute = AsyncMock(
+        side_effect=[
+            approved_result,
+            rejected_result,
+            expired_result,
+            top_stories_result,
+            queue_snapshot_result,
+            priority_result,
+        ]
+    )
 
     async def run_test():
         agent = SeniorAgent()
@@ -116,7 +206,9 @@ def test_morning_digest_assembly():
 
     # top_stories: list of 3, each with correct keys
     assert isinstance(digest["top_stories"], list), "top_stories must be a list"
-    assert len(digest["top_stories"]) == 3, f"Expected 3 top stories, got {len(digest['top_stories'])}"
+    assert len(digest["top_stories"]) == 3, (
+        f"Expected 3 top stories, got {len(digest['top_stories'])}"
+    )
     for story in digest["top_stories"]:
         assert "headline" in story, f"Missing 'headline' key in story: {story}"
         assert "source_account" in story, "Missing 'source_account' key"
@@ -126,16 +218,20 @@ def test_morning_digest_assembly():
 
     # queue_snapshot: correct platform counts and total
     qs = digest["queue_snapshot"]
-    assert qs == {"twitter": 3, "instagram": 1, "content": 1, "total": 5}, \
+    assert qs == {"twitter": 3, "instagram": 1, "content": 1, "total": 5}, (
         f"queue_snapshot mismatch: {qs}"
+    )
 
     # yesterday counts
-    assert digest["yesterday_approved"]["count"] == 3, \
+    assert digest["yesterday_approved"]["count"] == 3, (
         f"Expected approved count 3, got {digest['yesterday_approved']['count']}"
-    assert digest["yesterday_rejected"]["count"] == 1, \
+    )
+    assert digest["yesterday_rejected"]["count"] == 1, (
         f"Expected rejected count 1, got {digest['yesterday_rejected']['count']}"
-    assert digest["yesterday_expired"]["count"] == 2, \
+    )
+    assert digest["yesterday_expired"]["count"] == 2, (
         f"Expected expired count 2, got {digest['yesterday_expired']['count']}"
+    )
 
     # priority_alert: has required keys, correct score
     pa = digest["priority_alert"]
@@ -156,9 +252,27 @@ def test_morning_digest_whatsapp_send():
     # Known digest dict returned by _assemble_digest
     known_digest = {
         "top_stories": [
-            {"headline": "Gold hits all-time high.", "source_account": "@Kitco", "platform": "twitter", "score": 9.0, "source_url": "https://ex.com/1"},
-            {"headline": "Central banks buying gold.", "source_account": "@GoldInvestor", "platform": "instagram", "score": 8.5, "source_url": "https://ex.com/2"},
-            {"headline": "Gold ETF inflows surge.", "source_account": "@AuAnalyst", "platform": "twitter", "score": 7.0, "source_url": "https://ex.com/3"},
+            {
+                "headline": "Gold hits all-time high.",
+                "source_account": "@Kitco",
+                "platform": "twitter",
+                "score": 9.0,
+                "source_url": "https://ex.com/1",
+            },
+            {
+                "headline": "Central banks buying gold.",
+                "source_account": "@GoldInvestor",
+                "platform": "instagram",
+                "score": 8.5,
+                "source_url": "https://ex.com/2",
+            },
+            {
+                "headline": "Gold ETF inflows surge.",
+                "source_account": "@AuAnalyst",
+                "platform": "twitter",
+                "score": 7.0,
+                "source_url": "https://ex.com/3",
+            },
         ],
         "queue_snapshot": {"twitter": 3, "instagram": 1, "content": 1, "total": 5},
         "yesterday_approved": {"count": 3, "items": []},
@@ -196,12 +310,13 @@ def test_morning_digest_whatsapp_send():
                 return "https://app.sevamining.com"
             return default
 
-        with patch.object(agent, "_assemble_digest", new=mock_assemble_digest), \
-             patch.object(agent, "_get_config", new=mock_get_config), \
-             patch("agents.senior_agent.AsyncSessionLocal") as mock_session_local, \
-             patch("agents.senior_agent.AgentRun", return_value=mock_run), \
-             patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send:
-
+        with (
+            patch.object(agent, "_assemble_digest", new=mock_assemble_digest),
+            patch.object(agent, "_get_config", new=mock_get_config),
+            patch("agents.senior_agent.AsyncSessionLocal") as mock_session_local,
+            patch("agents.senior_agent.AgentRun", return_value=mock_run),
+            patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_send,
+        ):
             mock_session_local.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session_local.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -214,26 +329,29 @@ def test_morning_digest_whatsapp_send():
 
             # Must contain date, queue total, approved count, and dashboard URL
             today_str = date.today().isoformat()
-            assert today_str in message, \
+            assert today_str in message, (
                 f"Expected today's date '{today_str}' in message, got: {message!r}"
-            assert "5" in message, \
-                f"Expected queue total '5' in message, got: {message!r}"
-            assert "3" in message, \
-                f"Expected approved count '3' in message, got: {message!r}"
-            assert "https://app.sevamining.com" in message, \
+            )
+            assert "5" in message, f"Expected queue total '5' in message, got: {message!r}"
+            assert "3" in message, f"Expected approved count '3' in message, got: {message!r}"
+            assert "https://app.sevamining.com" in message, (
                 f"Expected dashboard URL in message, got: {message!r}"
-            assert "Morning Digest" in message, \
+            )
+            assert "Morning Digest" in message, (
                 f"Expected 'Morning Digest' header in message, got: {message!r}"
+            )
 
         # Assert DailyDigest was added to the session
         daily_digest_objects = [obj for obj in added_objects if type(obj).__name__ == "DailyDigest"]
-        assert len(daily_digest_objects) >= 1, \
+        assert len(daily_digest_objects) >= 1, (
             f"Expected DailyDigest to be added to session, added_objects: {[type(o).__name__ for o in added_objects]}"
+        )
 
         # Assert whatsapp_sent_at is set (not None)
         digest_record = daily_digest_objects[0]
-        assert digest_record.whatsapp_sent_at is not None, \
+        assert digest_record.whatsapp_sent_at is not None, (
             "Expected DailyDigest.whatsapp_sent_at to be set after send"
+        )
 
     asyncio.run(run_test())
 
@@ -241,6 +359,7 @@ def test_morning_digest_whatsapp_send():
 # ---------------------------------------------------------------------------
 # Phase 10-03 — Morning digest WhatsApp tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_morning_digest_calls_send_whatsapp_message():
@@ -259,13 +378,16 @@ async def test_morning_digest_calls_send_whatsapp_message():
         "priority_alert": None,
     }
 
-    with patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest), \
-         patch.object(agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"), \
-         patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls, \
-         patch("agents.senior_agent.DailyDigest") as mock_digest_cls, \
-         patch("agents.senior_agent.AgentRun") as mock_run_cls, \
-         patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_wa:
-
+    with (
+        patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest),
+        patch.object(
+            agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"
+        ),
+        patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls,
+        patch("agents.senior_agent.DailyDigest") as mock_digest_cls,
+        patch("agents.senior_agent.AgentRun") as mock_run_cls,
+        patch("agents.senior_agent.send_whatsapp_message", new_callable=AsyncMock) as mock_wa,
+    ):
         mock_session = AsyncMock()
         mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -284,8 +406,8 @@ async def test_morning_digest_calls_send_whatsapp_message():
     mock_wa.assert_called_once()
     msg = mock_wa.call_args[0][0]
     assert "Morning Digest" in msg
-    assert "5" in msg   # queue total
-    assert "3" in msg   # approved
+    assert "5" in msg  # queue total
+    assert "3" in msg  # approved
 
 
 @pytest.mark.asyncio
@@ -305,13 +427,16 @@ async def test_morning_digest_whatsapp_failure_still_commits():
         "priority_alert": None,
     }
 
-    with patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest), \
-         patch.object(agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"), \
-         patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls, \
-         patch("agents.senior_agent.DailyDigest"), \
-         patch("agents.senior_agent.AgentRun") as mock_run_cls, \
-         patch("agents.senior_agent.send_whatsapp_message", side_effect=Exception("Twilio down")):
-
+    with (
+        patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest),
+        patch.object(
+            agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"
+        ),
+        patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls,
+        patch("agents.senior_agent.DailyDigest"),
+        patch("agents.senior_agent.AgentRun") as mock_run_cls,
+        patch("agents.senior_agent.send_whatsapp_message", side_effect=Exception("Twilio down")),
+    ):
         mock_session = AsyncMock()
         mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -328,3 +453,108 @@ async def test_morning_digest_whatsapp_failure_still_commits():
     assert mock_session.commit.called
     # run status should be "completed" (WhatsApp failure is non-fatal)
     assert mock_run.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Debug session twilio-morning-digest-not-delivering (2026-04-24):
+# run.notes must capture delivery status so a multi-week silent failure
+# can be diagnosed by querying agent_runs.notes alone.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_notes_captures_twilio_sid_on_success():
+    """On successful send, run.notes must include the Twilio SID."""
+    from agents.senior_agent import SeniorAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    agent = SeniorAgent()
+
+    mock_digest = {
+        "top_stories": [],
+        "queue_snapshot": {"total": 0},
+        "yesterday_approved": {"count": 0},
+        "yesterday_rejected": {"count": 0},
+        "yesterday_expired": {"count": 0},
+        "priority_alert": None,
+    }
+
+    with (
+        patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest),
+        patch.object(
+            agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"
+        ),
+        patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls,
+        patch("agents.senior_agent.DailyDigest"),
+        patch("agents.senior_agent.AgentRun") as mock_run_cls,
+        patch(
+            "agents.senior_agent.send_whatsapp_message",
+            new_callable=AsyncMock,
+            return_value="SMabc123",
+        ),
+    ):
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.flush = AsyncMock()
+        mock_session.add = MagicMock()
+
+        mock_run = MagicMock()
+        mock_run_cls.return_value = mock_run
+
+        await agent.run_morning_digest()
+
+    assert isinstance(mock_run.notes, str)
+    assert "whatsapp_sent" in mock_run.notes
+    assert "SMabc123" in mock_run.notes
+
+
+@pytest.mark.asyncio
+async def test_run_notes_captures_skip_reason_when_creds_missing():
+    """When send_whatsapp_message returns None (missing creds), run.notes
+    must record 'whatsapp_skipped' with an actionable reason.
+    """
+    from agents.senior_agent import SeniorAgent
+    from unittest.mock import patch, AsyncMock, MagicMock
+
+    agent = SeniorAgent()
+
+    mock_digest = {
+        "top_stories": [],
+        "queue_snapshot": {"total": 0},
+        "yesterday_approved": {"count": 0},
+        "yesterday_rejected": {"count": 0},
+        "yesterday_expired": {"count": 0},
+        "priority_alert": None,
+    }
+
+    with (
+        patch.object(agent, "_assemble_digest", new_callable=AsyncMock, return_value=mock_digest),
+        patch.object(
+            agent, "_get_config", new_callable=AsyncMock, return_value="https://app.sevamining.com"
+        ),
+        patch("agents.senior_agent.AsyncSessionLocal") as mock_session_cls,
+        patch("agents.senior_agent.DailyDigest"),
+        patch("agents.senior_agent.AgentRun") as mock_run_cls,
+        patch(
+            "agents.senior_agent.send_whatsapp_message",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
+        mock_session = AsyncMock()
+        mock_session_cls.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        mock_session.commit = AsyncMock()
+        mock_session.flush = AsyncMock()
+        mock_session.add = MagicMock()
+
+        mock_run = MagicMock()
+        mock_run_cls.return_value = mock_run
+
+        await agent.run_morning_digest()
+
+    assert isinstance(mock_run.notes, str)
+    assert "whatsapp_skipped" in mock_run.notes
+    assert "credentials" in mock_run.notes.lower()

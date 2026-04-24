@@ -7,6 +7,7 @@ Covers:
   with stagger offsets [0, 17, 34, 51, 68, 85, 102] minutes and lock IDs
   1010-1016.
 """
+
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,7 +16,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require"
+)
 os.environ.setdefault("ANTHROPIC_API_KEY", "x")
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "x")
 os.environ.setdefault("TWILIO_AUTH_TOKEN", "x")
@@ -40,6 +43,7 @@ from worker import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Advisory lock semantics (INFRA-05, EXEC-04)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_advisory_lock_prevents_duplicate_run():
@@ -74,6 +78,7 @@ async def test_job_exception_does_not_propagate():
 # quick-260421-eoe: 8-job topology
 # ---------------------------------------------------------------------------
 
+
 def test_sub_agents_total_six():
     """Interval + cron sub-agent lists together must cover all 6 sub-agents (post-k8n: 2 interval + 4 cron)."""
     assert len(CONTENT_INTERVAL_AGENTS) + len(CONTENT_CRON_AGENTS) == 6
@@ -94,11 +99,11 @@ def test_sub_agent_lock_ids():
         sub_entries[job_id] = lock_id
     assert sub_entries == {
         "sub_breaking_news": 1010,
-        "sub_threads":       1011,
-        "sub_quotes":        1013,
-        "sub_infographics":  1014,
-        "sub_gold_media":    1015,
-        "sub_gold_history":  1016,
+        "sub_threads": 1011,
+        "sub_quotes": 1013,
+        "sub_infographics": 1014,
+        "sub_gold_media": 1015,
+        "sub_gold_history": 1016,
     }
     # Also assert JOB_LOCK_IDS matches.
     for job_id, lock_id in sub_entries.items():
@@ -125,8 +130,12 @@ def test_retired_crons_absent_from_job_lock_ids():
     assert len(JOB_LOCK_IDS) == 7
     assert set(JOB_LOCK_IDS.keys()) == {
         "morning_digest",
-        "sub_breaking_news", "sub_threads", "sub_quotes",
-        "sub_infographics", "sub_gold_media", "sub_gold_history",
+        "sub_breaking_news",
+        "sub_threads",
+        "sub_quotes",
+        "sub_infographics",
+        "sub_gold_media",
+        "sub_gold_history",
     }
 
 
@@ -134,18 +143,26 @@ def test_retired_crons_absent_from_job_lock_ids():
 async def test_scheduler_registers_7_jobs():
     """build_scheduler() registers exactly 7 jobs with the expected IDs (quick-260423-k8n: sub_long_form removed)."""
     mock_engine = MagicMock()
-    with patch("worker._read_schedule_config",
-               new=AsyncMock(return_value={"morning_digest_schedule_hour": "8"})):
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "8"}),
+    ):
         scheduler = await build_scheduler(mock_engine)
 
     try:
         jobs = scheduler.get_jobs()
         ids = sorted(j.id for j in jobs)
-        expected = sorted([
-            "morning_digest",
-            "sub_breaking_news", "sub_threads", "sub_quotes",
-            "sub_infographics", "sub_gold_media", "sub_gold_history",
-        ])
+        expected = sorted(
+            [
+                "morning_digest",
+                "sub_breaking_news",
+                "sub_threads",
+                "sub_quotes",
+                "sub_infographics",
+                "sub_gold_media",
+                "sub_gold_history",
+            ]
+        )
         assert ids == expected, f"expected {expected}, got {ids}"
         assert len(jobs) == 7
     finally:
@@ -153,10 +170,64 @@ async def test_scheduler_registers_7_jobs():
             scheduler.shutdown(wait=False)
 
 
+# ---------------------------------------------------------------------------
+# Debug session twilio-morning-digest-not-delivering (2026-04-24):
+# morning_digest cron must fire at 07:00 America/Los_Angeles, not 08:00 UTC.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_morning_digest_cron_fires_in_pacific_time():
+    """morning_digest CronTrigger uses timezone='America/Los_Angeles'.
+
+    Regression guard: scheduler-level default tz is UTC; the trigger MUST
+    override with America/Los_Angeles. Without the override, hour=7 means
+    07:00 UTC = 00:00 PDT, which is silently wrong.
+    """
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(mock_engine)
+
+    try:
+        job = scheduler.get_job("morning_digest")
+        assert job is not None
+        trigger = job.trigger
+        # APScheduler CronTrigger stores timezone on the trigger instance.
+        # Check by comparing the zone string.
+        tz_name = str(getattr(trigger, "timezone", ""))
+        assert "Los_Angeles" in tz_name, (
+            f"morning_digest trigger must be in America/Los_Angeles, got {tz_name!r}"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_morning_digest_default_hour_is_seven_pt():
+    """Default morning_digest_schedule_hour is '7' (PT-local), not '8' (UTC-era).
+
+    Guards against a regression where the default gets flipped back to 8 on
+    the assumption it's UTC-interpreted.
+    """
+    import inspect
+    from worker import _read_schedule_config
+
+    source = inspect.getsource(_read_schedule_config)
+    # Look for the defaults dict literal: "morning_digest_schedule_hour": "7"
+    assert '"morning_digest_schedule_hour": "7"' in source, (
+        "Default hour should be '7' (America/Los_Angeles local)"
+    )
+
+
 def test_read_schedule_config_has_no_retired_keys():
     """_read_schedule_config no longer reads content_agent_interval_hours or gold_history_hour."""
     import inspect
     from worker import _read_schedule_config
+
     source = inspect.getsource(_read_schedule_config)
     assert "content_agent_interval_hours" not in source
     assert "gold_history_hour" not in source
@@ -170,7 +241,7 @@ def test_interval_agents_cadences():
     cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
     assert cadences == {
         "sub_breaking_news": 2,
-        "sub_threads":       4,
+        "sub_threads": 4,
     }
 
 
@@ -179,7 +250,10 @@ def test_cron_agents_count_four():
     assert len(CONTENT_CRON_AGENTS) == 4
     ids = [t[0] for t in CONTENT_CRON_AGENTS]
     assert set(ids) == {
-        "sub_quotes", "sub_infographics", "sub_gold_media", "sub_gold_history",
+        "sub_quotes",
+        "sub_infographics",
+        "sub_gold_media",
+        "sub_gold_history",
     }
 
 
@@ -222,6 +296,7 @@ def test_gold_media_is_daily_cron():
 # Boot-time reconciler (quick-260422-l40)
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_session_factory(rowcount: int):
     """Build a mock AsyncSessionLocal factory returning a session with the given rowcount."""
     mock_session = AsyncMock()
@@ -259,7 +334,9 @@ async def test_reconcile_stale_runs_updates_orphans():
     assert params.get("status") == "failed" or "failed" in str(params)
     # errors should be a list (JSONB array)
     errors_val = params.get("errors")
-    assert isinstance(errors_val, list), f"Expected errors to be a list, got {type(errors_val)}: {errors_val}"
+    assert isinstance(errors_val, list), (
+        f"Expected errors to be a list, got {type(errors_val)}: {errors_val}"
+    )
     assert len(errors_val) == 1
     assert "scheduler restart" in errors_val[0]
 

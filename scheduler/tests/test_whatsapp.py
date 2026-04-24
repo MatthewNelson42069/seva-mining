@@ -2,8 +2,10 @@
 Tests for scheduler/services/whatsapp.py
 Covers: WHAT-01, WHAT-05
 """
+
 import sys
 import os
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Required env vars before any project import
@@ -38,7 +40,7 @@ async def test_send_whatsapp_message_missing_credentials():
     from services.whatsapp import send_whatsapp_message
 
     mock_settings = MagicMock()
-    mock_settings.twilio_account_sid = None   # <-- missing
+    mock_settings.twilio_account_sid = None  # <-- missing
     mock_settings.twilio_auth_token = "tok"
     mock_settings.twilio_whatsapp_from = "whatsapp:+14155238886"
     mock_settings.digest_whatsapp_to = "whatsapp:+15550001234"
@@ -63,3 +65,42 @@ async def test_send_whatsapp_message_retries_and_raises():
             await send_whatsapp_message("test")
 
     assert mock_send.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Debug session twilio-morning-digest-not-delivering (2026-04-24):
+# missing-cred path must log at ERROR and name the missing env var(s) so a
+# Railway log tail makes the problem obvious.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_missing_credentials_logs_at_error_level_and_names_missing(caplog):
+    """Missing cred path must log at ERROR (not WARNING) and list which env vars are missing.
+
+    Regression guard: the old code logged at WARNING, which is suppressed in
+    Railway's default log stream — a multi-week silent failure hid behind it.
+    """
+    import logging
+    from services.whatsapp import send_whatsapp_message
+    from unittest.mock import MagicMock
+
+    mock_settings = MagicMock()
+    mock_settings.twilio_account_sid = ""
+    mock_settings.twilio_auth_token = "tok"
+    mock_settings.twilio_whatsapp_from = "whatsapp:+14155238886"
+    mock_settings.digest_whatsapp_to = ""  # two missing
+
+    with patch("services.whatsapp.get_settings", return_value=mock_settings):
+        with caplog.at_level(logging.ERROR, logger="services.whatsapp"):
+            result = await send_whatsapp_message("test")
+
+    assert result is None
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert error_records, "Expected an ERROR-level log when creds are missing"
+    msg = error_records[0].getMessage()
+    assert "TWILIO_ACCOUNT_SID" in msg
+    assert "DIGEST_WHATSAPP_TO" in msg
+    # Must NOT list the ones that ARE set
+    assert "TWILIO_AUTH_TOKEN" not in msg
+    assert "TWILIO_WHATSAPP_FROM" not in msg

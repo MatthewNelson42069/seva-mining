@@ -8,6 +8,7 @@ Recipient must have opted in via: "join government-accident" to +14155238886
 Decision (Phase 10): Switched from content_sid (template SIDs) to body (free-form)
 for Twilio sandbox support. TEMPLATE_SIDS removed entirely.
 """
+
 import asyncio
 import logging
 
@@ -52,26 +53,49 @@ async def send_whatsapp_message(message: str) -> str | None:
     """
     settings = get_settings()
 
-    # Graceful skip if any required credential is absent
-    if not all([
-        settings.twilio_account_sid,
-        settings.twilio_auth_token,
-        settings.twilio_whatsapp_from,
-        settings.digest_whatsapp_to,
-    ]):
-        logger.warning(
-            "WhatsApp notification skipped — Twilio credentials not configured. "
-            "Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM, "
-            "and DIGEST_WHATSAPP_TO in environment."
+    # Graceful skip if any required credential is absent. The caller contract
+    # is: returns None on cred miss, raises on Twilio API error. Do NOT change
+    # the return-None path without updating callers — senior_agent and the
+    # send tests rely on this behavior.
+    # However: log at ERROR (not WARNING) and name the missing keys so this
+    # is visible in Railway production logs. The old WARNING-level log was
+    # invisible in Railway's default log stream and hid a multi-week silent
+    # failure — see debug session twilio-morning-digest-not-delivering
+    # (2026-04-24).
+    missing = [
+        name
+        for name, present in (
+            ("TWILIO_ACCOUNT_SID", bool(settings.twilio_account_sid)),
+            ("TWILIO_AUTH_TOKEN", bool(settings.twilio_auth_token)),
+            ("TWILIO_WHATSAPP_FROM", bool(settings.twilio_whatsapp_from)),
+            ("DIGEST_WHATSAPP_TO", bool(settings.digest_whatsapp_to)),
+        )
+        if not present
+    ]
+    if missing:
+        logger.error(
+            "WhatsApp notification SKIPPED — missing env vars on this service: %s. "
+            "Set these in the Railway scheduler service (NOT the API service — "
+            "they are separate Railway services with independent env sets) and redeploy.",
+            ", ".join(missing),
         )
         return None
 
     try:
-        return await asyncio.to_thread(_send_sync, message)
+        sid = await asyncio.to_thread(_send_sync, message)
+        logger.info("WhatsApp send OK — Twilio SID=%s", sid)
+        return sid
     except TwilioRestException as e:
         logger.warning("Twilio send failed (attempt 1), retrying: %s", e)
         try:
-            return await asyncio.to_thread(_send_sync, message)
+            sid = await asyncio.to_thread(_send_sync, message)
+            logger.info("WhatsApp send OK on retry — Twilio SID=%s", sid)
+            return sid
         except TwilioRestException as e2:
-            logger.error("Twilio send failed (attempt 2), giving up: %s", e2)
+            logger.error(
+                "Twilio send failed (attempt 2), giving up. status=%s code=%s msg=%s",
+                getattr(e2, "status", None),
+                getattr(e2, "code", None),
+                getattr(e2, "msg", str(e2)),
+            )
             raise

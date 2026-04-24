@@ -29,6 +29,7 @@ except Gold History every-other-day noon PT via ``day='*/2'``).
 CONTENT_CRON_AGENTS tuple shape changed to (job_id, run_fn, name, lock_id,
 cron_kwargs: dict).
 """
+
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
@@ -39,7 +40,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
 from sqlalchemy import text, select, update
 
-from database import engine, AsyncSessionLocal  # single shared engine — avoids duplicate connection pools
+from database import (
+    engine,
+    AsyncSessionLocal,
+)  # single shared engine — avoids duplicate connection pools
 from models.agent_run import AgentRun
 from models.config import Config
 from agents.content import (
@@ -79,13 +83,13 @@ def get_scheduler() -> AsyncIOScheduler:
 # quick-260421-eoe: retired content_agent(1003) + gold_history_agent(1009);
 # added sub_*(1010-1016) for the 7 content sub-agents.
 JOB_LOCK_IDS: dict[str, int] = {
-    "morning_digest":    1005,
+    "morning_digest": 1005,
     "sub_breaking_news": 1010,
-    "sub_threads":       1011,
-    "sub_quotes":        1013,
-    "sub_infographics":  1014,
-    "sub_gold_media":    1015,
-    "sub_gold_history":  1016,
+    "sub_threads": 1011,
+    "sub_quotes": 1013,
+    "sub_infographics": 1014,
+    "sub_gold_media": 1015,
+    "sub_gold_history": 1016,
 }
 
 
@@ -99,8 +103,8 @@ JOB_LOCK_IDS: dict[str, int] = {
 # quick-260423-k8n: sub_long_form removed — topology reduced from 7 to 6 sub-agents.
 # Lock ID 1012 (sub_long_form) retired, not reassigned. Stagger offsets [0,17,34] → [0,17].
 CONTENT_INTERVAL_AGENTS: list[tuple[str, object, str, int, int, int]] = [
-    ("sub_breaking_news", breaking_news.run_draft_cycle,  "Breaking News",  1010,   0, 2),
-    ("sub_threads",       threads.run_draft_cycle,        "Threads",        1011,  17, 4),
+    ("sub_breaking_news", breaking_news.run_draft_cycle, "Breaking News", 1010, 0, 2),
+    ("sub_threads", threads.run_draft_cycle, "Threads", 1011, 17, 4),
 ]
 
 # Cron-scheduled sub-agents (quick-260422-vxg).
@@ -112,10 +116,34 @@ CONTENT_INTERVAL_AGENTS: list[tuple[str, object, str, int, int, int]] = [
 # History fires every other day because the used-topics guard means most daily
 # ticks no-op; halving cadence halves the Claude picker spend.
 CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, dict]] = [
-    ("sub_quotes",        quotes.run_draft_cycle,       "Quotes",        1013, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
-    ("sub_infographics",  infographics.run_draft_cycle, "Infographics",  1014, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
-    ("sub_gold_media",    gold_media.run_draft_cycle,   "Gold Media",    1015, {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
-    ("sub_gold_history",  gold_history.run_draft_cycle, "Gold History",  1016, {"day": "*/2", "hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
+    (
+        "sub_quotes",
+        quotes.run_draft_cycle,
+        "Quotes",
+        1013,
+        {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
+    ),
+    (
+        "sub_infographics",
+        infographics.run_draft_cycle,
+        "Infographics",
+        1014,
+        {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
+    ),
+    (
+        "sub_gold_media",
+        gold_media.run_draft_cycle,
+        "Gold Media",
+        1015,
+        {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
+    ),
+    (
+        "sub_gold_history",
+        gold_history.run_draft_cycle,
+        "Gold History",
+        1016,
+        {"day": "*/2", "hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
+    ),
 ]
 
 
@@ -189,6 +217,7 @@ def _make_morning_digest_job(engine):
     Retained as a dedicated factory for clarity — morning_digest is the
     sole cron-scheduled job that isn't a content sub-agent.
     """
+
     async def job():
         async with engine.connect() as conn:
             agent = SeniorAgent()
@@ -198,6 +227,7 @@ def _make_morning_digest_job(engine):
                 "morning_digest",
                 agent.run_morning_digest,
             )
+
     return job
 
 
@@ -207,6 +237,7 @@ def _make_sub_agent_job(job_id: str, lock_id: int, run_fn, engine):
     Parameterized on ``run_fn`` so every sub-agent executes under its own
     advisory lock without needing a dispatch switch (quick-260421-eoe).
     """
+
     async def job():
         async with engine.connect() as conn:
             await with_advisory_lock(
@@ -215,6 +246,7 @@ def _make_sub_agent_job(job_id: str, lock_id: int, run_fn, engine):
                 job_id,
                 run_fn,
             )
+
     return job
 
 
@@ -229,22 +261,28 @@ async def _read_schedule_config(engine) -> dict[str, str]:
     with static offsets.
     """
     defaults = {
-        "morning_digest_schedule_hour": "8",
+        # Hour is interpreted in America/Los_Angeles local time, NOT UTC.
+        # 7 = 07:00 PT morning digest (user's expected delivery time).
+        # Historical: this key was "8" with scheduler tz=UTC, which fired at
+        # 01:00 PDT — silent mis-timing. Debug session
+        # twilio-morning-digest-not-delivering (2026-04-24) attached an
+        # explicit timezone to the CronTrigger and moved the default to 7 PT.
+        "morning_digest_schedule_hour": "7",
     }
     try:
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
         async with session_factory() as session:
             result = await session.execute(
-                select(Config.key, Config.value).where(
-                    Config.key.in_(list(defaults.keys()))
-                )
+                select(Config.key, Config.value).where(Config.key.in_(list(defaults.keys())))
             )
             rows = {row.key: row.value for row in result.all()}
         config = {}
         for key, default in defaults.items():
             value = rows.get(key, default)
             if key not in rows:
-                logger.warning("Schedule config key '%s' not in DB — using default: %s", key, default)
+                logger.warning(
+                    "Schedule config key '%s' not in DB — using default: %s", key, default
+                )
             config[key] = value
         return config
     except Exception as exc:
@@ -273,8 +311,10 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     digest_hour = int(cfg["morning_digest_schedule_hour"])
 
     logger.info(
-        "Schedule config: digest=cron(%d:00 UTC), interval_sub_agents=%d jobs (sub_breaking_news=2h, sub_threads=4h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
-        digest_hour, len(CONTENT_INTERVAL_AGENTS), len(CONTENT_CRON_AGENTS),
+        "Schedule config: digest=cron(%d:00 America/Los_Angeles), interval_sub_agents=%d jobs (sub_breaking_news=2h, sub_threads=4h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
+        digest_hour,
+        len(CONTENT_INTERVAL_AGENTS),
+        len(CONTENT_CRON_AGENTS),
     )
 
     scheduler = AsyncIOScheduler(
@@ -286,13 +326,22 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         timezone="UTC",
     )
 
+    # CronTrigger takes an explicit timezone arg — do NOT rely on the scheduler
+    # default (UTC). Without this arg the job would fire at 07:00 UTC (midnight
+    # PT) which is silently wrong for "daily morning digest at 7am local".
+    # Fixed during debug session twilio-morning-digest-not-delivering
+    # (2026-04-24). The matching default in _read_schedule_config was also moved
+    # from "8" to "7" so the PT-interpretation of the value matches the
+    # user-facing promise ("~7am America/Los_Angeles each day").
     scheduler.add_job(
         _make_morning_digest_job(engine),
-        trigger="cron",
-        hour=digest_hour,
-        minute=0,
+        trigger=CronTrigger(
+            hour=digest_hour,
+            minute=0,
+            timezone="America/Los_Angeles",
+        ),
         id="morning_digest",
-        name=f"Morning Digest — daily at {digest_hour}am",
+        name=f"Morning Digest — daily at {digest_hour}:00 America/Los_Angeles",
     )
 
     now = datetime.now(timezone.utc)
@@ -337,8 +386,8 @@ async def upsert_agent_config() -> None:
         # Content quality threshold
         # Anthropic relevance scoring fallback is 0.5 — lower threshold so more stories pass.
         # With 0.5 relevance: (0.5*0.4 + recency*0.3 + cred*0.3)*10 = min 4.0 for old/unknown sources
-        "content_quality_threshold": "7.0",    # restored — feed narrowing + gold gate replace this workaround
-        "content_recency_weight": "0.40",      # bump from 0.30 — favours fresher stories
+        "content_quality_threshold": "7.0",  # restored — feed narrowing + gold gate replace this workaround
+        "content_recency_weight": "0.40",  # bump from 0.30 — favours fresher stories
     }
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as session:
@@ -381,8 +430,7 @@ async def reconcile_stale_runs(threshold_minutes: int = 30) -> int:
             .values(
                 status="failed",
                 errors=[
-                    "scheduler restart — run abandoned (process killed "
-                    "before finally block)",
+                    "scheduler restart — run abandoned (process killed before finally block)",
                 ],
                 ended_at=now,
             )
@@ -393,7 +441,8 @@ async def reconcile_stale_runs(threshold_minutes: int = 30) -> int:
             logger.info(
                 "reconcile_stale_runs: marked %d orphan 'running' agent_runs "
                 "as 'failed' (older than %d min)",
-                count, threshold_minutes,
+                count,
+                threshold_minutes,
             )
         return count
 
@@ -405,6 +454,7 @@ async def _validate_env() -> None:
     Logs ERROR for keys that will cause agent failures if absent.
     """
     from config import get_settings  # noqa: PLC0415
+
     settings = get_settings()
 
     critical = {

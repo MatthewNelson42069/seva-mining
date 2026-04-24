@@ -9,6 +9,7 @@ aggregates them at 8am UTC.
 
 Requirements: SENR-06, SENR-07, SENR-08, WHAT-01
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,13 +39,9 @@ class SeniorAgent:
     # Config helper
     # ------------------------------------------------------------------
 
-    async def _get_config(
-        self, session: AsyncSession, key: str, default: str
-    ) -> str:
+    async def _get_config(self, session: AsyncSession, key: str, default: str) -> str:
         """Fetch a single config value by *key* or return *default*."""
-        result = await session.execute(
-            select(Config.value).where(Config.key == key)
-        )
+        result = await session.execute(select(Config.value).where(Config.key == key))
         return result.scalar_one_or_none() or default
 
     # ------------------------------------------------------------------
@@ -96,12 +93,10 @@ class SeniorAgent:
             ``yesterday_rejected``, ``yesterday_expired``, ``priority_alert``.
         """
         today = date.today()
-        yesterday_start = datetime.combine(
-            today - timedelta(days=1), datetime.min.time()
-        ).replace(tzinfo=timezone.utc)
-        yesterday_end = datetime.combine(today, datetime.min.time()).replace(
+        yesterday_start = datetime.combine(today - timedelta(days=1), datetime.min.time()).replace(
             tzinfo=timezone.utc
         )
+        yesterday_end = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
 
         # --- Yesterday approved count (SENR-08) ---
         approved_result = await session.execute(
@@ -154,7 +149,8 @@ class SeniorAgent:
         top_stories = [
             {
                 # source_text first line is the news headline (e.g. "Reuters: Gold hits...")
-                "headline": (item.source_text or "").split("\n")[0].strip() or self._headline_from_rationale(item.rationale),
+                "headline": (item.source_text or "").split("\n")[0].strip()
+                or self._headline_from_rationale(item.rationale),
                 "source_account": item.source_account or "",
                 "platform": item.platform or "",
                 "time": item.created_at.isoformat() if item.created_at else None,
@@ -192,9 +188,7 @@ class SeniorAgent:
                 "source_account": priority_item.source_account,
                 "headline": self._headline_from_rationale(priority_item.rationale),
                 "expires_at": (
-                    priority_item.expires_at.isoformat()
-                    if priority_item.expires_at
-                    else None
+                    priority_item.expires_at.isoformat() if priority_item.expires_at else None
                 ),
                 "source_url": priority_item.source_url,
             }
@@ -247,17 +241,13 @@ class SeniorAgent:
                 # Build WhatsApp template variables
                 var_1 = date.today().isoformat()
 
-                raw_headlines = "; ".join(
-                    s["headline"] for s in digest["top_stories"][:5]
-                )
+                raw_headlines = "; ".join(s["headline"] for s in digest["top_stories"][:5])
                 if len(raw_headlines) > 200:
                     # Truncate at last "; " boundary within 200 chars
                     truncated = raw_headlines[:200]
                     last_sep = truncated.rfind("; ")
                     var_2 = (
-                        truncated[:last_sep] + "..."
-                        if last_sep > 0
-                        else truncated[:197] + "..."
+                        truncated[:last_sep] + "..." if last_sep > 0 else truncated[:197] + "..."
                     )
                 else:
                     var_2 = raw_headlines
@@ -270,6 +260,15 @@ class SeniorAgent:
                     session, "dashboard_url", "https://app.sevamining.com"
                 )
 
+                # Delivery status is recorded into run.notes so a simple
+                # SELECT notes FROM agent_runs WHERE agent_name='morning_digest'
+                # ORDER BY started_at DESC LIMIT 10
+                # tells us, without Railway log access, whether each digest
+                # actually hit Twilio. See debug session
+                # twilio-morning-digest-not-delivering (2026-04-24) — a
+                # multi-week silent failure passed undetected because
+                # status='completed' was true regardless of delivery.
+                whatsapp_status: str
                 try:
                     # Build free-form digest message (Twilio sandbox — no template approval needed)
                     digest_message = (
@@ -279,10 +278,20 @@ class SeniorAgent:
                         f"Top stories: {var_2}\n"
                         f"Review: {var_7}"
                     )
-                    await send_whatsapp_message(digest_message)
-                    record.whatsapp_sent_at = datetime.now(timezone.utc)
+                    sid = await send_whatsapp_message(digest_message)
+                    if sid is None:
+                        # send_whatsapp_message returned None => credentials
+                        # missing (it already logged which keys at ERROR).
+                        whatsapp_status = (
+                            "whatsapp_skipped: credentials missing (see scheduler log)"
+                        )
+                    else:
+                        record.whatsapp_sent_at = datetime.now(timezone.utc)
+                        whatsapp_status = f"whatsapp_sent: sid={sid}"
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Morning digest WhatsApp send failed (non-fatal): %s", exc)
+                    whatsapp_status = f"whatsapp_failed: {type(exc).__name__}: {exc}"
+                run.notes = whatsapp_status
 
                 run.status = "completed"
                 run.ended_at = datetime.now(timezone.utc)
@@ -321,9 +330,7 @@ async def seed_senior_config() -> None:
     }
     async with AsyncSessionLocal() as session:
         for key, value in defaults.items():
-            existing = await session.execute(
-                select(Config.value).where(Config.key == key)
-            )
+            existing = await session.execute(select(Config.value).where(Config.key == key))
             if existing.scalar_one_or_none() is None:
                 session.add(Config(key=key, value=value))
         await session.commit()
