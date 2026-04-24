@@ -406,3 +406,381 @@ async def test_record_used_url_creates_config_row_when_missing():
     added = session.add.call_args[0][0]
     assert added.key == "gold_history_used_urls"
     assert "https://a.com/x" in json.loads(added.value)
+
+
+# ---------------------------------------------------------------------------
+# T4: drafter input shape
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_draft_gold_history_accepts_article_text_shape():
+    """_draft_gold_history now accepts (article_text, headline, url, source_name)."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [
+        MagicMock(
+            text=json.dumps(
+                {
+                    "format": "gold_history",
+                    "story_title": "Klondike",
+                    "story_slug": "klondike",
+                    "tweets": ["hook", "tweet 2"],
+                    "instagram_carousel": [
+                        {"slide": 1, "headline": "h", "body": "b", "visual_note": "v"}
+                    ],
+                    "instagram_caption": "cap",
+                    "sources": [
+                        {
+                            "ref": "[1]",
+                            "url": "https://kitco.com/klondike",
+                            "publisher": "Kitco",
+                        }
+                    ],
+                }
+            )
+        )
+    ]
+    client.messages.create = AsyncMock(return_value=response)
+    draft = await gold_history._draft_gold_history(
+        article_text="The Klondike gold rush began in 1896 when George Carmack...",
+        headline="Klondike Gold Rush",
+        url="https://kitco.com/klondike",
+        source_name="Kitco",
+        client=client,
+    )
+    assert draft is not None
+    assert draft["format"] == "gold_history"
+    assert "sources" in draft
+
+
+@pytest.mark.asyncio
+async def test_draft_gold_history_prompt_has_no_verified_facts_refs():
+    """System + user prompts must not mention verified_facts, fact_sheet, or a sources block.
+    Must mention article_text as the fact source."""
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [
+        MagicMock(
+            text=json.dumps(
+                {
+                    "format": "gold_history",
+                    "story_title": "T",
+                    "story_slug": "t",
+                    "tweets": ["h"],
+                    "instagram_carousel": [],
+                    "instagram_caption": "c",
+                    "sources": [{"ref": "[1]", "url": "https://x.com/a", "publisher": "X"}],
+                }
+            )
+        )
+    ]
+    client.messages.create = AsyncMock(return_value=response)
+    await gold_history._draft_gold_history(
+        article_text="body",
+        headline="T",
+        url="https://x.com/a",
+        source_name="X",
+        client=client,
+    )
+    _, kwargs = client.messages.create.call_args
+    composed = (kwargs.get("system", "") + "\n" + kwargs["messages"][0]["content"]).lower()
+    for forbidden in ("verified_facts", "fact_sheet", "story_slug:"):
+        assert forbidden.lower() not in composed, f"Prompt must not mention {forbidden!r}"
+    assert "article_text" in composed or "article text" in composed, (
+        "Prompt must reference article_text as the single fact source"
+    )
+
+
+@pytest.mark.asyncio
+async def test_draft_gold_history_returns_none_on_bad_json_new_shape():
+    client = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text="not valid json at all")]
+    client.messages.create = AsyncMock(return_value=response)
+    draft = await gold_history._draft_gold_history(
+        article_text="x",
+        headline="T",
+        url="https://x.com/a",
+        source_name="X",
+        client=client,
+    )
+    assert draft is None
+
+
+# ---------------------------------------------------------------------------
+# T4: run_draft_cycle (integration with heavy mocking)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_happy_path_queues_one_bundle():
+    """Fetch 3 stories → all pass dedup + gate → first passes draft + review → queued=1,
+    loop breaks on first success (items_per_run cap=1)."""
+    from agents import content_agent as ca
+
+    stories = [
+        {
+            "title": "S1",
+            "link": "https://a.com/1",
+            "source_name": "A",
+            "summary": "",
+            "published": datetime.now(timezone.utc),
+        },
+        {
+            "title": "S2",
+            "link": "https://b.com/2",
+            "source_name": "B",
+            "summary": "",
+            "published": datetime.now(timezone.utc),
+        },
+        {
+            "title": "S3",
+            "link": "https://c.com/3",
+            "source_name": "C",
+            "summary": "",
+            "published": datetime.now(timezone.utc),
+        },
+    ]
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+    session.flush = AsyncMock()
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    async def fake_draft(*, article_text, headline, url, source_name, client):
+        return {
+            "format": "gold_history",
+            "story_title": headline,
+            "story_slug": "s",
+            "tweets": ["hook"],
+            "instagram_carousel": [],
+            "instagram_caption": "c",
+            "sources": [{"ref": "[1]", "url": url, "publisher": source_name}],
+        }
+
+    with (
+        patch("agents.content.gold_history.AsyncSessionLocal", return_value=ctx),
+        patch(
+            "agents.content.gold_history._get_used_urls", new=AsyncMock(return_value=set())
+        ),
+        patch("agents.content.gold_history._record_used_url", new=AsyncMock()),
+        patch.object(
+            ca,
+            "fetch_analytical_historical_stories",
+            new=AsyncMock(return_value=stories),
+        ),
+        patch.object(
+            ca,
+            "is_gold_relevant_or_systemic_shock",
+            new=AsyncMock(return_value={"keep": True}),
+        ),
+        patch.object(
+            ca, "fetch_article", new=AsyncMock(return_value=("full article body", True))
+        ),
+        patch("agents.content.gold_history._draft_gold_history", new=fake_draft),
+        patch.object(
+            ca,
+            "review",
+            new=AsyncMock(return_value={"compliance_passed": True, "rationale": "ok"}),
+        ),
+        patch.object(ca, "build_draft_item", new=MagicMock(return_value=MagicMock())),
+        patch(
+            "agents.content.gold_history.get_settings",
+            return_value=MagicMock(anthropic_api_key="x", serpapi_api_key="x"),
+        ),
+    ):
+        await gold_history.run_draft_cycle()
+
+    # First object added is AgentRun; later adds include ContentBundle + DraftItem
+    agent_run = captured[0]
+    payload = json.loads(agent_run.notes)
+    for k in (
+        "candidates_fetched",
+        "after_dedup",
+        "gold_gate_passed",
+        "drafted",
+        "review_passed",
+        "queued",
+        "skipped_no_serpapi",
+        "skipped_insufficient_candidates",
+    ):
+        assert k in payload, f"notes missing key {k!r}"
+    assert payload["queued"] == 1
+    assert payload["skipped_no_serpapi"] is False
+    assert agent_run.items_queued == 1
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_skips_when_serpapi_missing():
+    """When SerpAPI key is empty, the cycle writes notes.skipped_no_serpapi=True and exits."""
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+    session.flush = AsyncMock()
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("agents.content.gold_history.AsyncSessionLocal", return_value=ctx),
+        patch(
+            "agents.content.gold_history.get_settings",
+            return_value=MagicMock(anthropic_api_key="x", serpapi_api_key=""),
+        ),
+    ):
+        await gold_history.run_draft_cycle()
+
+    agent_run = captured[0]
+    payload = json.loads(agent_run.notes)
+    assert payload["skipped_no_serpapi"] is True
+    assert payload["queued"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_dedupes_by_url():
+    """If the fetched story URL is already in used_urls, skip that candidate."""
+    from agents import content_agent as ca
+
+    # Two stories; first is already used (canonical match), second is fresh.
+    stories = [
+        {
+            "title": "Used",
+            "link": "https://a.com/x/",
+            "source_name": "A",
+            "summary": "",
+            "published": datetime.now(timezone.utc),
+        },
+        {
+            "title": "Fresh",
+            "link": "https://b.com/y",
+            "source_name": "B",
+            "summary": "",
+            "published": datetime.now(timezone.utc),
+        },
+    ]
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+    session.flush = AsyncMock()
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    async def fake_draft(**kwargs):
+        return {
+            "format": "gold_history",
+            "story_title": kwargs["headline"],
+            "story_slug": "s",
+            "tweets": ["h"],
+            "instagram_carousel": [],
+            "instagram_caption": "c",
+            "sources": [
+                {
+                    "ref": "[1]",
+                    "url": kwargs["url"],
+                    "publisher": kwargs["source_name"],
+                }
+            ],
+        }
+
+    with (
+        patch("agents.content.gold_history.AsyncSessionLocal", return_value=ctx),
+        patch(
+            "agents.content.gold_history._get_used_urls",
+            new=AsyncMock(return_value={"https://a.com/x"}),  # canonical of first story
+        ),
+        patch("agents.content.gold_history._record_used_url", new=AsyncMock()),
+        patch.object(
+            ca,
+            "fetch_analytical_historical_stories",
+            new=AsyncMock(return_value=stories),
+        ),
+        patch.object(
+            ca,
+            "is_gold_relevant_or_systemic_shock",
+            new=AsyncMock(return_value={"keep": True}),
+        ),
+        patch.object(
+            ca, "fetch_article", new=AsyncMock(return_value=("body", True))
+        ),
+        patch("agents.content.gold_history._draft_gold_history", new=fake_draft),
+        patch.object(
+            ca,
+            "review",
+            new=AsyncMock(return_value={"compliance_passed": True, "rationale": "ok"}),
+        ),
+        patch.object(ca, "build_draft_item", new=MagicMock(return_value=MagicMock())),
+        patch(
+            "agents.content.gold_history.get_settings",
+            return_value=MagicMock(anthropic_api_key="x", serpapi_api_key="x"),
+        ),
+    ):
+        await gold_history.run_draft_cycle()
+
+    agent_run = captured[0]
+    payload = json.loads(agent_run.notes)
+    # After dedup only 1 survives (the fresh one)
+    assert payload["candidates_fetched"] == 2
+    assert payload["after_dedup"] == 1
+    assert payload["queued"] == 1
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_all_rejected_writes_insufficient_candidates():
+    """When gold gate rejects everything, notes.skipped_insufficient_candidates=True."""
+    from agents import content_agent as ca
+
+    stories = [
+        {
+            "title": "S1",
+            "link": "https://a.com/1",
+            "source_name": "A",
+            "summary": "",
+            "published": datetime.now(timezone.utc),
+        },
+        {
+            "title": "S2",
+            "link": "https://b.com/2",
+            "source_name": "B",
+            "summary": "",
+            "published": datetime.now(timezone.utc),
+        },
+    ]
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+    session.flush = AsyncMock()
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("agents.content.gold_history.AsyncSessionLocal", return_value=ctx),
+        patch(
+            "agents.content.gold_history._get_used_urls", new=AsyncMock(return_value=set())
+        ),
+        patch("agents.content.gold_history._record_used_url", new=AsyncMock()),
+        patch.object(
+            ca,
+            "fetch_analytical_historical_stories",
+            new=AsyncMock(return_value=stories),
+        ),
+        patch.object(
+            ca,
+            "is_gold_relevant_or_systemic_shock",
+            new=AsyncMock(return_value={"keep": False}),
+        ),
+        patch(
+            "agents.content.gold_history.get_settings",
+            return_value=MagicMock(anthropic_api_key="x", serpapi_api_key="x"),
+        ),
+    ):
+        await gold_history.run_draft_cycle()
+
+    agent_run = captured[0]
+    payload = json.loads(agent_run.notes)
+    assert payload["skipped_insufficient_candidates"] is True
+    assert payload["queued"] == 0
