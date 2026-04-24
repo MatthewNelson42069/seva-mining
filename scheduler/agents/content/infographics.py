@@ -341,18 +341,22 @@ Respond in valid JSON with this structure:
 
 
 async def run_draft_cycle() -> None:
-    """Single-tick pipeline: fetch → filter → draft → review → write.
+    """Two-phase pipeline — guarantees 2 infographics/day (quick-260423-lvp).
+
+    Phase 1 (news): existing run_text_story_cycle with max_count=2, sort_by='score',
+    dedup_scope='same_type' (per quick-260422-of3).
+
+    Phase 2 (analytical-historical fallback): fires ONLY when phase 1 queued <2.
+    Fetches via content_agent.fetch_analytical_historical_stories using a day-seeded
+    rotation through ANALYTICAL_HISTORICAL_QUERIES. Runs stories through the SAME
+    _draft function — no prompt changes.
 
     Configured per quick-260422-of3:
     - max_count=2: produce the 2 best infographics per day (D-04)
-    - sort_by="score": pick best by quality/score, not recency (D-01)
-    - dedup_scope="same_type": allow reuse of breaking_news stories; dedup only
-      against other infographics within the same day (D-02)
-
-    Notes telemetry (structured JSON) is populated by the shared pipeline for
-    infographics rows; no4's PerAgentQueuePage renders it as an inline subtitle.
+    - sort_by='score': pick best by quality/score (D-01)
+    - dedup_scope='same_type': allow reuse of breaking_news stories (D-02)
     """
-    await run_text_story_cycle(
+    news_items_queued = await run_text_story_cycle(
         agent_name=AGENT_NAME,
         content_type=CONTENT_TYPE,
         draft_fn=_draft,
@@ -360,3 +364,19 @@ async def run_draft_cycle() -> None:
         sort_by="score",
         dedup_scope="same_type",
     )
+    if news_items_queued < 2:
+        shortfall = 2 - news_items_queued
+        analytical_queued = await _run_analytical_fallback(shortfall=shortfall)
+        logger.info(
+            "%s: two-phase summary — news=%d, analytical=%d, total=%d",
+            AGENT_NAME,
+            news_items_queued,
+            analytical_queued,
+            news_items_queued + analytical_queued,
+        )
+    else:
+        logger.info(
+            "%s: news phase queued %d items — fallback skipped",
+            AGENT_NAME,
+            news_items_queued,
+        )

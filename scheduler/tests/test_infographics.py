@@ -103,6 +103,10 @@ async def test_run_draft_cycle_completes_with_stories():
         patch("agents.content.AsyncSessionLocal", return_value=ctx),
         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)),
         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)),
+        patch(
+            "agents.content.infographics._run_analytical_fallback",
+            new=AsyncMock(return_value=0),
+        ),
     ):
         await infographics.run_draft_cycle()
 
@@ -123,6 +127,7 @@ async def test_run_draft_cycle_passes_new_kwargs():
 
     async def fake_cycle(**kwargs):
         call_kwargs.update(kwargs)
+        return 2  # return 2 so fallback is not triggered (quick-260423-lvp T5)
 
     with patch(
         "agents.content.infographics.run_text_story_cycle", new=AsyncMock(side_effect=fake_cycle)
@@ -320,6 +325,10 @@ async def test_run_draft_cycle_writes_notes_on_empty_candidates():
         patch("agents.content.AsyncSessionLocal", return_value=ctx),
         patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)),
         patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=[])),
+        patch(
+            "agents.content.infographics._run_analytical_fallback",
+            new=AsyncMock(return_value=0),
+        ),
     ):
         await infographics.run_draft_cycle()
 
@@ -488,3 +497,83 @@ async def test_run_analytical_fallback_returns_zero_when_gate_rejects_all():
         result = await _run_analytical_fallback(shortfall=2)
 
     assert result == 0
+
+
+# ---------------------------------------------------------------------------
+# quick-260423-lvp T5: two-phase run_draft_cycle wiring
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_zero_news_triggers_two_analytical():
+    """When news phase returns 0, fallback is called with shortfall=2."""
+    fallback_calls: list = []
+
+    async def fake_fallback(shortfall: int) -> int:
+        fallback_calls.append(shortfall)
+        return shortfall  # claims to have queued exactly shortfall
+
+    with (
+        patch(
+            "agents.content.infographics.run_text_story_cycle",
+            new=AsyncMock(return_value=0),
+        ),
+        patch(
+            "agents.content.infographics._run_analytical_fallback",
+            new=AsyncMock(side_effect=fake_fallback),
+        ),
+    ):
+        await infographics.run_draft_cycle()
+
+    assert fallback_calls == [2], f"Expected fallback called with shortfall=2, got {fallback_calls}"
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_one_news_triggers_one_analytical():
+    """When news phase returns 1, fallback is called with shortfall=1."""
+    fallback_calls: list = []
+
+    async def fake_fallback(shortfall: int) -> int:
+        fallback_calls.append(shortfall)
+        return shortfall
+
+    with (
+        patch(
+            "agents.content.infographics.run_text_story_cycle",
+            new=AsyncMock(return_value=1),
+        ),
+        patch(
+            "agents.content.infographics._run_analytical_fallback",
+            new=AsyncMock(side_effect=fake_fallback),
+        ),
+    ):
+        await infographics.run_draft_cycle()
+
+    assert fallback_calls == [1], f"Expected fallback called with shortfall=1, got {fallback_calls}"
+
+
+@pytest.mark.asyncio
+async def test_run_draft_cycle_two_news_skips_fallback_no_serpapi_call():
+    """When news phase returns 2, fallback is NOT called and
+    fetch_analytical_historical_stories is never awaited (zero SerpAPI credits).
+    """
+    fallback_mock = AsyncMock()
+    fetch_spy = AsyncMock(return_value=[])
+
+    with (
+        patch(
+            "agents.content.infographics.run_text_story_cycle",
+            new=AsyncMock(return_value=2),
+        ),
+        patch(
+            "agents.content.infographics._run_analytical_fallback",
+            new=fallback_mock,
+        ),
+        patch.object(content_agent, "fetch_analytical_historical_stories", new=fetch_spy),
+    ):
+        await infographics.run_draft_cycle()
+
+    fallback_mock.assert_not_called()
+    assert fetch_spy.await_count == 0, (
+        f"Expected 0 SerpAPI calls on normal news day, got {fetch_spy.await_count}"
+    )
