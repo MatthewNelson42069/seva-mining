@@ -597,3 +597,26 @@ async def test_fetch_analytical_historical_stories_handles_no_client():
         stories = await content_agent.fetch_analytical_historical_stories(["gold during wars"])
 
     assert stories == []
+
+
+# ---------------------------------------------------------------------------
+# recency_score — quick-260424-j5i D3: new <48h=0.3 bucket
+# ---------------------------------------------------------------------------
+
+
+def test_recency_score_48h_bucket():
+    """D3 (j5i): recency_score grows a <48h=0.3 bucket between <24h=0.4 and >=48h=0.2.
+
+    - 25h old  → 0.3 (previously 0.2 — new softer bucket)
+    - 47h old  → 0.3 (inside new bucket)
+    - 49h old  → 0.2 (floor unchanged)
+    Bucket-below (22h) and bucket-above (>=48h) assertions lock both edges.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    assert content_agent.recency_score(now - timedelta(hours=25)) == 0.3
+    assert content_agent.recency_score(now - timedelta(hours=47)) == 0.3
+    assert content_agent.recency_score(now - timedelta(hours=49)) == 0.2
+    # Sanity-preserve <24h edge unaffected by the new bucket.
+    assert content_agent.recency_score(now - timedelta(hours=22)) == 0.4

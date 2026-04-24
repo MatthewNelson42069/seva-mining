@@ -89,3 +89,45 @@ async def test_run_draft_cycle_completes_with_stories():
 
     # agent_run was created and committed (twice: initial + final)
     assert session.commit.await_count >= 2
+
+
+# ---------------------------------------------------------------------------
+# quick-260424-j5i — min_score constant + selection kwargs propagation
+# ---------------------------------------------------------------------------
+
+
+def test_breaking_news_min_score_constant():
+    """j5i D2: BREAKING_NEWS_MIN_SCORE is a module-level tunable at 6.5."""
+    assert breaking_news.BREAKING_NEWS_MIN_SCORE == 6.5
+
+
+@pytest.mark.asyncio
+async def test_breaking_news_passes_selection_kwargs():
+    """j5i D1+D2: run_draft_cycle passes max_count=3, sort_by='score',
+    min_score=BREAKING_NEWS_MIN_SCORE (=6.5) through to run_text_story_cycle.
+    Mirrors test_infographics.py:120-145's call_kwargs idiom.
+    """
+    call_kwargs: dict = {}
+
+    async def fake_cycle(**kwargs):
+        call_kwargs.update(kwargs)
+        return 0
+
+    with patch(
+        "agents.content.breaking_news.run_text_story_cycle",
+        new=AsyncMock(side_effect=fake_cycle),
+    ):
+        await breaking_news.run_draft_cycle()
+
+    assert call_kwargs.get("agent_name") == "sub_breaking_news"
+    assert call_kwargs.get("content_type") == "breaking_news"
+    assert callable(call_kwargs.get("draft_fn"))
+    assert call_kwargs.get("max_count") == 3, (
+        f"Expected max_count=3, got {call_kwargs.get('max_count')}"
+    )
+    assert call_kwargs.get("sort_by") == "score", (
+        f"Expected sort_by='score', got {call_kwargs.get('sort_by')}"
+    )
+    assert call_kwargs.get("min_score") == 6.5, (
+        f"Expected min_score=6.5, got {call_kwargs.get('min_score')}"
+    )

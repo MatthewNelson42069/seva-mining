@@ -512,3 +512,23 @@ async def test_senior_agent_receives_excluded_content_types_from_worker():
             f"SeniorAgent._excluded_content_types must equal DIGEST_EXCLUDED_CONTENT_TYPES, "
             f"got {agent._excluded_content_types!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# quick-260424-j5i D9 — sub_threads cadence flip from 4h → 3h
+# ---------------------------------------------------------------------------
+
+
+def test_sub_threads_interval_is_three_hours():
+    """j5i D9: sub_threads IntervalTrigger cadence is 3h (was 4h post-vxg).
+
+    This asserts the NEW desired state. `test_interval_agents_cadences` above
+    asserts the pre-j5i state and is updated in T3 to the new value; keeping
+    both tests during the RED phase produces a clear TDD signal.
+    """
+    cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
+    assert cadences["sub_threads"] == 3, (
+        f"Expected sub_threads interval=3h, got {cadences.get('sub_threads')}"
+    )
+    # sub_breaking_news stays at 2h — locked invariant.
+    assert cadences["sub_breaking_news"] == 2

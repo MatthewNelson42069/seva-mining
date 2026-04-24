@@ -366,3 +366,232 @@ async def test_per_run_hook_success_merges_into_notes_dict():
     assert "candidates" in notes_dict, (
         "'candidates' key must be preserved in notes dict"
     )
+
+
+# ---------------------------------------------------------------------------
+# T1 Tests: quick-260424-j5i — min_score floor + floored_by_min_score telemetry
+# ---------------------------------------------------------------------------
+
+
+async def _run_cycle_with_min_score(
+    agent_name,
+    content_type,
+    stories,
+    draft_result,
+    min_score,
+    max_count=None,
+):
+    """Variant of _run_cycle that passes `min_score` (and optional `max_count`) through.
+
+    Returns (agent_run, build_draft_item_mock, session) so tests can inspect how
+    many DraftItems were built vs how many ContentBundles got flushed.
+    """
+    ctx, session = _session_ctx()
+
+    agent_run = MagicMock()
+    agent_run.id = 42
+    agent_run.items_queued = 0
+    agent_run.notes = json.dumps({"candidates": len(stories)})
+    agent_run.status = "running"
+    session.flush = AsyncMock(return_value=None)
+
+    mock_build_draft_item = MagicMock(return_value=MagicMock())
+    mock_send = AsyncMock(return_value=["SM_test"])
+
+    with (
+        patch("agents.content.AsyncSessionLocal", return_value=ctx),
+        patch("agents.content.fetch_market_snapshot", new=AsyncMock(return_value=None)),
+        patch("agents.content._is_already_covered_today", new=AsyncMock(return_value=False)),
+        patch.object(content_agent, "fetch_stories", new=AsyncMock(return_value=stories)),
+        patch.object(
+            content_agent,
+            "is_gold_relevant_or_systemic_shock",
+            new=AsyncMock(return_value={"keep": True}),
+        ),
+        patch.object(
+            content_agent,
+            "fetch_article",
+            new=AsyncMock(return_value=("article body", True)),
+        ),
+        patch.object(
+            content_agent,
+            "search_corroborating",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            content_agent,
+            "review",
+            new=AsyncMock(return_value={"compliance_passed": True, "rationale": "ok"}),
+        ),
+        patch.object(content_agent, "build_draft_item", new=mock_build_draft_item),
+        patch("agents.content.AgentRun", return_value=agent_run),
+        patch(
+            "agents.content.whatsapp.send_agent_run_notification",
+            new=mock_send,
+        ),
+    ):
+        kwargs = dict(
+            agent_name=agent_name,
+            content_type=content_type,
+            draft_fn=AsyncMock(return_value=draft_result),
+            min_score=min_score,
+        )
+        if max_count is not None:
+            kwargs["max_count"] = max_count
+        await run_text_story_cycle(**kwargs)
+
+    return agent_run, mock_build_draft_item, session
+
+
+@pytest.mark.asyncio
+async def test_min_score_filters_below_threshold():
+    """j5i D2/D6: min_score skips DraftItem creation for stories whose score is below
+    the floor, but the ContentBundle row is still persisted (compliance_passed=True
+    branch, just no DraftItem).
+    """
+    stories = [
+        {
+            "title": "Top story (score 8.0)",
+            "link": "http://example.com/1",
+            "source_name": "Reuters",
+            "score": 8.0,
+            "summary": "Gold content.",
+            "published_at": "2026-04-24T10:00:00Z",
+        },
+        {
+            "title": "Mid story (score 6.0 — floored)",
+            "link": "http://example.com/2",
+            "source_name": "Reuters",
+            "score": 6.0,
+            "summary": "Gold content.",
+            "published_at": "2026-04-24T09:00:00Z",
+        },
+        {
+            "title": "Low story (score 5.5 — floored)",
+            "link": "http://example.com/3",
+            "source_name": "Reuters",
+            "score": 5.5,
+            "summary": "Gold content.",
+            "published_at": "2026-04-24T08:00:00Z",
+        },
+    ]
+    draft_result = {
+        "format": "breaking_news",
+        "_rationale": "r",
+        "_key_data_points": [],
+        "tweet": "A draft.",
+    }
+
+    agent_run, mock_build_draft_item, _session = await _run_cycle_with_min_score(
+        agent_name="sub_breaking_news",
+        content_type="breaking_news",
+        stories=stories,
+        draft_result=draft_result,
+        min_score=6.5,
+    )
+
+    # Only 1 of 3 stories should have produced a DraftItem (the 8.0 one).
+    assert mock_build_draft_item.call_count == 1, (
+        f"Expected 1 DraftItem built (score 8.0 passes), got {mock_build_draft_item.call_count}"
+    )
+    assert agent_run.items_queued == 1, f"Expected items_queued=1, got {agent_run.items_queued}"
+
+
+@pytest.mark.asyncio
+async def test_floored_by_min_score_counter_populated():
+    """j5i D7: agent_run.notes contains 'floored_by_min_score': 2 after the
+    above run-shape (3 stories, 2 below 6.5 floor).
+    """
+    stories = [
+        {
+            "title": "Top (8.0)",
+            "link": "http://example.com/1",
+            "source_name": "Reuters",
+            "score": 8.0,
+            "summary": "",
+            "published_at": "2026-04-24T10:00:00Z",
+        },
+        {
+            "title": "Mid (6.0)",
+            "link": "http://example.com/2",
+            "source_name": "Reuters",
+            "score": 6.0,
+            "summary": "",
+            "published_at": "2026-04-24T09:00:00Z",
+        },
+        {
+            "title": "Low (5.5)",
+            "link": "http://example.com/3",
+            "source_name": "Reuters",
+            "score": 5.5,
+            "summary": "",
+            "published_at": "2026-04-24T08:00:00Z",
+        },
+    ]
+    draft_result = {
+        "format": "breaking_news",
+        "_rationale": "r",
+        "_key_data_points": [],
+        "tweet": "A draft.",
+    }
+
+    agent_run, _build, _session = await _run_cycle_with_min_score(
+        agent_name="sub_breaking_news",
+        content_type="breaking_news",
+        stories=stories,
+        draft_result=draft_result,
+        min_score=6.5,
+    )
+
+    notes = json.loads(agent_run.notes)
+    assert "floored_by_min_score" in notes, (
+        f"Expected 'floored_by_min_score' in notes, got keys: {list(notes.keys())}"
+    )
+    assert notes["floored_by_min_score"] == 2, (
+        f"Expected floored_by_min_score=2, got {notes['floored_by_min_score']}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_all_stories_floored_returns_empty_not_failed():
+    """j5i D6: when ALL stories fall below min_score, items_queued stays 0 and
+    agent_run.status == 'completed' (NOT 'failed'). Empty runs are the silent
+    firehose contract from i8b — the hook does not fire and no WhatsApp goes out.
+    """
+    stories = [
+        {
+            "title": f"Low story {i}",
+            "link": f"http://example.com/{i}",
+            "source_name": "Reuters",
+            "score": 5.0,
+            "summary": "",
+            "published_at": "2026-04-24T10:00:00Z",
+        }
+        for i in range(3)
+    ]
+    draft_result = {
+        "format": "breaking_news",
+        "_rationale": "r",
+        "_key_data_points": [],
+        "tweet": "A draft.",
+    }
+
+    agent_run, mock_build, _session = await _run_cycle_with_min_score(
+        agent_name="sub_breaking_news",
+        content_type="breaking_news",
+        stories=stories,
+        draft_result=draft_result,
+        min_score=6.5,
+    )
+
+    assert agent_run.items_queued == 0
+    assert agent_run.status == "completed", (
+        f"Expected status='completed' on empty run, got {agent_run.status!r}"
+    )
+    assert mock_build.call_count == 0, (
+        f"Expected 0 DraftItems built (all floored), got {mock_build.call_count}"
+    )
+    notes = json.loads(agent_run.notes)
+    assert notes.get("floored_by_min_score", 0) >= 1, (
+        f"Expected floored_by_min_score>=1, got {notes.get('floored_by_min_score')}"
+    )
