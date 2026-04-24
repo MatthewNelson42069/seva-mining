@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     x_api_key: str | None = None
     x_api_secret: str | None = None
 
+    # Phase B (quick-260424-l0d): OAuth 1.0a User Context for posting + feature flag
+    # See CLAUDE.md "Posting to X (Phase B Prereqs)" runbook before generating tokens.
+    x_access_token: str | None = None
+    x_access_token_secret: str | None = None
+    x_posting_enabled: bool = False
+    x_posting_sim_prefix: str = "sim-"
+
     serpapi_api_key: str | None = None
 
     # Phase 11 — Image rendering (Gemini / Cloudflare R2)

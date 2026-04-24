@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     # Optional — agents that need these will fail gracefully if absent
     x_api_key: Optional[str] = None
     x_api_secret: Optional[str] = None
+
+    # Phase B (quick-260424-l0d) — kept in parity with backend; scheduler does not
+    # post today, so these are accepted but unused. `extra="ignore"` already tolerates
+    # missing-from-env, but declaring them here keeps the schema legible.
+    x_access_token: Optional[str] = None
+    x_access_token_secret: Optional[str] = None
+    x_posting_enabled: bool = False
+    x_posting_sim_prefix: str = "sim-"
+
     serpapi_api_key: Optional[str] = None
     twilio_account_sid: Optional[str] = None
     twilio_auth_token: Optional[str] = None

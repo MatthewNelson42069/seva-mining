@@ -18,6 +18,7 @@ dependencies = [
     "aiosqlite>=0.22",
     "google-genai[aiohttp]==1.73.1",
     "aioboto3==15.5.0",
+    "tweepy[async]>=4.14",
 ]
 
 [project.optional-dependencies]
