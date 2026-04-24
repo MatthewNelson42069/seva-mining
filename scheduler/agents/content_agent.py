@@ -822,12 +822,14 @@ async def _fetch_all_serpapi(serpapi_client: "serpapi.Client | None") -> list[di
 
 
 async def fetch_analytical_historical_stories(queries: list[str]) -> list[dict]:
-    """Fallback fetch for sub_infographics — analytical-historical gold topics.
+    """SerpAPI fetch for analytical/historical gold topics. Used by sub_infographics
+    (fallback phase, quick-260423-lvp) AND sub_gold_history (primary fetch,
+    quick-260424-e37). Accepts a caller-supplied query list; not cached.
 
-    Mirrors _fetch_all_serpapi pattern but accepts a custom query list. Used by
-    sub_infographics.run_draft_cycle when the news phase produces <2 queued
-    items (quick-260423-lvp). Intentionally NOT cached: invoked rarely and the
-    query list is caller-specific.
+    Mirrors _fetch_all_serpapi pattern but accepts a custom query list. Both
+    callers pass a small, caller-specific query list (infographics:
+    ANALYTICAL_HISTORICAL_QUERIES; gold_history: HISTORICAL_GOLD_QUERIES).
+    Intentionally NOT cached: invoked rarely and the query list is caller-specific.
 
     Returns story dicts in the same shape as fetch_stories() per-story entries
     BEFORE scoring (keys: title, link, published, summary, source_name). The
