@@ -26,6 +26,7 @@ DELETE FROM config WHERE key IN (
 );
 -- ---------------------------------------------------------------------------
 """
+
 import asyncio
 import os
 
@@ -39,15 +40,15 @@ from models.config import Config
 # Config defaults — Content Agent runtime parameters
 # ---------------------------------------------------------------------------
 CONFIG_DEFAULTS = [
-    ("content_relevance_weight",          "0.40"),
-    ("content_recency_weight",            "0.40"),
-    ("content_credibility_weight",        "0.30"),
-    ("content_quality_threshold",         "7.0"),
-    ("morning_digest_schedule_hour",      "15"),
-    ("gold_history_used_topics",          "[]"),
-    ("content_gold_gate_enabled",            "true"),
-    ("content_gold_gate_model",              "claude-haiku-4-5"),
-    ("content_bearish_filter_enabled",       "true"),
+    ("content_relevance_weight", "0.40"),
+    ("content_recency_weight", "0.40"),
+    ("content_credibility_weight", "0.30"),
+    ("content_quality_threshold", "7.0"),
+    ("morning_digest_schedule_hour", "15"),
+    ("gold_history_used_urls", "[]"),
+    ("content_gold_gate_enabled", "true"),
+    ("content_gold_gate_model", "claude-haiku-4-5"),
+    ("content_bearish_filter_enabled", "true"),
 ]
 
 
@@ -57,9 +58,7 @@ async def seed_config(session: AsyncSession) -> tuple[int, int]:
     skipped = 0
 
     for key, value in CONFIG_DEFAULTS:
-        result = await session.execute(
-            select(Config).where(Config.key == key)
-        )
+        result = await session.execute(select(Config).where(Config.key == key))
         existing = result.scalar_one_or_none()
 
         if existing is not None:
@@ -90,9 +89,7 @@ async def main() -> None:
 
     await engine.dispose()
 
-    print(
-        f"Seeded {cfg_inserted} config entries (skipped {cfg_skipped} existing)."
-    )
+    print(f"Seeded {cfg_inserted} config entries (skipped {cfg_skipped} existing).")
     print("Seed complete.")
 
 

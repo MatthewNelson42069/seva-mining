@@ -13,7 +13,8 @@ fully removed (no Claude-from-memory picker, no SerpAPI runtime verification).
 import json
 import os
 import sys
-from unittest.mock import AsyncMock, MagicMock
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -323,3 +324,85 @@ def test_historical_gold_queries_list_shape():
     assert isinstance(HISTORICAL_GOLD_QUERIES, list)
     assert len(HISTORICAL_GOLD_QUERIES) >= 10, "Need enough queries for meaningful rotation"
     assert all(isinstance(q, str) and q.strip() for q in HISTORICAL_GOLD_QUERIES)
+
+
+# ---------------------------------------------------------------------------
+# T3: URL dedup helpers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_used_urls_returns_empty_set_when_missing():
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None
+    session.execute = AsyncMock(return_value=result)
+    urls = await gold_history._get_used_urls(session)
+    assert urls == set()
+
+
+@pytest.mark.asyncio
+async def test_get_used_urls_parses_json_list():
+    session = AsyncMock()
+    row = MagicMock()
+    row.value = json.dumps(["https://a.com/x", "https://b.com/y"])
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    session.execute = AsyncMock(return_value=result)
+    urls = await gold_history._get_used_urls(session)
+    assert urls == {"https://a.com/x", "https://b.com/y"}
+
+
+@pytest.mark.asyncio
+async def test_get_used_urls_handles_malformed_json():
+    session = AsyncMock()
+    row = MagicMock()
+    row.value = "not valid json"
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    session.execute = AsyncMock(return_value=result)
+    urls = await gold_history._get_used_urls(session)
+    assert urls == set()
+
+
+@pytest.mark.asyncio
+async def test_record_used_url_appends_canonicalized():
+    """_record_used_url canonicalizes the URL before persisting."""
+    session = AsyncMock()
+    existing = MagicMock()
+    existing.value = json.dumps(["https://a.com/x"])
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = existing
+    session.execute = AsyncMock(return_value=result)
+    await gold_history._record_used_url(session, "HTTPS://B.com/NEW?ref=tw/")
+    # Row value should now contain the canonical form
+    stored = json.loads(existing.value)
+    assert "https://b.com/new" in stored
+    assert "https://a.com/x" in stored  # prior kept
+
+
+@pytest.mark.asyncio
+async def test_record_used_url_is_idempotent():
+    session = AsyncMock()
+    existing = MagicMock()
+    existing.value = json.dumps(["https://a.com/x"])
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = existing
+    session.execute = AsyncMock(return_value=result)
+    await gold_history._record_used_url(session, "https://a.com/x")
+    stored = json.loads(existing.value)
+    assert stored.count("https://a.com/x") == 1  # no duplicate
+
+
+@pytest.mark.asyncio
+async def test_record_used_url_creates_config_row_when_missing():
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = None  # Config row absent
+    session.execute = AsyncMock(return_value=result)
+    await gold_history._record_used_url(session, "https://a.com/x")
+    # session.add should have been called with a Config(key=..., value=json-encoded-list)
+    assert session.add.called
+    added = session.add.call_args[0][0]
+    assert added.key == "gold_history_used_urls"
+    assert "https://a.com/x" in json.loads(added.value)

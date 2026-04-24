@@ -101,42 +101,44 @@ def _select_historical_gold_queries(count: int = 3) -> list[str]:
     return shuffled[:count]
 
 
-async def _get_used_topics(session: AsyncSession) -> list[str]:
-    """Read used Gold History story slugs from Config.
+async def _get_used_urls(session: AsyncSession) -> set[str]:
+    """Read the all-time used-URL dedup set from Config.
 
-    Returns a list of slug strings. Returns empty list if key is missing or
-    the value cannot be parsed as JSON. (EXP-6)
+    Key: 'gold_history_used_urls' (quick-260424-e37; replaces slug-based
+    'gold_history_used_topics' from 260422-lbb — old key left dormant).
+    Returns a set of already-canonicalized URL strings. Empty set if the
+    key is missing or the stored value cannot be JSON-decoded.
     """
-    result = await session.execute(select(Config).where(Config.key == "gold_history_used_topics"))
+    result = await session.execute(select(Config).where(Config.key == "gold_history_used_urls"))
     row = result.scalar_one_or_none()
     if row is None:
-        return []
+        return set()
     try:
-        return json.loads(row.value)
+        data = json.loads(row.value)
+        if isinstance(data, list):
+            return set(data)
+        return set()
     except (json.JSONDecodeError, TypeError):
-        return []
+        return set()
 
 
-async def _add_used_topic(session: AsyncSession, slug: str) -> None:
-    """Append a story slug to the used topics list in Config.
+async def _record_used_url(session: AsyncSession, url: str) -> None:
+    """Canonicalize `url` and append to the used-URL dedup set in Config.
 
-    No-ops if slug is already present. Upserts the Config row with the
-    updated JSON-encoded list. Caller is responsible for committing. (EXP-6)
+    No-ops if already present. Upserts the Config row. Caller commits.
     """
-    topics = await _get_used_topics(session)
-    if slug not in topics:
-        topics.append(slug)
-    result = await session.execute(select(Config).where(Config.key == "gold_history_used_topics"))
+    canonical = _canonicalize_url(url)
+    existing = await _get_used_urls(session)
+    if canonical in existing:
+        return
+    existing.add(canonical)
+    result = await session.execute(select(Config).where(Config.key == "gold_history_used_urls"))
     row = result.scalar_one_or_none()
+    payload = json.dumps(sorted(existing))
     if row is None:
-        session.add(
-            Config(
-                key="gold_history_used_topics",
-                value=json.dumps(topics),
-            )
-        )
+        session.add(Config(key="gold_history_used_urls", value=payload))
     else:
-        row.value = json.dumps(topics)
+        row.value = payload
 
 
 async def _draft_gold_history(
