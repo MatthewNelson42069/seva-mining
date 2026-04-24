@@ -333,3 +333,158 @@ async def test_run_draft_cycle_writes_notes_on_empty_candidates():
         "compliance_blocked": 0,
         "queued": 0,
     }, f"Unexpected zero-filled notes payload: {payload}"
+
+
+# ---------------------------------------------------------------------------
+# quick-260423-lvp T4: _run_analytical_fallback
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_analytical_fallback_produces_shortfall_items():
+    """_run_analytical_fallback fetches stories, passes gold gate, drafts, and
+    persists (shortfall) ContentBundle+DraftItem rows with content_type='infographic'.
+    Returns items_queued == shortfall.
+    """
+    from agents.content.infographics import _run_analytical_fallback
+
+    stories = [
+        {"title": "Gold during wars", "link": "http://a", "source_name": "Kitco", "summary": "a"},
+        {"title": "Gold recessions", "link": "http://b", "source_name": "Mining", "summary": "b"},
+        {"title": "Gold ETF flows", "link": "http://c", "source_name": "Reuters", "summary": "c"},
+    ]
+
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    async def fake_draft(story, deep_research, market_snapshot, *, client):
+        return {
+            "format": "infographic",
+            "twitter_caption": "cap",
+            "_rationale": "r",
+            "_key_data_points": [],
+        }
+
+    with (
+        patch("agents.content.infographics.AsyncSessionLocal", return_value=ctx),
+        patch(
+            "agents.content.infographics.fetch_market_snapshot",
+            new=AsyncMock(return_value=None),
+        ),
+        patch.object(
+            content_agent,
+            "fetch_analytical_historical_stories",
+            new=AsyncMock(return_value=stories),
+        ),
+        patch.object(
+            content_agent,
+            "is_gold_relevant_or_systemic_shock",
+            new=AsyncMock(return_value={"keep": True}),
+        ),
+        patch.object(content_agent, "fetch_article", new=AsyncMock(return_value=("body", True))),
+        patch.object(content_agent, "search_corroborating", new=AsyncMock(return_value=[])),
+        patch("agents.content.infographics._draft", new=fake_draft),
+        patch.object(
+            content_agent,
+            "review",
+            new=AsyncMock(return_value={"compliance_passed": True, "rationale": "ok"}),
+        ),
+        patch.object(content_agent, "build_draft_item", new=MagicMock(return_value=MagicMock())),
+        patch(
+            "agents.content.infographics._is_already_covered_today",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        result = await _run_analytical_fallback(shortfall=2)
+
+    assert result == 2
+
+
+@pytest.mark.asyncio
+async def test_run_analytical_fallback_returns_zero_on_empty_fetch():
+    """_run_analytical_fallback returns 0 and persists an AgentRun with
+    notes.phase='analytical_fallback' when fetch returns [].
+    """
+    import json as _json  # noqa: PLC0415
+
+    from agents.content.infographics import _run_analytical_fallback
+
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("agents.content.infographics.AsyncSessionLocal", return_value=ctx),
+        patch(
+            "agents.content.infographics.fetch_market_snapshot",
+            new=AsyncMock(return_value=None),
+        ),
+        patch.object(
+            content_agent,
+            "fetch_analytical_historical_stories",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        result = await _run_analytical_fallback(shortfall=2)
+
+    assert result == 0
+    agent_run = captured[0]
+    assert agent_run.notes is not None
+    payload = _json.loads(agent_run.notes)
+    assert payload["phase"] == "analytical_fallback"
+    assert payload["shortfall"] == 2
+    assert payload["queued"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_analytical_fallback_returns_zero_when_gate_rejects_all():
+    """_run_analytical_fallback returns 0 when gold gate rejects all stories."""
+    from agents.content.infographics import _run_analytical_fallback
+
+    stories = [
+        {"title": "Gold wars", "link": "http://a", "source_name": "K", "summary": "a"},
+        {"title": "Gold crash", "link": "http://b", "source_name": "K", "summary": "b"},
+        {"title": "Gold ETF", "link": "http://c", "source_name": "K", "summary": "c"},
+    ]
+
+    captured: list = []
+    session = AsyncMock()
+    session.add = MagicMock(side_effect=lambda o: captured.append(o))
+
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("agents.content.infographics.AsyncSessionLocal", return_value=ctx),
+        patch(
+            "agents.content.infographics.fetch_market_snapshot",
+            new=AsyncMock(return_value=None),
+        ),
+        patch.object(
+            content_agent,
+            "fetch_analytical_historical_stories",
+            new=AsyncMock(return_value=stories),
+        ),
+        patch.object(
+            content_agent,
+            "is_gold_relevant_or_systemic_shock",
+            new=AsyncMock(return_value={"keep": False, "reject_reason": "not gold"}),
+        ),
+        patch(
+            "agents.content.infographics._is_already_covered_today",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        result = await _run_analytical_fallback(shortfall=2)
+
+    assert result == 0

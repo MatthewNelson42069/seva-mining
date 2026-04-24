@@ -11,12 +11,18 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from anthropic import AsyncAnthropic
 
+from agents import content_agent
 from agents.brand_preamble import BRAND_PREAMBLE
-from agents.content import run_text_story_cycle
-from services.market_snapshot import render_snapshot_block
+from agents.content import _is_already_covered_today, run_text_story_cycle
+from config import get_settings
+from database import AsyncSessionLocal
+from models.agent_run import AgentRun
+from models.content_bundle import ContentBundle
+from services.market_snapshot import fetch_market_snapshot, render_snapshot_block
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +65,167 @@ def _select_analytical_queries(shortfall: int, *, buffer: int = 2) -> list[str]:
     shuffled = list(ANALYTICAL_HISTORICAL_QUERIES)
     rng.shuffle(shuffled)
     return shuffled[:count]
+
+
+async def _run_analytical_fallback(shortfall: int) -> int:
+    """Second-phase fallback for sub_infographics — fetch analytical-historical
+    stories and draft infographics to fill the daily 2-per-day target.
+
+    Fires ONLY when the news phase returns items_queued < 2 (quick-260423-lvp).
+    Uses the SAME _draft function as the news phase — no prompt edits.
+
+    Writes a SEPARATE AgentRun row (agent_name=AGENT_NAME, notes includes
+    phase='analytical_fallback') so telemetry is distinct from the news row.
+
+    Returns the number of items queued by the fallback phase (0..shortfall).
+    """
+    if shortfall <= 0:
+        return 0
+
+    settings = get_settings()
+    anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+    queries = _select_analytical_queries(shortfall)
+
+    async with AsyncSessionLocal() as session:
+        agent_run = AgentRun(
+            agent_name=AGENT_NAME,
+            status="running",
+            started_at=datetime.now(timezone.utc),
+            items_found=0,
+            items_queued=0,
+            items_filtered=0,
+        )
+        session.add(agent_run)
+        await session.commit()
+
+        items_queued = 0
+        try:
+            try:
+                market_snapshot = await fetch_market_snapshot(session=session)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "%s analytical_fallback: market snapshot failed (%s)",
+                    AGENT_NAME,
+                    type(exc).__name__,
+                )
+                market_snapshot = None
+
+            stories = await content_agent.fetch_analytical_historical_stories(queries)
+            agent_run.items_found = len(stories)
+            if not stories:
+                agent_run.notes = json.dumps(
+                    {
+                        "phase": "analytical_fallback",
+                        "shortfall": shortfall,
+                        "queued": 0,
+                    }
+                )
+                agent_run.status = "completed"
+                return 0
+
+            gate_config = {
+                "content_gold_gate_enabled": "true",
+                "content_gold_gate_model": "claude-haiku-4-5",
+                "content_bearish_filter_enabled": "true",
+            }
+
+            for story in stories:
+                if items_queued >= shortfall:
+                    break
+                try:
+                    if await _is_already_covered_today(
+                        session,
+                        story["link"],
+                        story["title"],
+                        content_type=CONTENT_TYPE,
+                    ):
+                        continue
+
+                    gate = await content_agent.is_gold_relevant_or_systemic_shock(
+                        story,
+                        gate_config,
+                        client=anthropic_client,
+                    )
+                    if not gate["keep"]:
+                        continue
+
+                    article_text, fetch_ok = await content_agent.fetch_article(
+                        story["link"],
+                        fallback_text=story.get("summary", ""),
+                    )
+                    corroborating = await content_agent.search_corroborating(story["title"])
+                    deep_research = {
+                        "article_text": article_text[:5000],
+                        "article_fetch_succeeded": fetch_ok,
+                        "corroborating_sources": corroborating,
+                        "key_data_points": [],
+                    }
+
+                    draft_content = await _draft(
+                        story,
+                        deep_research,
+                        market_snapshot,
+                        client=anthropic_client,
+                    )
+                    if draft_content is None:
+                        continue
+
+                    rationale = draft_content.pop("_rationale", "")
+                    key_data_points = draft_content.pop("_key_data_points", [])
+                    deep_research["key_data_points"] = key_data_points
+
+                    review_result = await content_agent.review(draft_content)
+                    compliance_ok = bool(review_result.get("compliance_passed", False))
+
+                    bundle = ContentBundle(
+                        story_headline=story["title"],
+                        story_url=story["link"],
+                        source_name=story.get("source_name"),
+                        content_type=CONTENT_TYPE,
+                        score=0.0,
+                        deep_research=deep_research,
+                        draft_content=draft_content,
+                        compliance_passed=compliance_ok,
+                    )
+                    session.add(bundle)
+                    await session.flush()
+
+                    if compliance_ok:
+                        item = content_agent.build_draft_item(bundle, rationale)
+                        session.add(item)
+                        await session.flush()
+                        items_queued += 1
+                        logger.info(
+                            "%s analytical_fallback: queued '%s'",
+                            AGENT_NAME,
+                            story["title"][:60],
+                        )
+                except Exception as exc:
+                    logger.error(
+                        "%s analytical_fallback: error on story %r: %s",
+                        AGENT_NAME,
+                        story.get("title", "")[:60],
+                        exc,
+                        exc_info=True,
+                    )
+
+            agent_run.items_queued = items_queued
+            agent_run.notes = json.dumps(
+                {
+                    "phase": "analytical_fallback",
+                    "shortfall": shortfall,
+                    "queued": items_queued,
+                }
+            )
+            agent_run.status = "completed"
+        except Exception as exc:
+            agent_run.status = "failed"
+            agent_run.errors = str(exc)
+            logger.error("%s analytical_fallback failed: %s", AGENT_NAME, exc, exc_info=True)
+        finally:
+            agent_run.ended_at = datetime.now(timezone.utc)
+            await session.commit()
+    return items_queued
 
 
 async def _draft(
