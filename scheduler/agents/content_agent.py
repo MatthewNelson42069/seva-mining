@@ -24,6 +24,7 @@ This module also keeps a handful of shared helpers the sub-agents call directly:
 
 Requirements: CONT-01 through CONT-17 (coverage split across the 7 sub-agents).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -97,6 +98,7 @@ DEFAULT_CREDIBILITY = 0.4
 # Pure scoring functions — module-level for direct testability (CONT-05)
 # ---------------------------------------------------------------------------
 
+
 def recency_score(published: datetime) -> float:
     """CONT-05: Return recency score based on story age.
 
@@ -150,6 +152,7 @@ def calculate_story_score(relevance: float, recency: float, credibility: float) 
 # ---------------------------------------------------------------------------
 # Deduplication — URL + headline similarity (CONT-04)
 # ---------------------------------------------------------------------------
+
 
 def deduplicate_stories(stories: list[dict]) -> list[dict]:
     """CONT-04: Remove duplicate stories by URL and headline similarity.
@@ -221,17 +224,19 @@ async def classify_format_lightweight(story: dict, *, client) -> str:
             model="claude-haiku-4-5",
             max_tokens=20,
             system="You are a content format classifier. Reply with one word.",
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"Title: {story['title']}\n"
-                    f"Summary: {story.get('summary', '')[:500]}\n"
-                    f"Published: {story.get('published', '')}\n\n"
-                    "Which content format best fits? Choose exactly one: "
-                    "breaking_news | thread | infographic | quote. "
-                    "Reply with ONLY the format name."
-                ),
-            }],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Title: {story['title']}\n"
+                        f"Summary: {story.get('summary', '')[:500]}\n"
+                        f"Published: {story.get('published', '')}\n\n"
+                        "Which content format best fits? Choose exactly one: "
+                        "breaking_news | thread | infographic | quote. "
+                        "Reply with ONLY the format name."
+                    ),
+                }
+            ],
         )
         result = response.content[0].text.strip().lower()
         if result in valid_formats:
@@ -252,6 +257,7 @@ async def classify_format_lightweight(story: dict, *, client) -> str:
 # ---------------------------------------------------------------------------
 # Article fetch + BeautifulSoup extraction (CONT-08)
 # ---------------------------------------------------------------------------
+
 
 def extract_article_text(html: str) -> str:
     """Extract main article text from HTML, stripping boilerplate.
@@ -279,7 +285,9 @@ async def fetch_article(url: str, fallback_text: str = "") -> tuple[str, bool]:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0 SevaBot/1.0"})
             if resp.status_code != 200:
-                logger.warning("Article fetch %s returned %d, using fallback", url, resp.status_code)
+                logger.warning(
+                    "Article fetch %s returned %d, using fallback", url, resp.status_code
+                )
                 return fallback_text, False
             text = extract_article_text(resp.text)
             if len(text) < 100:
@@ -294,6 +302,7 @@ async def fetch_article(url: str, fallback_text: str = "") -> tuple[str, bool]:
 # ---------------------------------------------------------------------------
 # Corroborating-sources search (CONT-09)
 # ---------------------------------------------------------------------------
+
 
 async def search_corroborating(
     headline: str,
@@ -316,21 +325,27 @@ async def search_corroborating(
 
     loop = asyncio.get_event_loop()
     try:
+
         def _call():
-            return serpapi_client.search({
-                "engine": "google_news",
-                "q": headline,
-                "num": 3,
-            })
+            return serpapi_client.search(
+                {
+                    "engine": "google_news",
+                    "q": headline,
+                    "num": 3,
+                }
+            )
+
         results = await loop.run_in_executor(None, _call)
         sources = []
         for item in results.get("news_results", [])[:3]:
-            sources.append({
-                "title": item.get("title", ""),
-                "url": item.get("link", ""),
-                "source": (item.get("source") or {}).get("name", "unknown"),
-                "snippet": item.get("snippet", ""),
-            })
+            sources.append(
+                {
+                    "title": item.get("title", ""),
+                    "url": item.get("link", ""),
+                    "source": (item.get("source") or {}).get("name", "unknown"),
+                    "snippet": item.get("snippet", ""),
+                }
+            )
         return sources
     except Exception as exc:
         logger.warning("Corroboration search failed: %s", exc)
@@ -340,6 +355,7 @@ async def search_corroborating(
 # ---------------------------------------------------------------------------
 # Compliance checker — fail-safe pattern (CONT-14, CONT-15, CONT-16)
 # ---------------------------------------------------------------------------
+
 
 async def check_compliance(text: str, anthropic_client=None) -> bool:
     """Check content for compliance. Returns True only on explicit 'pass'.
@@ -439,21 +455,21 @@ async def is_gold_relevant_or_systemic_shock(
                 "'Newmont posts record Q2, raises guidance' (Newmont), "
                 "'Seva Mining hits 12g/t gold at Timmins drill hole 42' (Seva Mining).\n\n"
                 "REJECT — bearish_toward_gold\n"
-                "(is_gold_relevant=true but sentiment=\"bearish\") if the story's angle\n"
+                '(is_gold_relevant=true but sentiment="bearish") if the story\'s angle\n'
                 "is negative toward gold or its price. Three categories:\n"
                 "  1. Price-bearish forecasts or predictions: analyst cuts gold price\n"
-                "     target, bank downgrades gold outlook, \"expect pullback/correction\"\n"
-                "     framing. Example: \"Morgan Stanley cuts gold price forecast by ~10%\".\n"
+                '     target, bank downgrades gold outlook, "expect pullback/correction"\n'
+                '     framing. Example: "Morgan Stanley cuts gold price forecast by ~10%".\n'
                 "  2. Anti-gold narrative: gold dismissed in favor of alternatives,\n"
                 "     gold losing relevance/appeal, bitcoin/crypto replacing gold.\n"
-                "     Example: \"Bitcoin replaces gold as reserve asset of choice\".\n"
+                '     Example: "Bitcoin replaces gold as reserve asset of choice".\n'
                 "  3. Factual-negative price movement: gold fell / dropped / slumped /\n"
-                "     pulled back. Example: \"Gold fell 1.2% today on stronger dollar\".\n"
-                "DIRECTION matters, not the word \"forecast\": upside forecasts\n"
-                "(\"Goldman sees gold at $4K\") are sentiment=\"bullish\" and KEPT.\n"
-                "Neutral factual (\"gold hits new record high\") is sentiment=\"neutral\"\n"
+                '     pulled back. Example: "Gold fell 1.2% today on stronger dollar".\n'
+                'DIRECTION matters, not the word "forecast": upside forecasts\n'
+                '("Goldman sees gold at $4K") are sentiment="bullish" and KEPT.\n'
+                'Neutral factual ("gold hits new record high") is sentiment="neutral"\n'
                 "and KEPT.\n"
-                "Mixed or flat movement stories (\"gold holds steady\", \"gold flat\", \"gold mixed\") are sentiment=\"neutral\" and KEPT.\n\n"
+                'Mixed or flat movement stories ("gold holds steady", "gold flat", "gold mixed") are sentiment="neutral" and KEPT.\n\n'
                 "REJECT — not_gold_relevant "
                 "(is_gold_relevant=false) for:\n"
                 "- Listicles or rankings of gold stocks "
@@ -488,7 +504,8 @@ async def is_gold_relevant_or_systemic_shock(
         except (json.JSONDecodeError, ValueError):
             logger.warning(
                 "Gold gate returned non-JSON for '%s' — fail-open (keeping story): %r",
-                title[:50], raw[:80],
+                title[:50],
+                raw[:80],
             )
             return _KEEP
 
@@ -505,7 +522,12 @@ async def is_gold_relevant_or_systemic_shock(
             sentiment = None  # defensive: unknown → treat as missing (fail-open on this axis)
 
         if not is_gold:
-            return {"keep": False, "reject_reason": "not_gold_relevant", "company": None, "sentiment": sentiment}
+            return {
+                "keep": False,
+                "reject_reason": "not_gold_relevant",
+                "company": None,
+                "sentiment": sentiment,
+            }
         if is_specific_miner:
             return {
                 "keep": False,
@@ -529,7 +551,8 @@ async def is_gold_relevant_or_systemic_shock(
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Gold gate API failed for '%s' (%s) — fail-open (keeping story)",
-            title[:50], type(exc).__name__,
+            title[:50],
+            type(exc).__name__,
         )
         return _KEEP
 
@@ -538,9 +561,11 @@ async def is_gold_relevant_or_systemic_shock(
 # No-story flag and ContentBundle builder (CONT-07)
 # ---------------------------------------------------------------------------
 
+
 def build_no_story_bundle(best_score: float):
     """Create a ContentBundle with no_story_flag=True for days with no qualifying story."""
     from models.content_bundle import ContentBundle  # noqa: PLC0415
+
     return ContentBundle(
         story_headline="No qualifying story today",
         no_story_flag=True,
@@ -551,6 +576,7 @@ def build_no_story_bundle(best_score: float):
 # ---------------------------------------------------------------------------
 # DraftItem builder for the approval queue (CONT-17)
 # ---------------------------------------------------------------------------
+
 
 def build_draft_item(content_bundle, rationale: str):
     """Create a DraftItem from a ContentBundle for the approval queue.
@@ -598,11 +624,18 @@ def build_draft_item(content_bundle, rationale: str):
         if tweets:
             parts.append("=== Thread ===\n" + "\n\n".join(str(t) for t in tweets if t))
         if carousel:
-            parts.append("=== Instagram Carousel ===\n" + "\n\n".join(
-                f"Slide {i+1}: {slide}" if isinstance(slide, str) else f"Slide {i+1}: {slide.get('text', '')}"
-                for i, slide in enumerate(carousel)
-            ))
-        draft_text = "\n\n".join(parts) if parts else f"Gold History: {draft.get('story_title', '')}"
+            parts.append(
+                "=== Instagram Carousel ===\n"
+                + "\n\n".join(
+                    f"Slide {i + 1}: {slide}"
+                    if isinstance(slide, str)
+                    else f"Slide {i + 1}: {slide.get('text', '')}"
+                    for i, slide in enumerate(carousel)
+                )
+            )
+        draft_text = (
+            "\n\n".join(parts) if parts else f"Gold History: {draft.get('story_title', '')}"
+        )
 
     elif fmt == "gold_media":
         draft_text = (
@@ -644,6 +677,7 @@ def build_draft_item(content_bundle, rationale: str):
 # RSS and SerpAPI parsing helpers (CONT-02, CONT-03)
 # ---------------------------------------------------------------------------
 
+
 def parse_rss_entries(feed_url: str, source_name: str) -> list[dict]:
     """CONT-02: Parse an RSS feed and return normalized story dicts.
 
@@ -660,6 +694,7 @@ def parse_serpapi_results(results: list[dict], source_name: str = "serpapi") -> 
 # ---------------------------------------------------------------------------
 # Draft text extractor for compliance checking (used by review())
 # ---------------------------------------------------------------------------
+
 
 def _extract_check_text(draft_content: dict) -> str:
     """Extract all text from draft_content for compliance checking."""
@@ -702,6 +737,7 @@ def _extract_check_text(draft_content: dict) -> str:
 # Shared ingestion: RSS + SerpAPI (called by fetch_stories only)
 # ---------------------------------------------------------------------------
 
+
 async def _fetch_all_rss() -> list[dict]:
     """CONT-02: Fetch all RSS feeds concurrently using asyncio.gather + run_in_executor."""
     loop = asyncio.get_event_loop()
@@ -718,15 +754,18 @@ async def _fetch_all_rss() -> list[dict]:
             published_parsed = entry.get("published_parsed")
             published = (
                 datetime(*published_parsed[:6], tzinfo=timezone.utc)
-                if published_parsed else datetime.now(timezone.utc)
+                if published_parsed
+                else datetime.now(timezone.utc)
             )
-            stories.append({
-                "title": entry.get("title", ""),
-                "link": entry.get("link", ""),
-                "published": published,
-                "summary": entry.get("summary", ""),
-                "source_name": source,
-            })
+            stories.append(
+                {
+                    "title": entry.get("title", ""),
+                    "link": entry.get("link", ""),
+                    "published": published,
+                    "summary": entry.get("summary", ""),
+                    "source_name": source,
+                }
+            )
     return stories
 
 
@@ -738,12 +777,16 @@ async def _fetch_all_serpapi(serpapi_client: "serpapi.Client | None") -> list[di
     loop = asyncio.get_event_loop()
     tasks = []
     for keyword in SERPAPI_KEYWORDS:
+
         def _call(q=keyword):
-            return serpapi_client.search({
-                "engine": "google_news",
-                "q": q,
-                "num": 5,
-            })
+            return serpapi_client.search(
+                {
+                    "engine": "google_news",
+                    "q": q,
+                    "num": 5,
+                }
+            )
+
         tasks.append(loop.run_in_executor(None, _call))
     results = await asyncio.gather(*tasks, return_exceptions=True)
     stories = []
@@ -758,21 +801,101 @@ async def _fetch_all_serpapi(serpapi_client: "serpapi.Client | None") -> list[di
                     published = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
                 except ValueError:
                     try:
-                        published = datetime.strptime(iso_date, "%m/%d/%Y, %I:%M %p, +0000 UTC").replace(
-                            tzinfo=timezone.utc
-                        )
+                        published = datetime.strptime(
+                            iso_date, "%m/%d/%Y, %I:%M %p, +0000 UTC"
+                        ).replace(tzinfo=timezone.utc)
                     except ValueError:
                         published = datetime.now(timezone.utc)
             else:
                 published = datetime.now(timezone.utc)
             source_name = (item.get("source") or {}).get("name", "unknown")
-            stories.append({
-                "title": item.get("title", ""),
-                "link": item.get("link", ""),
-                "published": published,
-                "summary": item.get("snippet", ""),
-                "source_name": source_name,
-            })
+            stories.append(
+                {
+                    "title": item.get("title", ""),
+                    "link": item.get("link", ""),
+                    "published": published,
+                    "summary": item.get("snippet", ""),
+                    "source_name": source_name,
+                }
+            )
+    return stories
+
+
+async def fetch_analytical_historical_stories(queries: list[str]) -> list[dict]:
+    """Fallback fetch for sub_infographics — analytical-historical gold topics.
+
+    Mirrors _fetch_all_serpapi pattern but accepts a custom query list. Used by
+    sub_infographics.run_draft_cycle when the news phase produces <2 queued
+    items (quick-260423-lvp). Intentionally NOT cached: invoked rarely and the
+    query list is caller-specific.
+
+    Returns story dicts in the same shape as fetch_stories() per-story entries
+    BEFORE scoring (keys: title, link, published, summary, source_name). The
+    caller is responsible for gold-gate + draft + review + persist.
+
+    Returns [] if SerpAPI is not configured or if all queries fail.
+    """
+    settings = get_settings()
+    if not settings.serpapi_api_key:
+        logger.warning(
+            "fetch_analytical_historical_stories: SerpAPI not configured — returning []",
+        )
+        return []
+    serpapi_client = serpapi.Client(api_key=settings.serpapi_api_key)
+    loop = asyncio.get_event_loop()
+    tasks = []
+    for q in queries:
+
+        def _call(query=q):
+            return serpapi_client.search(
+                {
+                    "engine": "google_news",
+                    "q": query,
+                    "num": 5,
+                }
+            )
+
+        tasks.append(loop.run_in_executor(None, _call))
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    stories: list[dict] = []
+    for query, result in zip(queries, results):
+        if isinstance(result, Exception):
+            logger.warning(
+                "fetch_analytical_historical_stories: query '%s' failed: %s",
+                query,
+                result,
+            )
+            continue
+        for item in result.get("news_results", [])[:5]:
+            iso_date = item.get("date")
+            if iso_date:
+                try:
+                    published = datetime.fromisoformat(iso_date.replace("Z", "+00:00"))
+                except ValueError:
+                    try:
+                        published = datetime.strptime(
+                            iso_date,
+                            "%m/%d/%Y, %I:%M %p, +0000 UTC",
+                        ).replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        published = datetime.now(timezone.utc)
+            else:
+                published = datetime.now(timezone.utc)
+            source_name = (item.get("source") or {}).get("name", "unknown")
+            stories.append(
+                {
+                    "title": item.get("title", ""),
+                    "link": item.get("link", ""),
+                    "published": published,
+                    "summary": item.get("snippet", ""),
+                    "source_name": source_name,
+                }
+            )
+    logger.info(
+        "fetch_analytical_historical_stories: %d queries → %d stories",
+        len(queries),
+        len(stories),
+    )
     return stories
 
 
@@ -782,11 +905,38 @@ def _keyword_relevance(title: str, summary: str) -> float:
     Counts gold/mining keyword hits and returns a 0.0-1.0 score.
     """
     text = (title + " " + summary).lower()
-    HIGH_SIGNAL = ["gold price", "gold mining", "precious metal", "bullion", "gold reserve",
-                   "central bank gold", "gold standard", "gold etf", "gold miner"]
-    MED_SIGNAL = ["gold", "silver", "platinum", "copper", "mining", "miner", "ore", "drill",
-                  "royalty", "streaming", "ounce", "oz", "troy", "vein", "deposit",
-                  "exploration", "production", "refinery", "smelter"]
+    HIGH_SIGNAL = [
+        "gold price",
+        "gold mining",
+        "precious metal",
+        "bullion",
+        "gold reserve",
+        "central bank gold",
+        "gold standard",
+        "gold etf",
+        "gold miner",
+    ]
+    MED_SIGNAL = [
+        "gold",
+        "silver",
+        "platinum",
+        "copper",
+        "mining",
+        "miner",
+        "ore",
+        "drill",
+        "royalty",
+        "streaming",
+        "ounce",
+        "oz",
+        "troy",
+        "vein",
+        "deposit",
+        "exploration",
+        "production",
+        "refinery",
+        "smelter",
+    ]
     hits_high = sum(1 for kw in HIGH_SIGNAL if kw in text)
     hits_med = sum(1 for kw in MED_SIGNAL if kw in text)
     if hits_high >= 2:
@@ -826,7 +976,8 @@ async def _score_relevance(title: str, summary: str, *, client: AsyncAnthropic) 
     except Exception as exc:
         logger.warning(
             "Relevance scoring API failed for '%s' (%s) — using keyword fallback",
-            title[:50], type(exc).__name__,
+            title[:50],
+            type(exc).__name__,
         )
         return _keyword_relevance(title, summary)
 
@@ -898,9 +1049,7 @@ async def fetch_stories() -> list[dict]:
         settings = get_settings()
         anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         serpapi_client = (
-            serpapi.Client(api_key=settings.serpapi_api_key)
-            if settings.serpapi_api_key
-            else None
+            serpapi.Client(api_key=settings.serpapi_api_key) if settings.serpapi_api_key else None
         )
 
         try:
@@ -919,7 +1068,9 @@ async def fetch_stories() -> list[dict]:
         all_stories = rss_stories + serpapi_stories
         logger.info(
             "fetch_stories ingested %d stories (%d RSS, %d SerpAPI)",
-            len(all_stories), len(rss_stories), len(serpapi_stories),
+            len(all_stories),
+            len(rss_stories),
+            len(serpapi_stories),
         )
 
         unique_stories = deduplicate_stories(all_stories)
@@ -938,16 +1089,14 @@ async def fetch_stories() -> list[dict]:
             )
             rec = recency_score(story["published"])
             cred = credibility_score(story.get("source_name", ""))
-            story["score"] = (
-                relevance * rel_weight + rec * rec_weight + cred * cred_weight
-            ) * 10
+            story["score"] = (relevance * rel_weight + rec * rec_weight + cred * cred_weight) * 10
             scored.append(story)
 
         # Predicted format via lightweight Haiku classifier.
         try:
-            format_labels = await asyncio.gather(*[
-                classify_format_lightweight(s, client=anthropic_client) for s in scored
-            ])
+            format_labels = await asyncio.gather(
+                *[classify_format_lightweight(s, client=anthropic_client) for s in scored]
+            )
             for s, fmt in zip(scored, format_labels):
                 s["predicted_format"] = fmt
         except Exception as exc:  # noqa: BLE001
@@ -965,6 +1114,7 @@ async def fetch_stories() -> list[dict]:
 # ---------------------------------------------------------------------------
 # review(draft) — Haiku compliance gate (no DB I/O)
 # ---------------------------------------------------------------------------
+
 
 async def review(draft: dict) -> dict:
     """Haiku compliance gate. Pure function — no DB I/O.

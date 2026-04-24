@@ -14,6 +14,7 @@ files (test_breaking_news.py, test_threads.py, ...). Scoring / dedup / gold
 gate helpers are covered inline here because they remain module-level in
 content_agent.py and have no sub-agent-specific equivalent.
 """
+
 import os
 import sys
 import time
@@ -24,7 +25,9 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Env vars must be set before importing settings-bound modules.
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require"
+)
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-fake")
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "x")
 os.environ.setdefault("TWILIO_AUTH_TOKEN", "x")
@@ -43,6 +46,7 @@ from agents import content_agent  # noqa: E402
 # Module-level constants — retained after split
 # ---------------------------------------------------------------------------
 
+
 def test_rss_feeds_constant_preserved():
     """RSS_FEEDS constant is preserved and reachable (CONT-02)."""
     assert len(content_agent.RSS_FEEDS) == 7
@@ -59,6 +63,7 @@ def test_serpapi_keywords_constant_preserved():
 # fetch_stories() — shared SerpAPI + RSS ingestion with 30-min TTL cache
 # ---------------------------------------------------------------------------
 
+
 def _clear_cache():
     content_agent._STORIES_CACHE.clear()
 
@@ -67,16 +72,25 @@ def _clear_cache():
 async def test_fetch_stories_cache_hit_same_bucket():
     """Two calls within the same 30-min bucket issue one underlying fetch."""
     _clear_cache()
-    stories = [{"title": "GOLD NEWS", "summary": "...", "link": "http://a",
-                "source_name": "kitco.com", "published": None}]
+    stories = [
+        {
+            "title": "GOLD NEWS",
+            "summary": "...",
+            "link": "http://a",
+            "source_name": "kitco.com",
+            "published": None,
+        }
+    ]
 
     bucket = content_agent._cache_bucket()
     # Seed the cache directly — if fetch_stories respects the cache, no fetch
     # is invoked and the function returns our pre-seeded list.
     content_agent._STORIES_CACHE[bucket] = stories
 
-    with patch.object(content_agent, "_fetch_all_rss", new=AsyncMock()) as mock_rss, \
-         patch.object(content_agent, "_fetch_all_serpapi", new=AsyncMock()) as mock_serp:
+    with (
+        patch.object(content_agent, "_fetch_all_rss", new=AsyncMock()) as mock_rss,
+        patch.object(content_agent, "_fetch_all_serpapi", new=AsyncMock()) as mock_serp,
+    ):
         first = await content_agent.fetch_stories()
         second = await content_agent.fetch_stories()
 
@@ -95,18 +109,27 @@ async def test_fetch_stories_cache_miss_new_bucket():
     old_bucket = content_agent._cache_bucket() - 1
     content_agent._STORIES_CACHE[old_bucket] = [{"title": "stale"}]
 
-    fetched = [{"title": "fresh", "summary": "", "link": "http://b",
-                "source_name": "kitco.com",
-                "published": None}]
+    fetched = [
+        {
+            "title": "fresh",
+            "summary": "",
+            "link": "http://b",
+            "source_name": "kitco.com",
+            "published": None,
+        }
+    ]
 
-    with patch.object(content_agent, "_fetch_all_rss", new=AsyncMock(return_value=fetched)), \
-         patch.object(content_agent, "_fetch_all_serpapi", new=AsyncMock(return_value=[])), \
-         patch.object(content_agent, "deduplicate_stories", return_value=fetched), \
-         patch.object(content_agent, "_score_relevance", new=AsyncMock(return_value=0.5)), \
-         patch.object(content_agent, "recency_score", return_value=0.9), \
-         patch.object(content_agent, "credibility_score", return_value=0.8), \
-         patch.object(content_agent, "classify_format_lightweight",
-                      new=AsyncMock(return_value="thread")):
+    with (
+        patch.object(content_agent, "_fetch_all_rss", new=AsyncMock(return_value=fetched)),
+        patch.object(content_agent, "_fetch_all_serpapi", new=AsyncMock(return_value=[])),
+        patch.object(content_agent, "deduplicate_stories", return_value=fetched),
+        patch.object(content_agent, "_score_relevance", new=AsyncMock(return_value=0.5)),
+        patch.object(content_agent, "recency_score", return_value=0.9),
+        patch.object(content_agent, "credibility_score", return_value=0.8),
+        patch.object(
+            content_agent, "classify_format_lightweight", new=AsyncMock(return_value="thread")
+        ),
+    ):
         result = await content_agent.fetch_stories()
 
     assert len(result) == 1
@@ -120,10 +143,12 @@ async def test_fetch_stories_fetch_failure_returns_empty():
     """Ingestion exceptions produce [] and log a warning, not re-raise."""
     _clear_cache()
 
-    with patch.object(content_agent, "_fetch_all_rss",
-                      new=AsyncMock(side_effect=RuntimeError("network down"))), \
-         patch.object(content_agent, "_fetch_all_serpapi",
-                      new=AsyncMock(return_value=[])):
+    with (
+        patch.object(
+            content_agent, "_fetch_all_rss", new=AsyncMock(side_effect=RuntimeError("network down"))
+        ),
+        patch.object(content_agent, "_fetch_all_serpapi", new=AsyncMock(return_value=[])),
+    ):
         result = await content_agent.fetch_stories()
 
     assert result == []
@@ -142,12 +167,12 @@ def test_cache_bucket_matches_30_min_formula():
 # review(draft) — Haiku compliance gate
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_review_pass_returns_compliance_passed_true():
     """When check_compliance passes, review returns compliance_passed=True."""
     draft = {"format": "breaking_news", "tweet": "Gold at $2400."}
-    with patch.object(content_agent, "check_compliance",
-                      new=AsyncMock(return_value=True)):
+    with patch.object(content_agent, "check_compliance", new=AsyncMock(return_value=True)):
         result = await content_agent.review(draft)
     assert result["compliance_passed"] is True
     assert "rationale" in result
@@ -157,8 +182,7 @@ async def test_review_pass_returns_compliance_passed_true():
 async def test_review_fail_returns_compliance_passed_false():
     """When check_compliance fails, review returns compliance_passed=False + rationale."""
     draft = {"format": "breaking_news", "tweet": "You should buy gold now."}
-    with patch.object(content_agent, "check_compliance",
-                      new=AsyncMock(return_value=False)):
+    with patch.object(content_agent, "check_compliance", new=AsyncMock(return_value=False)):
         result = await content_agent.review(draft)
     assert result["compliance_passed"] is False
     assert result["rationale"]
@@ -178,6 +202,7 @@ async def test_review_empty_draft_treated_as_pass():
 # ---------------------------------------------------------------------------
 # classify_format_lightweight — fixed string return set
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_classify_format_lightweight_returns_valid_format():
@@ -226,6 +251,7 @@ def test_classify_format_lightweight_returns_sub_agent_filter_strings():
     """The classifier's valid_formats set MUST match the 4 CONTENT_TYPE strings
     that text-story sub-agents filter on (quick-260423-k8n: long_form removed)."""
     import inspect
+
     source = inspect.getsource(content_agent.classify_format_lightweight)
     for expected in ("breaking_news", "thread", "infographic", "quote"):
         assert f'"{expected}"' in source, f"missing classifier label {expected}"
@@ -235,6 +261,7 @@ def test_classify_format_lightweight_returns_sub_agent_filter_strings():
 # ---------------------------------------------------------------------------
 # Compliance checker — retained module-level helper
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_compliance_screens_seva_mining_mention_locally():
@@ -263,9 +290,11 @@ async def test_compliance_failsafe_on_api_error():
 # Draft item / content bundle builder helpers — retained + used by sub-agents
 # ---------------------------------------------------------------------------
 
+
 def test_build_draft_item_stores_bundle_id_in_engagement_snapshot():
     """DraftItem.engagement_snapshot contains the content_bundle_id (pre-split pattern preserved)."""
     from uuid import uuid4
+
     bundle = MagicMock()
     bundle.id = uuid4()
     bundle.story_headline = "gold at record high"
@@ -296,11 +325,17 @@ async def test_gold_gate_rejects_price_bearish_forecast():
     """Gate rejects price-bearish analyst forecasts with reject_reason='bearish_toward_gold'."""
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    response.content = [
+        MagicMock(
+            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "Morgan Stanley cuts gold price forecast by almost 10%", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, GATE_CONFIG, client=client
+    )
 
     assert result["keep"] is False
     assert result["reject_reason"] == "bearish_toward_gold"
@@ -312,11 +347,17 @@ async def test_gold_gate_rejects_anti_gold_narrative():
     """Gate rejects anti-gold narrative (bitcoin replacing gold) with bearish_toward_gold."""
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    response.content = [
+        MagicMock(
+            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "Bitcoin replaces gold as reserve asset of choice", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, GATE_CONFIG, client=client
+    )
 
     assert result["keep"] is False
     assert result["reject_reason"] == "bearish_toward_gold"
@@ -328,11 +369,17 @@ async def test_gold_gate_rejects_factual_price_decline():
     """Gate rejects factual-negative price movement stories with bearish_toward_gold."""
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    response.content = [
+        MagicMock(
+            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "Gold fell 1.2% today on stronger dollar", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, GATE_CONFIG, client=client
+    )
 
     assert result["keep"] is False
     assert result["reject_reason"] == "bearish_toward_gold"
@@ -344,11 +391,17 @@ async def test_gold_gate_keeps_bullish_central_bank_buying():
     """Gate keeps bullish stories (central bank buying) with keep=True."""
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}')]
+    response.content = [
+        MagicMock(
+            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "Central banks added 800t of gold in Q1", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, GATE_CONFIG, client=client
+    )
 
     assert result["keep"] is True
     assert result["reject_reason"] is None
@@ -360,11 +413,17 @@ async def test_gold_gate_keeps_bullish_price_forecast():
     """Gate keeps bullish upside forecasts (Goldman $4K) — direction matters, not the word 'forecast'."""
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}')]
+    response.content = [
+        MagicMock(
+            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "Goldman sees gold at $4K by year-end", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, GATE_CONFIG, client=client
+    )
 
     assert result["keep"] is True
     assert result["reject_reason"] is None
@@ -376,11 +435,17 @@ async def test_gold_gate_keeps_neutral_record_high():
     """Gate keeps neutral factual stories (record high) with keep=True."""
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "neutral"}')]
+    response.content = [
+        MagicMock(
+            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "neutral"}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "Gold hits new record high", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, GATE_CONFIG, client=client
+    )
 
     assert result["keep"] is True
     assert result["reject_reason"] is None
@@ -396,7 +461,9 @@ async def test_gold_gate_fail_open_on_parse_error():
     client.messages.create = AsyncMock(return_value=response)
 
     story = {"title": "Some gold story", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, GATE_CONFIG, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, GATE_CONFIG, client=client
+    )
 
     assert result["keep"] is True
     assert result["reject_reason"] is None
@@ -408,7 +475,11 @@ async def test_gold_gate_flag_disabled():
     """When content_bearish_filter_enabled='false', bearish stories are NOT rejected."""
     client = AsyncMock()
     response = MagicMock()
-    response.content = [MagicMock(text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}')]
+    response.content = [
+        MagicMock(
+            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
+        )
+    ]
     client.messages.create = AsyncMock(return_value=response)
 
     config_flag_off = {
@@ -417,6 +488,65 @@ async def test_gold_gate_flag_disabled():
         "content_bearish_filter_enabled": "false",
     }
     story = {"title": "Morgan Stanley cuts gold price forecast by almost 10%", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(story, config_flag_off, client=client)
+    result = await content_agent.is_gold_relevant_or_systemic_shock(
+        story, config_flag_off, client=client
+    )
 
     assert result["keep"] is True
+
+
+# ---------------------------------------------------------------------------
+# fetch_analytical_historical_stories — quick-260423-lvp T1
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_analytical_historical_stories_returns_story_shape():
+    """fetch_analytical_historical_stories returns story dicts with the
+    expected keys (title, link, published, summary, source_name)."""
+    from datetime import datetime
+
+    fake_results = {
+        "news_results": [
+            {
+                "title": "Gold during wars: a historical analysis",
+                "link": "http://example.com/gold-wars",
+                "date": "2026-04-23T12:00:00Z",
+                "snippet": "Gold historically surges during major conflicts.",
+                "source": {"name": "KitcoNews"},
+            }
+        ]
+    }
+
+    mock_client_instance = MagicMock()
+    mock_client_instance.search = MagicMock(return_value=fake_results)
+
+    with (
+        patch("agents.content_agent.get_settings") as mock_settings,
+        patch("agents.content_agent.serpapi.Client", return_value=mock_client_instance),
+    ):
+        mock_settings.return_value.serpapi_api_key = "fake-key"
+        stories = await content_agent.fetch_analytical_historical_stories(
+            ["gold during wars", "gold recessions 2008"]
+        )
+
+    assert len(stories) >= 1
+    story = stories[0]
+    assert "title" in story
+    assert "link" in story
+    assert "published" in story
+    assert "summary" in story
+    assert "source_name" in story
+    assert story["title"] == "Gold during wars: a historical analysis"
+    assert story["source_name"] == "KitcoNews"
+    assert isinstance(story["published"], datetime)
+
+
+@pytest.mark.asyncio
+async def test_fetch_analytical_historical_stories_handles_no_client():
+    """fetch_analytical_historical_stories returns [] when SerpAPI key is missing."""
+    with patch("agents.content_agent.get_settings") as mock_settings:
+        mock_settings.return_value.serpapi_api_key = None
+        stories = await content_agent.fetch_analytical_historical_stories(["gold during wars"])
+
+    assert stories == []
