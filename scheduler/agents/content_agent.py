@@ -54,7 +54,7 @@ RSS_FEEDS = [
     ("https://www.mining.com/feed/", "mining.com"),
     ("https://www.juniorminingnetwork.com/feed", "juniorminingnetwork.com"),
     ("https://www.gold.org/goldhub/news/feed", "gold.org"),
-    ("https://feeds.reuters.com/reuters/businessNews", "reuters.com"),
+    ("https://www.bnnbloomberg.ca/feed/", "bnnbloomberg.ca"),
     ("https://feeds.bloomberg.com/commodities/news.rss", "bloomberg.com"),
     ("https://goldseek.com/feed/", "goldseek.com"),
 ]
@@ -74,6 +74,15 @@ SERPAPI_KEYWORDS = [
     "Fed gold",
     "dollar gold",
     "recession gold",
+    # Expansion (htu) — critical minerals + sovereign gold coverage
+    "critical minerals",
+    "rare earth restrictions",
+    "strategic metals",
+    "sovereign wealth fund gold",
+    "treasury gold sale",
+    "gold mining M&A",
+    "US China metals",
+    "mineral supply chain",
 ]
 
 # ---------------------------------------------------------------------------

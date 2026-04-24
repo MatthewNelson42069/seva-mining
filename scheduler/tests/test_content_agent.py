@@ -55,8 +55,55 @@ def test_rss_feeds_constant_preserved():
 
 def test_serpapi_keywords_constant_preserved():
     """SERPAPI_KEYWORDS is preserved (CONT-03)."""
-    assert len(content_agent.SERPAPI_KEYWORDS) == 10
+    assert len(content_agent.SERPAPI_KEYWORDS) == 18
     assert "gold price" in content_agent.SERPAPI_KEYWORDS
+
+
+def test_serpapi_keywords_critical_minerals_coverage():
+    """New keywords for critical-minerals + sovereign-gold coverage (htu)."""
+    required = [
+        "critical minerals",
+        "rare earth restrictions",
+        "strategic metals",
+        "sovereign wealth fund gold",
+        "treasury gold sale",
+        "gold mining M&A",
+        "US China metals",
+        "mineral supply chain",
+    ]
+    for kw in required:
+        assert kw in content_agent.SERPAPI_KEYWORDS, f"missing keyword: {kw}"
+
+
+def test_serpapi_keywords_existing_preserved():
+    """Original 10 keywords must remain after expansion (htu)."""
+    original = [
+        "gold exploration",
+        "gold price",
+        "central bank gold",
+        "gold ETF",
+        "junior miners",
+        "gold reserves",
+        "gold inflation hedge",
+        "Fed gold",
+        "dollar gold",
+        "recession gold",
+    ]
+    for kw in original:
+        assert kw in content_agent.SERPAPI_KEYWORDS, f"pre-existing keyword dropped: {kw}"
+
+
+def test_serpapi_keywords_total_count_and_unique():
+    """Total = 18, no duplicates (htu)."""
+    assert len(content_agent.SERPAPI_KEYWORDS) == 18
+    assert len(set(content_agent.SERPAPI_KEYWORDS)) == 18
+
+
+def test_rss_feeds_reuters_dropped_bnn_added():
+    """Dead Reuters feed removed, BNN Bloomberg added (htu)."""
+    urls = [u for u, _ in content_agent.RSS_FEEDS]
+    assert not any("feeds.reuters.com" in u for u in urls), "dead Reuters feed still present"
+    assert any("bnnbloomberg.ca" in u for u in urls), "BNN Bloomberg feed missing"
 
 
 # ---------------------------------------------------------------------------
