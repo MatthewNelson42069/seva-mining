@@ -56,9 +56,21 @@ class DraftItem(Base):
     engagement_alert_level = Column(String(20), nullable=True)   # null/watchlist/viral
     alerted_expiry_at = Column(DateTime(timezone=True), nullable=True)  # expiry alert dedup
 
+    # Phase B (quick-260424-l0d): X posting state — orthogonal to `status`.
+    # `status` owns the dashboard approve/reject lifecycle; `approval_state` owns the
+    # post-to-X result. See migration 0009_add_x_post_state_to_draft_items.
+    approval_state = Column(
+        String(16), nullable=False, server_default="pending"
+    )  # pending | posted | failed | discarded | posted_partial (CHECK constraint)
+    posted_tweet_id = Column(Text, nullable=True)   # first tweet for threads, sole id for single
+    posted_tweet_ids = Column(JSONB, nullable=True)  # full id list for threads, NULL for single
+    posted_at = Column(DateTime(timezone=True), nullable=True)
+    post_error = Column(Text, nullable=True)        # "{code}:{message}" per D11
+
     __table_args__ = (
         Index("ix_draft_items_status", "status"),       # D-08
         Index("ix_draft_items_platform", "platform"),   # D-08
         Index("ix_draft_items_created_at", "created_at"),  # D-08
         Index("ix_draft_items_expires_at", "expires_at"),  # D-08
+        Index("ix_draft_items_approval_state", "approval_state"),  # Phase B (l0d)
     )

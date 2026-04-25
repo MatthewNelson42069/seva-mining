@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -5,8 +6,11 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import type { DraftItemResponse, DraftAlternative } from '@/api/types'
 import { useContentBundle } from '@/hooks/useContentBundle'
+import { usePostToX } from '@/hooks/usePostToX'
+import { PostToXConfirmModal } from './PostToXConfirmModal'
 import { InfographicPreview } from '@/components/content/InfographicPreview'
 import { ThreadPreview } from '@/components/content/ThreadPreview'
 import { BreakingNewsPreview } from '@/components/content/BreakingNewsPreview'
@@ -29,6 +33,8 @@ const FORMAT_RENDERERS: Record<string, true> = {
 }
 
 export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModalProps) {
+  const [showPostConfirm, setShowPostConfirm] = useState(false)
+
   // Pull content_bundle_id from engagement_snapshot (populated by Plan 01 schema change)
   const bundleId =
     (item.engagement_snapshot as Record<string, unknown> | undefined)?.content_bundle_id as
@@ -43,6 +49,41 @@ export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModal
   const contentType = bundle?.content_type ?? ''
   // Fallback path: no bundle id, fetch failed, or unknown format → flat text (D-24)
   const showFallback = !bundleId || isError || !FORMAT_RENDERERS[contentType]
+
+  // Phase B (quick-260424-l0d): Post-to-X is enabled only for the two
+  // text-only formats supported by the backend route (breaking_news, thread)
+  // AND only while the draft has not already been posted. `posted_partial`
+  // remains actionable on the X side (review/cleanup) but the button stays
+  // hidden — re-posting is not the desired recovery path.
+  const postToXMutation = usePostToX(item.platform)
+  const canPostToX =
+    (contentType === 'breaking_news' || contentType === 'thread') &&
+    item.approval_state !== 'posted' &&
+    item.approval_state !== 'posted_partial'
+
+  const draftContent = (bundle?.draft_content ?? null) as
+    | { tweet?: string; tweets?: string[] }
+    | null
+  const previewText: string | string[] = (() => {
+    if (contentType === 'breaking_news') {
+      return draftContent?.tweet ?? ''
+    }
+    if (contentType === 'thread') {
+      return Array.isArray(draftContent?.tweets) ? draftContent.tweets : []
+    }
+    return ''
+  })()
+
+  function handleConfirmPost() {
+    postToXMutation.mutate(
+      { id: item.id },
+      {
+        onSettled: () => {
+          setShowPostConfirm(false)
+        },
+      },
+    )
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
@@ -106,8 +147,29 @@ export function ContentDetailModal({ item, isOpen, onClose }: ContentDetailModal
           )}
         </div>
 
-        <DialogFooter showCloseButton />
+        <DialogFooter showCloseButton={!canPostToX}>
+          {canPostToX && (
+            <Button
+              onClick={() => setShowPostConfirm(true)}
+              disabled={postToXMutation.isPending}
+            >
+              Post to X
+            </Button>
+          )}
+        </DialogFooter>
       </DialogContent>
+
+      {/* Confirmation modal — only mounted when relevant */}
+      {canPostToX && (
+        <PostToXConfirmModal
+          isOpen={showPostConfirm}
+          onClose={() => setShowPostConfirm(false)}
+          onConfirm={handleConfirmPost}
+          isPending={postToXMutation.isPending}
+          contentType={contentType as 'breaking_news' | 'thread'}
+          preview={previewText}
+        />
+      )}
     </Dialog>
   )
 }

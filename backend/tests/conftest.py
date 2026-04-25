@@ -25,6 +25,11 @@ os.environ["DIGEST_WHATSAPP_TO"] = "whatsapp:+15551234567"
 os.environ["X_API_BEARER_TOKEN"] = "test-bearer"
 os.environ["X_API_KEY"] = "test-key"
 os.environ["X_API_SECRET"] = "test-secret"
+# Phase B (quick-260424-l0d): OAuth1 user-context tokens for tweepy.
+# X_POSTING_ENABLED stays UNSET → defaults to False → all tests run in simulate mode,
+# never invoking the real tweepy AsyncClient (no network calls in unit tests).
+os.environ["X_ACCESS_TOKEN"] = "test-access"
+os.environ["X_ACCESS_TOKEN_SECRET"] = "test-access-secret"
 os.environ["SERPAPI_API_KEY"] = "test-key"
 os.environ["JWT_SECRET"] = _TEST_JWT_SECRET
 os.environ["DASHBOARD_PASSWORD"] = _TEST_PASSWORD_HASH

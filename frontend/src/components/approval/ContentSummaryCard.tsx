@@ -26,6 +26,30 @@ const FORMAT_LABELS: Record<string, string> = {
   comment: 'Comment',
 }
 
+// Phase B (quick-260424-l0d): X post-state badge styling.
+// Surfaces draft_items.approval_state on the summary card so the user can
+// see at a glance which drafts already shipped to X (or partially shipped /
+// failed). `pending` is the implicit default and gets no badge — the absence
+// of a badge is the pending signal.
+const POST_STATE_BADGE: Record<string, { label: string; className: string }> = {
+  posted: {
+    label: 'Posted',
+    className: 'bg-green-50 text-green-700 border-green-200',
+  },
+  posted_partial: {
+    label: 'Posted (partial)',
+    className: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  failed: {
+    label: 'Failed',
+    className: 'bg-red-50 text-red-700 border-red-200',
+  },
+  discarded: {
+    label: 'Discarded',
+    className: 'bg-muted text-muted-foreground border-border',
+  },
+}
+
 export function ContentSummaryCard({ item }: ContentSummaryCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
 
@@ -54,6 +78,10 @@ export function ContentSummaryCard({ item }: ContentSummaryCardProps) {
   // Extract headline from first line of source_text
   const headline = item.source_text?.split('\n')[0] ?? 'Content item'
   const formatType = item.alternatives[0]?.type
+  const postStateBadge =
+    item.approval_state && item.approval_state !== 'pending'
+      ? POST_STATE_BADGE[item.approval_state]
+      : undefined
 
   function handleApprove(e: React.MouseEvent) {
     e.stopPropagation()
@@ -113,12 +141,21 @@ export function ContentSummaryCard({ item }: ContentSummaryCardProps) {
           {/* Header row */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
-              {/* Format badge */}
-              {formatType && (
-                <div className="mb-1.5">
-                  <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                    {FORMAT_LABELS[formatType] ?? formatType}
-                  </span>
+              {/* Format + post-state badges */}
+              {(formatType || postStateBadge) && (
+                <div className="mb-1.5 flex items-center gap-1.5 flex-wrap">
+                  {formatType && (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                      {FORMAT_LABELS[formatType] ?? formatType}
+                    </span>
+                  )}
+                  {postStateBadge && (
+                    <span
+                      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium border ${postStateBadge.className}`}
+                    >
+                      {postStateBadge.label}
+                    </span>
+                  )}
                 </div>
               )}
               {/* Headline */}
