@@ -93,7 +93,7 @@ A 6-sub-agent AI system that monitors the gold sector via news feeds 24/7, draft
 | SQLAlchemy 1.x / ORM v1 patterns | FastAPI async requires v2 `async_sessionmaker` and `AsyncSession`. v1 `Session` blocks the event loop. Pydantic v1 support also deprecated in FastAPI 0.135+. | SQLAlchemy 2.0 only |
 | `requests` library in async routes | Blocks the event loop. Any sync I/O inside an async FastAPI route blocks all concurrent requests. | `httpx` with `async with AsyncClient()` |
 | `AsyncIOScheduler` inside Gunicorn multi-worker | Each Gunicorn worker spawns its own scheduler — agents would run N times per cycle (N = worker count). Use a dedicated single-process worker. | APScheduler in a separate Railway service with `--workers 1` |
-| Auto-posting to any platform | Out of scope by design. Never implement. Even accidental partial implementation creates compliance and reputational risk for the client. | Clipboard copy + direct link only |
+| Unattended auto-posting to any platform | Scheduled or agent-driven posting (no human in the loop) is out of scope. The risk model is unattended autonomous publishing — not user-initiated posting. User-initiated approve→post-to-X (Phase B, quick-260424-l0d) is explicitly in scope: a draft only ships when the user opens the detail modal, clicks "Post to X", and confirms in a second dialog; the backend writes `draft_items.approval_state` atomically inside a single FOR-UPDATE transaction. | User-initiated approve→post via `/items/{id}/post-to-x` (single-tweet + thread; breaking_news + thread content_types only). Clipboard copy + manual paste remains available for every other format. Never run posting on a cron, and never expose a "post all queued" bulk action. |
 | Pydantic v1 (`from pydantic import BaseModel` with v1 patterns) | FastAPI 0.135+ deprecates v1 support. Will break on Python 3.14+. | Pydantic v2 patterns: `model_config = ConfigDict(...)` |
 | Celery for this use case | Adds Redis broker, separate worker, Celery Beat, and operational overhead for 3 cron jobs. The complexity-to-benefit ratio is wrong for this scale. | APScheduler in dedicated worker process |
 | `create_engine()` (sync SQLAlchemy) | Blocks event loop in async FastAPI context. | `create_async_engine()` with `asyncpg` |
@@ -140,6 +140,20 @@ Conventions not yet established. Will populate as patterns emerge during develop
 
 Architecture not yet mapped. Follow existing patterns found in the codebase.
 <!-- GSD:architecture-end -->
+
+## X Developer Portal — Approve→Post-to-X Runbook (Phase B, quick-260424-l0d)
+
+Phase B's `POST /items/{id}/post-to-x` route uses `tweepy.AsyncClient` with OAuth 1.0a User Context to post on behalf of the Seva Mining X account. The X API Basic tier ($100/mo) covers the Write quota. The keys/tokens are read from env vars (`x_api_key`, `x_api_secret`, `x_access_token`, `x_access_token_secret`) and the route is gated by `X_POSTING_ENABLED=true` — when unset, the backend writes `sim-{uuid4()}` IDs without any tweepy call (D2 simulate mode).
+
+**One-time setup at the X Developer Portal — do these in order; step 4 (Read+Write) MUST happen before step 5 (token regeneration), or the Access Token will only carry Read scope and `tweepy.create_tweet()` will return 403.**
+
+1. Log in at https://developer.x.com/en/portal/dashboard with the Seva Mining X account.
+2. Open the project containing the existing Basic-tier app (the same app whose Bearer Token already powers the Content Agent's video_clip pipeline).
+3. Open the app → "Keys and tokens" tab. The "API Key" + "API Key Secret" pair is the OAuth 1.0a app key — copy these to `X_API_KEY` and `X_API_SECRET` in Railway env if not already set.
+4. Open the app → "User authentication settings" → click "Set up" or "Edit". Set "App permissions" to **Read and write** (NOT "Read and write and Direct message" — DMs are out of scope and asking for unused scopes is a compliance smell). Type of App: "Web App, Automated App or Bot". Callback URI: any valid URL is fine for OAuth 1.0a token generation (e.g. `https://seva-mining-smm.vercel.app/oauth/callback` even if unused). Save.
+5. Back on "Keys and tokens" → "Access Token and Secret" → click "Regenerate". The new token pair is what carries the Read+Write scope — copy these to `X_ACCESS_TOKEN` and `X_ACCESS_TOKEN_SECRET`. Old tokens (if any) are now Read-only and will silently fail for `create_tweet`.
+
+After the token pair is in Railway env, set `X_POSTING_ENABLED=true` to flip the route from simulate mode to real posting. To roll back, set `X_POSTING_ENABLED=false` (or unset it) — the route reverts to writing sim-IDs without redeploy. Verify with: open a draft in the dashboard, click "Post to X", confirm; the toast should link to a real `https://x.com/i/web/status/{tweet_id}` URL when `X_POSTING_ENABLED=true`, or a `sim-...` ID otherwise.
 
 <!-- GSD:workflow-start source:GSD defaults -->
 ## GSD Workflow Enforcement
