@@ -1,5 +1,10 @@
 import { apiFetch } from './client'
-import type { DraftItemResponse, QueueListResponse, RejectionCategory } from './types'
+import type {
+  DraftItemResponse,
+  PostToXResponse,
+  QueueListResponse,
+  RejectionCategory,
+} from './types'
 
 export async function getQueue(params: {
   platform?: string; status?: string; contentType?: string; cursor?: string; limit?: number
@@ -27,5 +32,16 @@ export async function rejectItem(id: string, category: RejectionCategory, notes?
   return apiFetch<DraftItemResponse>(`/items/${id}/reject`, {
     method: 'PATCH',
     body: JSON.stringify({ category, notes }),
+  })
+}
+
+// Phase B (quick-260424-l0d): user-initiated approve→post-to-X.
+// Backend atomically transitions draft_items.approval_state pending → posted
+// (or posted_partial / failed) inside a single FOR-UPDATE transaction.
+// Returns the post-state columns + an `already_posted` flag for idempotent
+// re-calls.
+export async function postItemToX(id: string): Promise<PostToXResponse> {
+  return apiFetch<PostToXResponse>(`/items/${id}/post-to-x`, {
+    method: 'POST',
   })
 }

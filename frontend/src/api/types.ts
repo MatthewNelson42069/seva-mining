@@ -9,6 +9,15 @@ export interface DraftAlternative {
   label: string  // "Draft A", "Draft B" (retweet/RT Quote types are legacy — no longer produced)
 }
 
+// Phase B (quick-260424-l0d): X post-state, orthogonal to DraftStatus.
+// Stored on draft_items.approval_state. See backend ApprovalState enum.
+export type ApprovalState =
+  | 'pending'
+  | 'posted'
+  | 'failed'
+  | 'discarded'
+  | 'posted_partial'
+
 export interface DraftItemResponse {
   id: string
   platform: Platform
@@ -30,6 +39,24 @@ export interface DraftItemResponse {
   created_at: string
   updated_at?: string
   engagement_snapshot?: Record<string, unknown>
+  // Phase B (quick-260424-l0d): X post-state surfaced to dashboard
+  approval_state?: ApprovalState
+  posted_tweet_id?: string
+  posted_tweet_ids?: string[]
+  posted_at?: string
+  post_error?: string
+}
+
+// Phase B (quick-260424-l0d): response from POST /items/{id}/post-to-x.
+// Mirrors the post-state columns plus an `already_posted` flag for idempotent
+// re-calls.
+export interface PostToXResponse {
+  approval_state: ApprovalState
+  posted_tweet_id?: string
+  posted_tweet_ids?: string[]
+  posted_at?: string
+  post_error?: string
+  already_posted: boolean
 }
 
 export interface QueueListResponse {
