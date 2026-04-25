@@ -51,6 +51,14 @@ def make_draft_item(
     item.updated_at = None
     item.event_mode = None
     item.engagement_snapshot = None
+    # Phase B (quick-260424-l0d) — DraftItemResponse now surfaces post-state fields.
+    # Default to a clean "never posted" row so existing approve/reject tests keep
+    # validating against the extended schema without spurious mock attrs.
+    item.approval_state = "pending"
+    item.posted_tweet_id = None
+    item.posted_tweet_ids = None
+    item.posted_at = None
+    item.post_error = None
     return item
 
 
