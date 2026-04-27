@@ -1026,12 +1026,102 @@ async def _score_relevance(title: str, summary: str, *, client: AsyncAnthropic) 
 # this is safe. Not exposed publicly — tests should monkeypatch via
 # ``content_agent._STORIES_CACHE`` if they need to clear it.
 _STORIES_CACHE: dict[int, list[dict]] = {}
+
+# _FETCH_IN_FLIGHT maps a bucket key → asyncio.Future whose result is the
+# scored story list for that bucket. When a second caller arrives mid-fetch
+# it awaits the existing Future rather than starting a duplicate fetch.
+# Protected by _CACHE_LOCK, which is held only for dict look-ups/mutations
+# (microseconds) — never during Anthropic calls. This is the coalesce pattern:
+# one in-flight fetch shared by all concurrent callers, with NO long-held lock.
+# Root cause of the prior deadlock: the old implementation held _CACHE_LOCK
+# across 100+ sequential _score_relevance Anthropic calls (worst case
+# 118 × 30 s = 3,540 s), blocking every other fetch_stories caller.
+# (quick-260427-m51: replaces kro's 30 s timeout band-aid)
+_FETCH_IN_FLIGHT: dict[int, "asyncio.Future[list[dict]]"] = {}
 _CACHE_LOCK: asyncio.Lock = asyncio.Lock()
 
 
 def _cache_bucket() -> int:
     """Return the current 30-minute timestamp bucket key."""
     return int(time.time() // 1800)
+
+
+async def _do_fetch(bucket: int) -> list[dict]:
+    """Execute one full fetch-score-classify cycle for ``bucket``.
+
+    Caller is responsible for registering / resolving the in-flight Future
+    and writing the result to _STORIES_CACHE. This function does the work
+    only — no lock is held during any await inside here.
+    """
+    settings = get_settings()
+    # Per-request timeout keeps individual Anthropic calls bounded at 30 s.
+    # With scoring now parallelised via asyncio.gather the worst-case wall
+    # time for the whole fetch drops from ~118 × 30 s = 59 min to ~30 s.
+    anthropic_client = AsyncAnthropic(
+        api_key=settings.anthropic_api_key, timeout=30.0
+    )
+    serpapi_client = (
+        serpapi.Client(api_key=settings.serpapi_api_key) if settings.serpapi_api_key else None
+    )
+
+    try:
+        rss_stories, serpapi_stories = await asyncio.gather(
+            _fetch_all_rss(),
+            _fetch_all_serpapi(serpapi_client),
+        )
+    except Exception as exc:  # noqa: BLE001 — fetch-failure: return []
+        logger.warning(
+            "fetch_stories: ingestion failed (%s) — returning empty list",
+            type(exc).__name__,
+        )
+        return []
+
+    all_stories = rss_stories + serpapi_stories
+    logger.info(
+        "fetch_stories ingested %d stories (%d RSS, %d SerpAPI)",
+        len(all_stories),
+        len(rss_stories),
+        len(serpapi_stories),
+    )
+
+    unique_stories = deduplicate_stories(all_stories)
+    if not unique_stories:
+        return []
+
+    # Score all stories in parallel via asyncio.gather — eliminates the
+    # sequential bottleneck that was the root cause of the cache-lock starvation
+    # (previously one await per story in a for-loop while holding _CACHE_LOCK).
+    rel_weight, rec_weight, cred_weight = 0.4, 0.3, 0.3
+
+    async def _score_story(story: dict) -> dict:
+        relevance = await _score_relevance(
+            story["title"], story.get("summary", ""), client=anthropic_client
+        )
+        rec = recency_score(story["published"])
+        cred = credibility_score(story.get("source_name", ""))
+        story["score"] = (relevance * rel_weight + rec * rec_weight + cred * cred_weight) * 10
+        return story
+
+    scored: list[dict] = list(
+        await asyncio.gather(*[_score_story(s) for s in unique_stories])
+    )
+
+    # Predicted format via lightweight Haiku classifier (already parallelised).
+    try:
+        format_labels = await asyncio.gather(
+            *[classify_format_lightweight(s, client=anthropic_client) for s in scored]
+        )
+        for s, fmt in zip(scored, format_labels):
+            s["predicted_format"] = fmt
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "fetch_stories: format classifier batch failed (%s) — defaulting all to 'thread'",
+            type(exc).__name__,
+        )
+        for s in scored:
+            s["predicted_format"] = "thread"
+
+    return scored
 
 
 async def fetch_stories() -> list[dict]:
@@ -1043,13 +1133,19 @@ async def fetch_stories() -> list[dict]:
     multiple sub-agents firing back-to-back within their stagger window all
     share one fetch.
 
-    On cache miss under the module-level asyncio.Lock, this runs the ingestion
-    stage that ``ContentAgent._run_pipeline`` used to run inline:
+    Concurrency model (coalesce pattern — quick-260427-m51):
+    - _CACHE_LOCK is held ONLY for microsecond dict operations (read, write,
+      Future registration). It is NEVER held during Anthropic API calls.
+    - When a fetch is already in progress for the current bucket, new callers
+      await the existing Future rather than starting a duplicate fetch.
+    - Scoring runs via asyncio.gather (parallel), so worst-case wall time for
+      ~120 stories drops from 118 × 30 s = 59 min to ~30 s.
 
+    On cache miss this runs:
         1. RSS ingestion (``_fetch_all_rss``)
         2. SerpAPI ingestion (``_fetch_all_serpapi``)
         3. Dedup (``deduplicate_stories``)
-        4. Relevance scoring per story (``_score_relevance``)
+        4. Relevance scoring — parallel asyncio.gather over ``_score_relevance``
         5. Composite score (``calculate_story_score`` via inline formula)
         6. Lightweight format classification (``classify_format_lightweight``)
 
@@ -1063,97 +1159,66 @@ async def fetch_stories() -> list[dict]:
     """
     bucket = _cache_bucket()
 
-    # Fast path: bucket already populated.
+    # Fast path: bucket already populated (no lock needed for a dict read in
+    # CPython — GIL protects the reference, and asyncio is single-threaded).
     cached = _STORIES_CACHE.get(bucket)
     if cached is not None:
         return cached
 
+    # Determine whether WE are the designated fetcher or a waiter.
+    # we_own is set inside the lock so no other coroutine can race on this
+    # decision (asyncio is single-threaded; the lock serialises the check).
+    fut: "asyncio.Future[list[dict]]"
+    we_own: bool
     async with _CACHE_LOCK:
-        # Re-check under the lock in case another coroutine just populated it.
+        # Re-check under the lock: another coroutine may have just populated
+        # the cache or registered an in-flight Future.
         cached = _STORIES_CACHE.get(bucket)
         if cached is not None:
             return cached
 
-        # Evict any stale buckets to keep the cache bounded.
-        stale_keys = [k for k in _STORIES_CACHE if k < bucket]
-        for k in stale_keys:
-            _STORIES_CACHE.pop(k, None)
+        if bucket in _FETCH_IN_FLIGHT:
+            # Another coroutine is already fetching — coalesce onto its Future.
+            fut = _FETCH_IN_FLIGHT[bucket]
+            we_own = False
+        else:
+            # We are first — register a Future so concurrent callers coalesce.
+            loop = asyncio.get_event_loop()
+            fut = loop.create_future()
+            _FETCH_IN_FLIGHT[bucket] = fut
+            we_own = True
 
-        settings = get_settings()
-        # Per-request timeout on the shared scoring/classification client.
-        # Default Anthropic SDK timeout is 600s (10 min). With 100+ sequential
-        # _score_relevance calls plus a gather() over classify_format_lightweight
-        # all running while _CACHE_LOCK is held, a single hung call (Anthropic
-        # transient slowdown, network black hole, etc.) blocks every caller of
-        # fetch_stories — i.e. every text-pipeline sub-agent — until the worker
-        # is killed and restarted. 30s/call is plenty for Haiku scoring/
-        # classification (typical: 1-2s); both call sites already have their
-        # own try/except + fallback, so a TimeoutError just routes them to the
-        # defensive path. (quick-260427-kro)
-        anthropic_client = AsyncAnthropic(
-            api_key=settings.anthropic_api_key, timeout=30.0
-        )
-        serpapi_client = (
-            serpapi.Client(api_key=settings.serpapi_api_key) if settings.serpapi_api_key else None
-        )
+            # Evict stale cache buckets while we hold the lock (cheap op).
+            stale_keys = [k for k in _STORIES_CACHE if k < bucket]
+            for k in stale_keys:
+                _STORIES_CACHE.pop(k, None)
 
+    # Lock is released here. All awaits below happen OUTSIDE the lock,
+    # so no Anthropic or network I/O ever holds _CACHE_LOCK.
+
+    if we_own:
+        # We registered the Future — execute the fetch and resolve it.
+        result: list[dict] = []
         try:
-            rss_stories, serpapi_stories = await asyncio.gather(
-                _fetch_all_rss(),
-                _fetch_all_serpapi(serpapi_client),
-            )
-        except Exception as exc:  # noqa: BLE001 — fetch-failure: return []
-            logger.warning(
-                "fetch_stories: ingestion failed (%s) — returning empty list",
-                type(exc).__name__,
-            )
-            _STORIES_CACHE[bucket] = []
-            return []
-
-        all_stories = rss_stories + serpapi_stories
-        logger.info(
-            "fetch_stories ingested %d stories (%d RSS, %d SerpAPI)",
-            len(all_stories),
-            len(rss_stories),
-            len(serpapi_stories),
-        )
-
-        unique_stories = deduplicate_stories(all_stories)
-        if not unique_stories:
-            _STORIES_CACHE[bucket] = []
-            return []
-
-        # Score and classify each unique story (relevance + recency + credibility).
-        # Use default weights — sub-agents can re-score if they override, but the
-        # shared cache uses the CONT-05 defaults (0.4 / 0.3 / 0.3).
-        rel_weight, rec_weight, cred_weight = 0.4, 0.3, 0.3
-        scored: list[dict] = []
-        for story in unique_stories:
-            relevance = await _score_relevance(
-                story["title"], story.get("summary", ""), client=anthropic_client
-            )
-            rec = recency_score(story["published"])
-            cred = credibility_score(story.get("source_name", ""))
-            story["score"] = (relevance * rel_weight + rec * rec_weight + cred * cred_weight) * 10
-            scored.append(story)
-
-        # Predicted format via lightweight Haiku classifier.
-        try:
-            format_labels = await asyncio.gather(
-                *[classify_format_lightweight(s, client=anthropic_client) for s in scored]
-            )
-            for s, fmt in zip(scored, format_labels):
-                s["predicted_format"] = fmt
+            result = await _do_fetch(bucket)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "fetch_stories: format classifier batch failed (%s) — defaulting all to 'thread'",
+                "fetch_stories: _do_fetch raised unexpectedly (%s) — resolving with []",
                 type(exc).__name__,
             )
-            for s in scored:
-                s["predicted_format"] = "thread"
-
-        _STORIES_CACHE[bucket] = scored
-        return scored
+            result = []
+        finally:
+            # Write to cache and clean up in-flight entry (micro-hold on lock).
+            async with _CACHE_LOCK:
+                _STORIES_CACHE[bucket] = result
+                _FETCH_IN_FLIGHT.pop(bucket, None)
+            # Resolve the Future so all waiters unblock.
+            if not fut.done():
+                fut.set_result(result)
+        return result
+    else:
+        # Another coroutine owns the fetch — await the shared Future.
+        return await fut
 
 
 # ---------------------------------------------------------------------------

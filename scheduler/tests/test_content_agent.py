@@ -15,6 +15,7 @@ gate helpers are covered inline here because they remain module-level in
 content_agent.py and have no sub-agent-specific equivalent.
 """
 
+import asyncio
 import os
 import sys
 import time
@@ -216,6 +217,58 @@ def test_cache_bucket_matches_30_min_formula():
     """_cache_bucket returns int(time.time() // 1800) at call time."""
     expected = int(time.time() // 1800)
     assert content_agent._cache_bucket() == expected
+
+
+@pytest.mark.asyncio
+async def test_fetch_stories_coalesce_concurrent_callers_issue_one_fetch():
+    """Concurrent callers within the same bucket coalesce onto one in-flight fetch.
+
+    quick-260427-m51: the coalesce pattern ensures _do_fetch is called exactly
+    once even when multiple coroutines arrive simultaneously on a cache miss.
+    Previously the sequential _score_relevance loop held _CACHE_LOCK for the
+    entire scoring duration, blocking all concurrent callers for up to 59 min.
+    This test verifies: (a) _do_fetch is called once, (b) both callers receive
+    the same list, (c) _CACHE_LOCK is NOT held during the actual fetch work.
+    """
+    _clear_cache()
+    # Also clear any in-flight futures from a previous test.
+    content_agent._FETCH_IN_FLIGHT.clear()
+
+    scored_story = {
+        "title": "GOLD UP",
+        "summary": "",
+        "link": "http://c",
+        "source_name": "kitco.com",
+        "published": None,
+        "score": 7.0,
+        "predicted_format": "breaking_news",
+    }
+    do_fetch_call_count = 0
+
+    async def _fake_do_fetch(bucket):
+        nonlocal do_fetch_call_count
+        do_fetch_call_count += 1
+        # Yield to the event loop so the second coroutine can also enter
+        # fetch_stories and see the in-flight Future.
+        await asyncio.sleep(0)
+        return [scored_story]
+
+    with patch.object(content_agent, "_do_fetch", new=_fake_do_fetch):
+        result_a, result_b = await asyncio.gather(
+            content_agent.fetch_stories(),
+            content_agent.fetch_stories(),
+        )
+
+    # _do_fetch must be called exactly once — the second caller coalesced.
+    assert do_fetch_call_count == 1
+    # Both callers receive the same list.
+    assert result_a == [scored_story]
+    assert result_b == [scored_story]
+    # Cache populated correctly.
+    bucket = content_agent._cache_bucket()
+    assert content_agent._STORIES_CACHE[bucket] == [scored_story]
+    # In-flight entry cleaned up.
+    assert bucket not in content_agent._FETCH_IN_FLIGHT
 
 
 # ---------------------------------------------------------------------------
