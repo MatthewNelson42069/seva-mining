@@ -639,15 +639,31 @@ def build_draft_item(content_bundle, rationale: str):
         if tweets:
             parts.append("=== Thread ===\n" + "\n\n".join(str(t) for t in tweets if t))
         if carousel:
-            parts.append(
-                "=== Instagram Carousel ===\n"
-                + "\n\n".join(
-                    f"Slide {i + 1}: {slide}"
-                    if isinstance(slide, str)
-                    else f"Slide {i + 1}: {slide.get('text', '')}"
-                    for i, slide in enumerate(carousel)
-                )
-            )
+            # Per quick-260427-k5h: each slide is a dict with headline + body +
+            # visual_note (see scheduler/agents/content/gold_history.py drafter
+            # prompt — that's the source-of-truth schema). The pre-k5h code read
+            # slide.get('text', '') which doesn't exist on any slide, so the
+            # modal showed empty `Slide N:` lines. Render each present field on
+            # its own indented line for readability + copy-into-image-generator.
+            slide_lines = []
+            for i, slide in enumerate(carousel):
+                prefix = f"Slide {i + 1}:"
+                if isinstance(slide, str):
+                    slide_lines.append(f"{prefix} {slide}")
+                    continue
+                if not isinstance(slide, dict):
+                    slide_lines.append(prefix)
+                    continue
+                headline = (slide.get("headline") or "").strip()
+                body = (slide.get("body") or "").strip()
+                visual = (slide.get("visual_note") or "").strip()
+                block = [f"{prefix} {headline}" if headline else prefix]
+                if body:
+                    block.append(f"  {body}")
+                if visual:
+                    block.append(f"  Visual: {visual}")
+                slide_lines.append("\n".join(block))
+            parts.append("=== Instagram Carousel ===\n" + "\n\n".join(slide_lines))
         draft_text = (
             "\n\n".join(parts) if parts else f"Gold History: {draft.get('story_title', '')}"
         )

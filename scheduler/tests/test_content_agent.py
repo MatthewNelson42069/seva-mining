@@ -365,6 +365,155 @@ def test_build_draft_item_stores_bundle_id_in_engagement_snapshot():
 
 
 # ---------------------------------------------------------------------------
+# build_draft_item — gold_history carousel renderer (quick-260427-k5h regression)
+# ---------------------------------------------------------------------------
+
+
+def _make_gold_history_bundle(carousel: list, tweets: list | None = None):
+    """Build a MagicMock bundle whose draft_content matches the gold_history schema."""
+    from uuid import uuid4
+
+    bundle = MagicMock()
+    bundle.id = uuid4()
+    bundle.story_headline = "Gold has not peaked"
+    bundle.story_url = "http://example.com/article"
+    bundle.source_name = "AJ Bell"
+    bundle.score = 8.0
+    bundle.quality_score = None
+    bundle.draft_content = {
+        "format": "gold_history",
+        "story_title": "Gold has not peaked",
+        "story_slug": "gold-has-not-peaked",
+        "tweets": tweets if tweets is not None else ["Tweet one", "Tweet two"],
+        "instagram_carousel": carousel,
+        "instagram_caption": "Caption text.",
+        "sources": [],
+    }
+    return bundle
+
+
+def test_build_draft_item_gold_history_renders_carousel_slides():
+    """Regression for quick-260427-k5h: carousel slides must surface headline + body + visual_note.
+
+    Pre-fix behavior: build_draft_item read ``slide.get('text', '')`` which does
+    not exist on the real schema → modal showed empty ``Slide N:`` lines. This
+    test feeds the realistic schema (``{slide, headline, body, visual_note}``)
+    through build_draft_item and asserts every field is present in the
+    assembled draft_text.
+    """
+    carousel = [
+        {
+            "slide": 1,
+            "headline": "Gold Has Not Peaked",
+            "body": "History says the biggest move may still be ahead.",
+            "visual_note": "Full-bleed warm cream background with bold serif headline.",
+        },
+        {
+            "slide": 2,
+            "headline": "1971 Set the Stage",
+            "body": "Nixon shock ended the gold standard, freeing the price to discover its true level.",
+            "visual_note": "Vintage newspaper clipping motif, sepia tone.",
+        },
+        {
+            "slide": 3,
+            "headline": "1980 Peak Was a Crisis Top",
+            "body": "Inflation, hostage crisis, Soviet invasion of Afghanistan — peak fear, peak gold.",
+            "visual_note": "Dual chart: CPI vs gold price 1976-1982.",
+        },
+        {
+            "slide": 4,
+            "headline": "Today Looks Different",
+            "body": "Real rates positive, dollar strong, yet gold rallies — that's structural demand.",
+            "visual_note": "Side-by-side chart: gold vs DXY 2020-present.",
+        },
+        {
+            "slide": 5,
+            "headline": "The Asymmetric Setup",
+            "body": "When central banks accumulate, retail follows; we are still in act one.",
+            "visual_note": "Stacked area chart of central bank gold reserves 2010-present.",
+        },
+    ]
+    bundle = _make_gold_history_bundle(carousel)
+
+    item = content_agent.build_draft_item(bundle, "test rationale")
+    text = item.alternatives[0]["text"]
+
+    # Section markers must be preserved (frontend rendering depends on them).
+    assert "=== Thread ===" in text
+    assert "=== Instagram Carousel ===" in text
+
+    # Every slide's headline, body, and visual_note must appear in the output.
+    for slide in carousel:
+        assert slide["headline"] in text, f"missing headline for slide {slide['slide']}"
+        assert slide["body"] in text, f"missing body for slide {slide['slide']}"
+        assert slide["visual_note"] in text, f"missing visual_note for slide {slide['slide']}"
+
+    # Visual: prefix is used to separate render-direction from post copy.
+    assert "Visual:" in text
+
+    # Regression guard: no empty "Slide N:" line followed immediately by another
+    # slide marker (the broken renderer produced "Slide 1:\n\nSlide 2:\n\n...").
+    assert "Slide 1:\n\nSlide 2:" not in text
+    assert "Slide 1: \n\nSlide 2:" not in text
+
+
+def test_build_draft_item_gold_history_handles_partial_slide():
+    """Slides missing one of headline/body/visual_note still render the present fields."""
+    carousel = [
+        # Slide with everything
+        {"slide": 1, "headline": "Full slide", "body": "All fields present.", "visual_note": "Visual cue."},
+        # Slide missing headline (only body + visual)
+        {"slide": 2, "body": "Body only.", "visual_note": "Some visual."},
+        # Slide missing visual_note
+        {"slide": 3, "headline": "No visual", "body": "Has body."},
+        # Slide with only headline
+        {"slide": 4, "headline": "Just a headline"},
+    ]
+    bundle = _make_gold_history_bundle(carousel, tweets=[])
+
+    item = content_agent.build_draft_item(bundle, "test rationale")
+    text = item.alternatives[0]["text"]
+
+    # Every present field surfaces.
+    assert "Full slide" in text
+    assert "All fields present." in text
+    assert "Visual cue." in text
+    assert "Body only." in text
+    assert "Some visual." in text
+    assert "No visual" in text
+    assert "Has body." in text
+    assert "Just a headline" in text
+
+    # Slide markers exist for every slide even when fields are sparse.
+    assert "Slide 1:" in text
+    assert "Slide 2:" in text
+    assert "Slide 3:" in text
+    assert "Slide 4:" in text
+
+
+def test_build_draft_item_gold_history_legacy_string_slide_compat():
+    """Legacy compat: a slide that's a bare string still renders as ``Slide N: <str>``."""
+    carousel = ["legacy slide one", "legacy slide two"]
+    bundle = _make_gold_history_bundle(carousel, tweets=[])
+
+    item = content_agent.build_draft_item(bundle, "test rationale")
+    text = item.alternatives[0]["text"]
+
+    assert "Slide 1: legacy slide one" in text
+    assert "Slide 2: legacy slide two" in text
+
+
+def test_build_draft_item_gold_history_empty_carousel_falls_back():
+    """When both tweets and carousel are empty, fall back to ``Gold History: {story_title}``."""
+    bundle = _make_gold_history_bundle(carousel=[], tweets=[])
+
+    item = content_agent.build_draft_item(bundle, "test rationale")
+    text = item.alternatives[0]["text"]
+
+    assert text == "Gold History: Gold has not peaked"
+
+
+# ---------------------------------------------------------------------------
 # is_gold_relevant_or_systemic_shock — gold gate bearish filter (quick-260423-j7x)
 # ---------------------------------------------------------------------------
 
