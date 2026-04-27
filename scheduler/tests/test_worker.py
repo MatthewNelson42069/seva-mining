@@ -32,7 +32,6 @@ os.environ.setdefault("FRONTEND_URL", "https://x.com")
 
 from worker import (  # noqa: E402
     CONTENT_CRON_AGENTS,
-    CONTENT_INTERVAL_AGENTS,
     JOB_LOCK_IDS,
     build_scheduler,
     reconcile_stale_runs,
@@ -80,23 +79,19 @@ async def test_job_exception_does_not_propagate():
 
 
 def test_sub_agents_total_six():
-    """Interval + cron sub-agent lists together must cover all 6 sub-agents (post-k8n: 2 interval + 4 cron)."""
-    assert len(CONTENT_INTERVAL_AGENTS) + len(CONTENT_CRON_AGENTS) == 6
-    assert len(CONTENT_INTERVAL_AGENTS) == 2
-    assert len(CONTENT_CRON_AGENTS) == 4
-
-
-def test_sub_agent_staggering():
-    """Post quick-260423-k8n: only 2 interval agents remain. Offsets are [0, 17] minutes — Breaking News (2h), Threads (4h)."""
-    offsets = [t[4] for t in CONTENT_INTERVAL_AGENTS]
-    assert offsets == [0, 17]
+    """All 6 sub-agents now register through CONTENT_CRON_AGENTS
+    (post-m49: CONTENT_INTERVAL_AGENTS retired; sub_breaking_news + sub_threads
+    moved off IntervalTrigger onto CronTrigger so Railway redeploys cannot
+    trigger spurious runs).
+    """
+    assert len(CONTENT_CRON_AGENTS) == 6
 
 
 def test_sub_agent_lock_ids():
-    """Lock IDs cover active sub_* job IDs across both schedule shapes (sub_long_form/1012 retired per quick-260423-k8n)."""
-    sub_entries = {job_id: lock_id for job_id, _, _, lock_id, *_ in CONTENT_INTERVAL_AGENTS}
-    for job_id, _, _, lock_id, *_ in CONTENT_CRON_AGENTS:
-        sub_entries[job_id] = lock_id
+    """Lock IDs cover active sub_* job IDs (sub_long_form/1012 retired per quick-260423-k8n;
+    post-m49 all 6 sub-agents register through CONTENT_CRON_AGENTS).
+    """
+    sub_entries = {job_id: lock_id for job_id, _, _, lock_id, *_ in CONTENT_CRON_AGENTS}
     assert sub_entries == {
         "sub_breaking_news": 1010,
         "sub_threads": 1011,
@@ -239,20 +234,38 @@ def test_read_schedule_config_has_no_retired_keys():
     assert "morning_digest_schedule_hour" in source
 
 
-def test_interval_agents_cadences():
-    """Post-kqa interval cadences: BN=1h (kqa reverts vxg's 2h), Threads=3h (j5i flipped 4h→3h)."""
-    cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
-    assert cadences == {
-        "sub_breaking_news": 1,
-        "sub_threads": 3,
-    }
+def test_breaking_news_is_hourly_cron():
+    """Post-m49: sub_breaking_news fires at HH:00 UTC every hour via CronTrigger.
+    Replaces the pre-m49 IntervalTrigger(hours=1, start_date=now+10s) shape
+    that caused Railway-restart-induced extra runs.
+    """
+    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_breaking_news")
+    assert entry[3] == 1010
+    assert entry[4] == {"minute": 0}, (
+        f"Expected sub_breaking_news cron_kwargs={{'minute': 0}}, got {entry[4]}"
+    )
 
 
-def test_cron_agents_count_four():
-    """Post-vxg: 4 cron sub-agents (quotes / infographics / gold_media / gold_history)."""
-    assert len(CONTENT_CRON_AGENTS) == 4
+def test_threads_is_every_three_hours_cron():
+    """Post-m49: sub_threads fires every 3h at HH:17 UTC via CronTrigger
+    (00:17, 03:17, 06:17, 09:17, 12:17, 15:17, 18:17, 21:17). The :17 minute
+    offset preserves the staggering vs sub_breaking_news's :00 fire-time
+    that the pre-m49 IntervalTrigger offset=17 expressed.
+    """
+    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_threads")
+    assert entry[3] == 1011
+    assert entry[4] == {"hour": "*/3", "minute": 17}, (
+        f"Expected sub_threads cron_kwargs={{'hour': '*/3', 'minute': 17}}, got {entry[4]}"
+    )
+
+
+def test_cron_agents_count_six():
+    """Post-m49: all 6 sub-agents register through CONTENT_CRON_AGENTS."""
+    assert len(CONTENT_CRON_AGENTS) == 6
     ids = [t[0] for t in CONTENT_CRON_AGENTS]
     assert set(ids) == {
+        "sub_breaking_news",
+        "sub_threads",
         "sub_quotes",
         "sub_infographics",
         "sub_gold_media",
@@ -261,14 +274,17 @@ def test_cron_agents_count_four():
 
 
 def test_cron_agents_use_dict_shape():
-    """Post-vxg: 5th tuple element is a CronTrigger kwargs dict."""
+    """5th tuple element is a CronTrigger kwargs dict for every agent."""
     for entry in CONTENT_CRON_AGENTS:
         assert len(entry) == 5
         assert isinstance(entry[4], dict)
-        # All four fire at noon Pacific.
-        assert entry[4]["hour"] == 12
-        assert entry[4]["minute"] == 0
-        assert entry[4]["timezone"] == "America/Los_Angeles"
+        # The 4 noon-PT cron agents all fire at hour=12, minute=0, PT timezone.
+        # The 2 hourly/3-hourly agents (m49) use a different shape — only
+        # assert the noon-PT shape on the agents that actually use it.
+        if entry[0] in {"sub_quotes", "sub_infographics", "sub_gold_media", "sub_gold_history"}:
+            assert entry[4]["hour"] == 12
+            assert entry[4]["minute"] == 0
+            assert entry[4]["timezone"] == "America/Los_Angeles"
 
 
 def test_gold_history_is_every_other_day():
@@ -516,19 +532,6 @@ async def test_senior_agent_receives_excluded_content_types_from_worker():
 
 # ---------------------------------------------------------------------------
 # quick-260424-j5i D9 — sub_threads cadence flip from 4h → 3h
+# (post-m49: cadence preserved, but trigger flipped from IntervalTrigger to
+# CronTrigger — see test_threads_is_every_three_hours_cron above.)
 # ---------------------------------------------------------------------------
-
-
-def test_sub_threads_interval_is_three_hours():
-    """j5i D9: sub_threads IntervalTrigger cadence is 3h (was 4h post-vxg).
-
-    This asserts the NEW desired state. `test_interval_agents_cadences` above
-    asserts the pre-j5i state and is updated in T3 to the new value; keeping
-    both tests during the RED phase produces a clear TDD signal.
-    """
-    cadences = {t[0]: t[5] for t in CONTENT_INTERVAL_AGENTS}
-    assert cadences["sub_threads"] == 3, (
-        f"Expected sub_threads interval=3h, got {cadences.get('sub_threads')}"
-    )
-    # sub_breaking_news cadence asserted in test_interval_agents_cadences above
-    # (1h post-kqa — revert of vxg's 2h).

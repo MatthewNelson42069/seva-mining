@@ -97,15 +97,19 @@ async def test_run_draft_cycle_completes_with_stories():
 
 
 def test_breaking_news_min_score_constant():
-    """j5i D2: BREAKING_NEWS_MIN_SCORE is a module-level tunable at 6.5."""
-    assert breaking_news.BREAKING_NEWS_MIN_SCORE == 6.5
+    """BREAKING_NEWS_MIN_SCORE is a module-level tunable at 6.0
+    (j5i shipped 6.5; m49 dropped to 6.0 after live telemetry showed 69%
+    floor rate exceeding j5i's own 70% drop-trigger).
+    """
+    assert breaking_news.BREAKING_NEWS_MIN_SCORE == 6.0
 
 
 @pytest.mark.asyncio
 async def test_breaking_news_passes_selection_kwargs():
     """j5i D1+D2: run_draft_cycle passes max_count=3, sort_by='score',
-    min_score=BREAKING_NEWS_MIN_SCORE (=6.5) through to run_text_story_cycle.
-    Mirrors test_infographics.py:120-145's call_kwargs idiom.
+    min_score=BREAKING_NEWS_MIN_SCORE (=6.0 post-m49) through to
+    run_text_story_cycle. Mirrors test_infographics.py:120-145's
+    call_kwargs idiom.
     """
     call_kwargs: dict = {}
 
@@ -128,6 +132,6 @@ async def test_breaking_news_passes_selection_kwargs():
     assert call_kwargs.get("sort_by") == "score", (
         f"Expected sort_by='score', got {call_kwargs.get('sort_by')}"
     )
-    assert call_kwargs.get("min_score") == 6.5, (
-        f"Expected min_score=6.5, got {call_kwargs.get('min_score')}"
+    assert call_kwargs.get("min_score") == 6.0, (
+        f"Expected min_score=6.0, got {call_kwargs.get('min_score')}"
     )

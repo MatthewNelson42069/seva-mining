@@ -2,15 +2,15 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-Post quick-260423-k8n, it starts AsyncIOScheduler with 7 jobs:
+Post quick-260427-m49, it starts AsyncIOScheduler with 7 jobs:
 
 - midday_digest (daily cron, 12:30 America/Los_Angeles — retimed in quick-260424-i8b
   from 07:00 PT; scope filtered to non-firehose content types via DIGEST_EXCLUDED_CONTENT_TYPES)
-- 2 interval sub-agents on IntervalTrigger — sub_breaking_news every 1h,
-  sub_threads every 3h — staggered with offsets [0, 17] minutes.
-- 4 cron sub-agents — sub_quotes / sub_infographics / sub_gold_media all
-  daily at 12:00 America/Los_Angeles; sub_gold_history every other day
-  (``day='*/2'``) at 12:00 America/Los_Angeles.
+- 6 cron sub-agents (post-m49 — ALL on CronTrigger; no more IntervalTrigger):
+  - sub_breaking_news every hour at HH:00 UTC
+  - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, 09:17, 12:17, 15:17, 18:17, 21:17)
+  - sub_quotes / sub_infographics / sub_gold_media — daily 12:00 America/Los_Angeles
+  - sub_gold_history every other day (``day='*/2'``) at 12:00 America/Los_Angeles
 
 PostgreSQL advisory locks prevent duplicate execution during Railway
 zero-downtime deploys.
@@ -32,10 +32,16 @@ quick-260424-i8b: morning_digest → midday_digest (job id), retimed 07:00→12:
 digest scope filter added (DIGEST_EXCLUDED_CONTENT_TYPES excludes breaking_news +
 thread content types already covered by the per-run firehose in content/__init__.py).
 quick-260424-j5i: sub_threads cadence 4h→3h (D9).
-quick-260424-kqa: sub_breaking_news cadence 2h→1h (reverts vxg's 2h, restores
-m9k's original 1h experiment cadence — user directive after observing a
-perceived ~30 min cadence in prod logs, most likely attributable to Railway
-redeploys rather than the interval itself; flagged for follow-up if persistent).
+quick-260424-kqa: sub_breaking_news cadence 2h→1h.
+quick-260427-m49: ALL sub-agents now use CronTrigger. The previous IntervalTrigger
+shape for sub_breaking_news + sub_threads fired the job ~10s after every
+scheduler restart (because start_date was set to ``now + offset + 10s``). Under
+Railway's zero-downtime redeploy churn, this caused breaking_news to fire
+multiple times per hour, looking like an "every few minutes" cadence to the
+user. Switching to CronTrigger makes runs clock-aligned and restart-immune:
+breaking_news at HH:00 UTC, threads at HH:17 UTC every 3h. CONTENT_INTERVAL_AGENTS
+retired entirely; both jobs moved into CONTENT_CRON_AGENTS with the same
+(job_id, run_fn, name, lock_id, cron_kwargs) tuple shape used by the other 4.
 """
 
 import asyncio
@@ -44,7 +50,6 @@ from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncConnection, async_sessionmaker
 from sqlalchemy import text, select, update
 
@@ -107,32 +112,47 @@ JOB_LOCK_IDS: dict[str, int] = {
 }
 
 
-# Content sub-agent registration table — interval-scheduled (quick-260422-vxg).
-# Tuple shape: (job_id, run_fn, name, lock_id, offset_minutes, interval_hours).
-# Only 2 news-responsive agents run on interval now: sub_breaking_news every 1h
-# (restored from 2h in quick-260424-kqa — reverts vxg's cadence rebalance back
-# toward m9k's original 1h experiment), sub_threads every 3h (flipped from 4h
-# in quick-260424-j5i D9 — halfway back toward the pre-vxg 2h cadence).
-# Stagger offsets [0, 17] minutes
-# spread the two across the first 17 minutes of each hour to avoid thundering
-# herds on SerpAPI + Anthropic. The other 4 sub-agents moved to
-# CONTENT_CRON_AGENTS (daily / every-other-day).
-# quick-260423-k8n: sub_long_form removed — topology reduced from 7 to 6 sub-agents.
-# Lock ID 1012 (sub_long_form) retired, not reassigned. Stagger offsets [0,17,34] → [0,17].
-CONTENT_INTERVAL_AGENTS: list[tuple[str, object, str, int, int, int]] = [
-    ("sub_breaking_news", breaking_news.run_draft_cycle, "Breaking News", 1010, 0, 1),
-    ("sub_threads", threads.run_draft_cycle, "Threads", 1011, 17, 3),
-]
-
-# Cron-scheduled sub-agents (quick-260422-vxg).
+# Cron-scheduled sub-agents (post-m49 unified registration table).
 # Tuple shape: (job_id, run_fn, name, lock_id, cron_kwargs: dict). `cron_kwargs`
 # is unpacked directly into `CronTrigger(**cron_kwargs)` at registration time
-# so heterogeneous patterns (daily noon PT vs every-other-day noon PT via
-# `day='*/2'`) coexist without extra tuple columns. All 4 agents fire at
-# 12:00 America/Los_Angeles — post US morning news, pre market close. Gold
-# History fires every other day because the used-topics guard means most daily
-# ticks no-op; halving cadence halves the Claude picker spend.
+# so heterogeneous patterns coexist without extra tuple columns.
+#
+# Why ALL agents are on CronTrigger (post-m49):
+# IntervalTrigger fires at start_date and every interval_hours thereafter. We
+# previously set ``start_date = scheduler_start_time + offset + 10s``, so on
+# every Railway redeploy sub_breaking_news fired ~10s after process start —
+# producing an "every few minutes" cadence visible to the user during
+# deploy churn. CronTrigger's fire times are clock-aligned (e.g. HH:00 UTC),
+# independent of when the process boots, so restarts can never trigger an
+# extra run.
+#
+# Cadences:
+# - sub_breaking_news: every hour at :00 UTC (kqa: 2h→1h; m49: interval→cron)
+# - sub_threads: every 3h at :17 UTC (j5i: 4h→3h; m49: interval→cron;
+#   ":17 minute offset" preserves the staggering vs sub_breaking_news that
+#   the pre-m49 IntervalTrigger offset=17 expressed)
+# - sub_quotes / sub_infographics / sub_gold_media: daily 12:00 PT
+# - sub_gold_history: every other day (day='*/2') at 12:00 PT
+#
+# The cron sub-agents fire at 12:00 America/Los_Angeles — post US morning news,
+# pre market close. Gold History fires every other day because the used-topics
+# guard means most daily ticks no-op; halving cadence halves the Claude
+# picker spend.
 CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, dict]] = [
+    (
+        "sub_breaking_news",
+        breaking_news.run_draft_cycle,
+        "Breaking News",
+        1010,
+        {"minute": 0},  # every hour at HH:00 UTC
+    ),
+    (
+        "sub_threads",
+        threads.run_draft_cycle,
+        "Threads",
+        1011,
+        {"hour": "*/3", "minute": 17},  # every 3h at HH:17 UTC starting hour 0
+    ),
     (
         "sub_quotes",
         quotes.run_draft_cycle,
@@ -316,24 +336,26 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
 
     - midday_digest: cron at 12:30 America/Los_Angeles (retimed in quick-260424-i8b;
       scope filtered to non-firehose content via DIGEST_EXCLUDED_CONTENT_TYPES).
-    - 2 interval sub-agents: IntervalTrigger with per-agent hours
-      (sub_breaking_news=2, sub_threads=3 post quick-260424-j5i D9) and staggered
-      start_date offsets [0, 17] minutes.
-    - 4 cron sub-agents: sub_quotes / sub_infographics / sub_gold_media daily
-      at 12:00 America/Los_Angeles; sub_gold_history every other day at
-      12:00 America/Los_Angeles.
+    - 6 cron sub-agents (post-m49 — all CronTrigger):
+      - sub_breaking_news every hour at HH:00 UTC
+      - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, ..., 21:17)
+      - sub_quotes / sub_infographics / sub_gold_media daily at 12:00 PT
+      - sub_gold_history every other day at 12:00 PT
 
     quick-260423-k8n: sub_long_form removed; 8 jobs → 7 jobs.
     quick-260424-i8b: morning_digest → midday_digest (job id), retimed 07:00→12:30 PT.
     The digest CronTrigger now uses hardcoded hour=12, minute=30 literals; _read_schedule_config
     is still called but its morning_digest_schedule_hour value is no longer consumed
     (midday digest time is not DB-configurable — quick-260424-i8b locked it at 12:30 PT).
+    quick-260427-m49: sub_breaking_news + sub_threads moved off IntervalTrigger
+    onto CronTrigger so Railway redeploys can no longer trigger spurious runs
+    (the previous start_date=now+10s pattern fired the job ~10s after each
+    process start, producing visible cadence drift under deploy churn).
     """
     await _read_schedule_config(engine)  # reads DB config; morning_digest_schedule_hour no longer used
 
     logger.info(
-        "Schedule config: digest=cron(12:30 America/Los_Angeles), interval_sub_agents=%d jobs (sub_breaking_news=1h, sub_threads=3h), cron_sub_agents=%d jobs (3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
-        len(CONTENT_INTERVAL_AGENTS),
+        "Schedule config: digest=cron(12:30 America/Los_Angeles), cron_sub_agents=%d jobs (BN every hour HH:00 UTC + Threads every 3h HH:17 UTC + 3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
         len(CONTENT_CRON_AGENTS),
     )
 
@@ -362,18 +384,6 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         id="midday_digest",
         name="Midday Digest — daily at 12:30 America/Los_Angeles",
     )
-
-    now = datetime.now(timezone.utc)
-    for job_id, run_fn, name, lock_id, offset, interval_hours in CONTENT_INTERVAL_AGENTS:
-        # +10s buffer ensures start_date > scheduler.start() wall clock for offset=0
-        # (APScheduler IntervalTrigger skips first fire if start_date <= now).
-        start_date = now + timedelta(minutes=offset) + timedelta(seconds=10)
-        scheduler.add_job(
-            _make_sub_agent_job(job_id, lock_id, run_fn, engine),
-            trigger=IntervalTrigger(hours=interval_hours, start_date=start_date),
-            id=job_id,
-            name=f"{name} — every {interval_hours}h (offset +{offset}m)",
-        )
 
     for job_id, run_fn, name, lock_id, cron_kwargs in CONTENT_CRON_AGENTS:
         scheduler.add_job(
