@@ -1080,7 +1080,19 @@ async def fetch_stories() -> list[dict]:
             _STORIES_CACHE.pop(k, None)
 
         settings = get_settings()
-        anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+        # Per-request timeout on the shared scoring/classification client.
+        # Default Anthropic SDK timeout is 600s (10 min). With 100+ sequential
+        # _score_relevance calls plus a gather() over classify_format_lightweight
+        # all running while _CACHE_LOCK is held, a single hung call (Anthropic
+        # transient slowdown, network black hole, etc.) blocks every caller of
+        # fetch_stories — i.e. every text-pipeline sub-agent — until the worker
+        # is killed and restarted. 30s/call is plenty for Haiku scoring/
+        # classification (typical: 1-2s); both call sites already have their
+        # own try/except + fallback, so a TimeoutError just routes them to the
+        # defensive path. (quick-260427-kro)
+        anthropic_client = AsyncAnthropic(
+            api_key=settings.anthropic_api_key, timeout=30.0
+        )
         serpapi_client = (
             serpapi.Client(api_key=settings.serpapi_api_key) if settings.serpapi_api_key else None
         )
