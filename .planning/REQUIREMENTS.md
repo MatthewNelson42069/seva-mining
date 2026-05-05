@@ -110,47 +110,51 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 
 ## Traceability
 
-Empty initially — populated by the roadmapper during phase definition.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SUM-01 | TBD | Pending |
-| SUM-02 | TBD | Pending |
-| SUM-03 | TBD | Pending |
-| SUM-04 | TBD | Pending |
-| SUM-05 | TBD | Pending |
-| SUM-06 | TBD | Pending |
-| GOLD-01 | TBD | Pending |
-| GOLD-02 | TBD | Pending |
-| GOLD-03 | TBD | Pending |
-| LAW-01 | TBD | Pending |
-| LAW-02 | TBD | Pending |
-| LAW-03 | TBD | Pending |
-| LAW-04 | TBD | Pending |
-| STAT-01 | TBD | Pending |
-| STAT-02 | TBD | Pending |
-| STAT-03 | TBD | Pending |
-| STAT-04 | TBD | Pending |
-| STAT-05 | TBD | Pending |
-| FEED-01 | TBD | Pending |
-| FEED-02 | TBD | Pending |
-| FEED-03 | TBD | Pending |
-| FEED-04 | TBD | Pending |
-| FEED-05 | TBD | Pending |
-| FEED-06 | TBD | Pending |
-| WHA-01 | TBD | Pending |
-| WHA-02 | TBD | Pending |
-| WHA-03 | TBD | Pending |
-| OPS-01 | TBD | Pending |
-| OPS-02 | TBD | Pending |
-| OPS-03 | TBD | Pending |
-| OPS-04 | TBD | Pending |
+| SUM-01 | Phase 1 | Pending |
+| SUM-02 | Phase 1 | Pending |
+| SUM-03 | Phase 1 | Pending |
+| SUM-04 | Phase 1 | Pending |
+| SUM-05 | Phase 1 | Pending |
+| SUM-06 | Phase 1 | Pending |
+| GOLD-01 | Phase 1 | Pending |
+| GOLD-02 | Phase 1 | Pending |
+| GOLD-03 | Phase 1 | Pending |
+| LAW-01 | Phase 2 | Pending |
+| LAW-02 | Phase 2 | Pending |
+| LAW-03 | Phase 2 | Pending |
+| LAW-04 | Phase 2 | Pending |
+| STAT-01 | Phase 3 | Pending |
+| STAT-02 | Phase 3 | Pending |
+| STAT-03 | Phase 3 | Pending |
+| STAT-04 | Phase 3 | Pending |
+| STAT-05 | Phase 3 | Pending |
+| FEED-01 | Phase 1 | Pending |
+| FEED-02 | Phase 1 | Pending |
+| FEED-03 | Phase 1 | Pending |
+| FEED-04 | Phase 1 | Pending |
+| FEED-05 | Phase 1 | Pending |
+| FEED-06 | Phase 1 | Pending |
+| WHA-01 | Phase 1 | Pending |
+| WHA-02 | Phase 1 | Pending |
+| WHA-03 | Phase 1 | Pending |
+| OPS-01 | Phase 4 | Pending |
+| OPS-02 | Phase 1 | Pending |
+| OPS-03 | Phase 4 | Pending |
+| OPS-04 | Phase 4 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 31 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 31 ⚠️ (will be 0 after roadmapper runs)
+- Mapped to phases: 31
+- Unmapped: 0 ✓
+
+**Phase distribution:**
+- Phase 1 (Gold News Card + Web Feed): 19 requirements — SUM-01..06, GOLD-01..03, FEED-01..06, WHA-01..03, OPS-02
+- Phase 2 (Ontario Law Ingestion): 4 requirements — LAW-01..04
+- Phase 3 (Ontario Stats Ingestion): 5 requirements — STAT-01..05
+- Phase 4 (Prune Cron + Operations Hardening): 3 requirements — OPS-01, OPS-03, OPS-04
 
 ---
 *Requirements defined: 2026-04-27 — Milestone v2.0 (Daily Summary Feed)*
-*Last updated: 2026-04-27 after initial definition*
+*Last updated: 2026-05-05 — Traceability populated by roadmapper*

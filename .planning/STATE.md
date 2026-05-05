@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Daily Summary Feed
-status: defining-requirements
+status: roadmap-ready
 stopped_at: Milestone v1.0.1 complete (45/45 plans). Final pre-pivot ship was quick-260427-m51 (coalesce + parallel scoring fetch_stories deadlock fix, commit a23b984). Pivot initiated 2026-04-27 — replacing 6-sub-agent approval dashboard with a 2x-daily summary feed (08:00 PT + 12:00 PT). Old v1.0 phase directories archived to .planning/milestones/v1.0.1/phases/ via --reset-phase-numbers. v2.0 phase numbering restarts at Phase 1.
-last_updated: "2026-04-27T23:35:00.000Z"
+last_updated: "2026-05-05T00:00:00.000Z"
 last_activity: "2026-04-22 — Completed quick-260422-no4 (surface zero-item agent runs in per-agent queue UI with "No content found"). **Origin:** user ask immediately after shipping the gmb debug fix — verbatim: *"Even if some of the agents runs dont find anything, for examples the quotes or gold media one, I still want it to say 'no content found' so I know it is working tomorrow"*. The 12:00 PT cron verification tomorrow needs every tick visible in the UI regardless of whether items were produced. **Reconnaissance:** `frontend/src/pages/PerAgentQueuePage.tsx` L137-138 rendered bare `<EmptyState />` when items=0, and `groupByRun` L19-54 silently dropped runs with 0 matched items — so a sequence like "5, 0, 2 items across 3 runs" rendered as 2 groups, and all-zero-item days showed the generic empty state indistinguishable from "agent never ran". Data contract was already sufficient (runs fetched via `getAgentRuns()` returning `items_found` / `items_queued` / `notes` fields). Ran via `/gsd:quick --discuss` — orchestrator pre-surfaced 6 gray-area questions (Q1 wording, Q2 telemetry placement, Q3 render location, Q4 truly-empty fallback, Q5 page subtitle, Q6 per-agent gating) with Recommended answers; user's "yeah push it" locked all 6 decisions (D-01 through D-06) to Recommendations. **Changes (surgical, frontend-only):** (a) `groupByRun` emits a group for every recent run including runs with 0 matched items via `groups.get(key) ?? { run, items: [] }`; (b) render branch guard now `items.length === 0 && runs.length === 0` before falling through to `<EmptyState />` so items=0+runs>0 renders timeline; (c) new `parseRunNotes` module-scope helper parses gmb's structured JSON into a muted inline subtitle with graceful degradation (null→skip, malformed→null, partial→show-present-only); (d) zero-item groups render "No content found" row in RunHeader-consistent `text-xs text-muted-foreground` style. Ink's specific-timestamp fallback preserved; mfg's zero-grep hygiene preserved (zero `video_clip` refs). **Tests (+4, 52 → 56):** zero-item-renders-no-content-found, chronological-interleaving, notes-subtitle-present-vs-null-vs-malformed-vs-partial, items=0+runs>0-falls-through, items=0+runs=0-still-empty-state. **Gates all 5 green:** lint + tsc + vitest 56/56 + build + zero-grep. Single atomic commit `8080b4c` on main. **Third deliverable of tonight's session** after gmb debug fix (85fccfc refactor + 3efe3b9 docs). All 5 zid follow-ups now shipped + gmb debug fix + no4 UX gap close — the 12:00 PT verification tomorrow is maximally instrumented and visible. **Known limitation:** other 6 sub-agents don't have gmb-style structured `notes` telemetry yet — they show "No content found" without the counter subtitle. Extending telemetry to breaking_news/threads/long_form/quotes/infographics/gold_history is a separate follow-up. **Deploy:** Vercel auto-deploys on push; user sees this in UI on next page load after push → origin."
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-27)
 
 **Core value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
-**Current focus:** v2.0 — Daily Summary Feed (defining requirements)
+**Current focus:** v2.0 — Daily Summary Feed (Phase 1: Gold News Card + Web Feed)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-27 — Milestone v2.0 (Daily Summary Feed) started. Pivot from approval dashboard to 2x-daily summary feed.
+Phase: Phase 1 — Gold News Card + Web Feed
+Plan: TBD (phase not yet planned)
+Status: Ready to plan
+Progress: 0/4 phases complete
+Last activity: 2026-05-05 — Roadmap created. 4 phases defined, 31/31 requirements mapped.
 
 ## Performance Metrics
 
