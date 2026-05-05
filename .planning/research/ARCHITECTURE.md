@@ -1,448 +1,564 @@
-# Architecture Research
-
-**Domain:** AI social media monitoring and content drafting system
-**Researched:** 2026-03-30
-**Confidence:** HIGH
-
-## Standard Architecture
-
-### System Overview
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          EXTERNAL SOURCES                                │
-│  ┌────────────┐  ┌─────────────┐  ┌────────────┐  ┌──────────────────┐  │
-│  │ X API v2   │  │ Apify Actors│  │  SerpAPI   │  │  RSS Feeds       │  │
-│  │ (Basic)    │  │ (Instagram) │  │  + Google  │  │  (Kitco, WGC...) │  │
-│  └─────┬──────┘  └──────┬──────┘  └─────┬──────┘  └────────┬─────────┘  │
-└────────┼────────────────┼───────────────┼──────────────────┼────────────┘
-         │                │               │                  │
-┌────────▼────────────────▼───────────────▼──────────────────▼────────────┐
-│                       SCHEDULER WORKER (Railway)                         │
-│  ┌─────────────────────────────────────────────────────────────────────┐ │
-│  │                  APScheduler (separate process)                      │ │
-│  │  ┌───────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │ │
-│  │  │ Twitter Agent │  │ Instagram    │  │ Content Agent            │  │ │
-│  │  │ (2h interval) │  │ Agent (4h)   │  │ (daily, morning)         │  │ │
-│  │  └───────┬───────┘  └──────┬───────┘  └─────────┬────────────────┘  │ │
-│  │          │                 │                     │                   │ │
-│  │          └─────────────────▼─────────────────────┘                   │ │
-│  │                   Senior Agent (orchestrator)                         │ │
-│  │           (dedup, scoring, queue cap, expiry, WhatsApp)               │ │
-│  └─────────────────────────────┬───────────────────────────────────────┘ │
-└────────────────────────────────┼─────────────────────────────────────────┘
-                                 │ writes to DB (shared PostgreSQL)
-┌────────────────────────────────▼─────────────────────────────────────────┐
-│                      DATABASE LAYER (Neon PostgreSQL)                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ drafts       │  │ watchlists   │  │ agent_runs   │  │ settings     │  │
-│  │ (JSONB alts) │  │ (X + IG)     │  │ (run logs)   │  │ (weights,    │  │
-│  │              │  │              │  │              │  │  thresholds) │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘  │
-└────────────────────────────────┬─────────────────────────────────────────┘
-                                 │ reads/writes via API
-┌────────────────────────────────▼─────────────────────────────────────────┐
-│                      FASTAPI BACKEND (Railway)                            │
-│  ┌──────────────────────────────────────────────────────────────────────┐ │
-│  │ REST API: /drafts, /approve, /reject, /settings, /watchlists, /logs  │ │
-│  │ Auth: password middleware (single user)                               │ │
-│  │ Twilio outbound: WhatsApp digest + alerts (triggered by scheduler)    │ │
-│  └──────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────────┬─────────────────────────────────────────┘
-                                 │ HTTP REST
-┌────────────────────────────────▼─────────────────────────────────────────┐
-│                      REACT DASHBOARD (Vercel)                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ Twitter tab  │  │ Instagram tab│  │ Content tab  │  │ Settings     │  │
-│  │ (approval    │  │ (approval    │  │ (approval    │  │ (watchlists, │  │
-│  │  cards)      │  │  cards)      │  │  cards)      │  │  weights,    │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │  schedules)  │  │
-│                                                          └──────────────┘  │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### Component Responsibilities
-
-| Component | Responsibility | Communicates With |
-|-----------|----------------|-------------------|
-| Twitter Agent | Monitor X API every 2h, score posts, draft reply + RT-with-comment alternatives | Senior Agent, X API v2, PostgreSQL |
-| Instagram Agent | Run Apify scraper every 4h, score posts, draft comment alternatives | Senior Agent, Apify API, PostgreSQL |
-| Content Agent | Ingest RSS + SerpAPI daily, deep-research stories, draft posts/threads/infographic briefs | Senior Agent, SerpAPI, RSS, Claude API, PostgreSQL |
-| Senior Agent | Queue management (cap 15), deduplication, priority re-scoring, auto-expiry, WhatsApp dispatch | All specialist agents, PostgreSQL, Twilio |
-| APScheduler Worker | Trigger agents on cron intervals, isolated from API server to prevent cascading failures | All agents, PostgreSQL (job store) |
-| FastAPI Backend | Serve REST API for dashboard, handle approval state transitions, validate auth | PostgreSQL, Twilio SDK, React dashboard |
-| PostgreSQL (Neon) | Persist all drafts with state machine, agent run logs, settings, watchlists | FastAPI backend, Scheduler worker |
-| React Dashboard | Human approval interface — review, inline edit, approve/reject drafts; manage settings | FastAPI backend only |
-| Twilio WhatsApp | Outbound-only notifications: morning digest and breaking alerts | FastAPI backend (outbound SDK calls) |
-| Claude API | LLM reasoning for all four agents — scoring, drafting, evaluation | Called by agents via Anthropic SDK |
-
-## Recommended Project Structure
-
-```
-seva-mining/
-├── backend/                      # FastAPI application (Railway service 1)
-│   ├── app/
-│   │   ├── main.py               # FastAPI app, lifespan, middleware
-│   │   ├── auth.py               # Password middleware
-│   │   ├── database.py           # SQLAlchemy engine, session factory
-│   │   ├── models/               # SQLAlchemy ORM models
-│   │   │   ├── draft.py          # drafts table, state enum
-│   │   │   ├── watchlist.py      # watchlist entries
-│   │   │   ├── agent_run.py      # run log entries
-│   │   │   └── settings.py       # configurable parameters
-│   │   ├── schemas/              # Pydantic request/response models
-│   │   ├── routers/              # Endpoint groupings
-│   │   │   ├── drafts.py         # GET, PATCH approve/reject/edit
-│   │   │   ├── settings.py       # watchlist CRUD, weight config
-│   │   │   └── logs.py           # agent run log queries
-│   │   └── services/
-│   │       └── notifications.py  # Twilio WhatsApp outbound
-│   ├── alembic/                  # DB migrations
-│   └── requirements.txt
-│
-├── scheduler/                    # APScheduler worker (Railway service 2)
-│   ├── worker.py                 # Scheduler entry point, job registration
-│   ├── agents/
-│   │   ├── base.py               # Shared Claude client, DB session, logging
-│   │   ├── senior_agent.py       # Orchestrator: dedup, queue cap, expiry, WhatsApp
-│   │   ├── twitter_agent.py      # X API fetch, score, draft
-│   │   ├── instagram_agent.py    # Apify fetch, score, draft
-│   │   └── content_agent.py      # RSS + SerpAPI fetch, research, draft
-│   ├── integrations/
-│   │   ├── x_api.py              # X API v2 client, rate-limit handling
-│   │   ├── apify_client.py       # Apify Actor runner, retry logic
-│   │   ├── serpapi_client.py     # SerpAPI news search
-│   │   └── rss_reader.py         # Feedparser RSS ingestion
-│   └── requirements.txt
-│
-├── frontend/                     # React + Tailwind (Vercel)
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ApprovalCard/     # Core card: platform badge, drafts, actions
-│   │   │   ├── DraftAlternatives/# Tabbed draft selector with inline edit
-│   │   │   └── RelatedBadge/     # Cross-platform deduplication link
-│   │   ├── pages/
-│   │   │   ├── Twitter.tsx
-│   │   │   ├── Instagram.tsx
-│   │   │   ├── Content.tsx
-│   │   │   └── Settings.tsx
-│   │   ├── api/                  # Typed fetch wrappers to FastAPI
-│   │   └── store/                # React Query or SWR for server state
-│   └── package.json
-│
-└── .planning/                    # Project planning (not deployed)
-```
-
-### Structure Rationale
-
-- **backend/ vs scheduler/:** Two separate Railway services with separate `requirements.txt`. The scheduler crash does not kill the dashboard API. Both share the same PostgreSQL database — the only coupling point.
-- **agents/base.py:** All agents inherit Claude client initialization, DB session management, and structured run logging. Eliminates duplication and ensures every run is logged consistently.
-- **integrations/:** Platform clients are isolated. Rate limit logic, retry logic, and API key config live here — agents call clean interfaces, not raw HTTP.
-- **frontend/store/:** Use React Query (or SWR) — not Redux — for server state. All state is owned by the FastAPI backend. The dashboard polls or fetches on demand; no complex local state management needed.
-
-## Architectural Patterns
-
-### Pattern 1: Orchestrator-Worker (Hub-and-Spoke)
-
-**What:** Senior Agent is the single coordinator. Twitter, Instagram, and Content agents are workers that produce candidate drafts but never interact with each other. All cross-cutting concerns (dedup, queue cap, expiry, notifications) flow through the Senior Agent only.
-
-**When to use:** Exactly this case — a fixed set of specialized workers each producing independently scored items that need centralized arbitration before reaching the user.
-
-**Trade-offs:** Simple to reason about and debug. Bottleneck is the Senior Agent, but given the low volume (15-item queue cap), this is never a problem. Workers cannot directly react to each other's output without going through the orchestrator.
-
-```python
-# scheduler/agents/senior_agent.py (conceptual)
-class SeniorAgent:
-    def process_batch(self, raw_candidates: list[Candidate]) -> None:
-        deduplicated = self._deduplicate(raw_candidates)
-        scored = self._rescore_priority(deduplicated)
-        within_cap = self._enforce_queue_cap(scored, cap=15)
-        self._persist_drafts(within_cap)
-        self._send_whatsapp_alerts(within_cap)
-```
-
-### Pattern 2: State Machine for Draft Lifecycle
-
-**What:** Every draft row has an explicit `status` column with allowed transitions enforced at the API layer (not just the DB). Valid states: `pending` -> `approved` | `edited_approved` | `rejected` (with required reason) | `expired` (auto by scheduler). No backward transitions.
-
-**When to use:** Any human-approval workflow where audit trail matters and invalid state transitions must be prevented at the application boundary.
-
-**Trade-offs:** Slightly more code for the transition guards, but prevents bugs where expired drafts get accidentally approved. Makes the audit log trivial.
-
-```python
-# backend/app/routers/drafts.py (conceptual)
-VALID_TRANSITIONS = {
-    "pending": {"approved", "edited_approved", "rejected"},
-    # expired is set only by the scheduler
-}
-
-def transition_draft(draft_id, new_status, reason=None):
-    draft = get_draft(draft_id)
-    if new_status not in VALID_TRANSITIONS.get(draft.status, set()):
-        raise HTTPException(400, f"Cannot transition from {draft.status} to {new_status}")
-    if new_status == "rejected" and not reason:
-        raise HTTPException(400, "Rejection reason required")
-    draft.status = new_status
-    draft.rejection_reason = reason
-    draft.decided_at = utcnow()
-```
-
-### Pattern 3: JSONB Array for Draft Alternatives
-
-**What:** Draft alternatives (2-3 per post) are stored as a JSONB array on the draft row rather than a child table. Each alternative is a structured object with `text`, `type` (reply/rt-with-comment/thread-format/long-form), and `selected` flag.
-
-**When to use:** When alternatives are always displayed together, never filtered or queried independently, and the set is bounded and small.
-
-**Trade-offs:** Simpler schema, single-row fetch for the full approval card. Cannot easily aggregate "which alternative type gets chosen most" without JSONB operators — acceptable for v1, queryable when needed for the learning loop.
-
-```sql
--- drafts table (simplified)
-CREATE TABLE drafts (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    platform    TEXT NOT NULL,         -- 'twitter' | 'instagram' | 'content'
-    status      TEXT NOT NULL DEFAULT 'pending',
-    source_url  TEXT,
-    source_text TEXT,
-    score       NUMERIC(4,2),
-    alternatives JSONB NOT NULL,       -- [{text, type, selected}, ...]
-    rationale   TEXT,
-    urgency     TEXT,
-    related_id  UUID REFERENCES drafts(id),  -- dedup link
-    created_at  TIMESTAMPTZ DEFAULT now(),
-    expires_at  TIMESTAMPTZ,
-    decided_at  TIMESTAMPTZ,
-    rejection_reason TEXT
-);
-```
-
-### Pattern 4: Separate Scheduler Worker with Shared DB
-
-**What:** APScheduler runs as a fully independent Python process (separate Railway service). It writes directly to the same PostgreSQL database the FastAPI backend reads from. No message queue between them — the DB is the integration point.
-
-**When to use:** Low-volume, low-latency-tolerance background jobs (2-4h intervals). A message queue (Celery/Redis/RabbitMQ) adds operational complexity with no benefit at this scale.
-
-**Trade-offs:** Dead simple ops. The shared DB creates a coupling point, but since both services only write to their own domains (scheduler writes drafts, API reads and updates status), contention is minimal. The scheduler never updates draft status; the API never triggers agents.
-
-## Data Flow
-
-### Agent Run Flow (Scheduler)
-
-```
-APScheduler cron fires (e.g., every 2h for Twitter Agent)
-    |
-    v
-Twitter Agent: fetch X API (keyword/watchlist search)
-    |
-    v
-Filter by engagement gate (500+ likes OR watchlist 50+)
-    |
-    v
-Apply recency decay (full at 1h, 50% at 4h, expired at 6h)
-    |
-    v
-Score each post (likes x1 + RTs x2 + replies x1.5 + authority + relevance)
-    |
-    v
-Claude API: draft 2-3 reply alternatives + 2-3 RT-with-comment alternatives
-    |
-    v
-Agent self-evaluation: quality rubric (relevance, originality, tone, no company mention)
-    |
-    v
-Senior Agent: deduplicate against existing pending drafts
-    |
-    v
-Senior Agent: enforce 15-item queue cap (lowest score items dropped)
-    |
-    v
-Write passing drafts to PostgreSQL (status = 'pending')
-    |
-    v
-Senior Agent: WhatsApp alert if breaking news (3x engagement spike or price move)
-    |
-    v
-Log agent run (items_found, items_queued, items_filtered, errors)
-```
-
-### Human Approval Flow (Dashboard)
-
-```
-React Dashboard polls GET /drafts?status=pending
-    |
-    v
-Renders approval cards per platform tab
-    |
-    v
-User reviews card: reads source excerpt, alternatives, rationale, score
-    |
-    v
-  [Approve] -> PATCH /drafts/{id}/approve  -> status = 'approved'
-  [Edit+Approve] -> PATCH /drafts/{id}/approve + edited_text -> status = 'edited_approved'
-  [Reject] -> PATCH /drafts/{id}/reject + reason -> status = 'rejected'
-    |
-    v
-User copies approved draft text to clipboard
-    |
-    v
-User follows direct link to source post on platform
-    |
-    v
-User manually pastes and posts — system never auto-posts
-```
-
-### WhatsApp Notification Flow
-
-```
-Senior Agent (scheduler) identifies notification trigger:
-  - Morning: daily digest at configured time
-  - Breaking: engagement spike (3x+ normal) or gold price move
-  - Expiring: high-value draft approaching expiry window
-    |
-    v
-Senior Agent calls FastAPI endpoint OR directly calls Twilio SDK
-(recommendation: Senior Agent calls Twilio SDK directly — no need to route
- through API for an outbound-only notification)
-    |
-    v
-Twilio sends WhatsApp message to configured number
-    |
-    v
-No inbound handling — notifications only, one-way
-```
-
-### Settings Change Flow
-
-```
-User edits settings in React Dashboard
-    |
-    v
-PATCH /settings (weights, thresholds, watchlists, schedule config)
-    |
-    v
-FastAPI writes to settings/watchlist tables in PostgreSQL
-    |
-    v
-Scheduler worker reads settings from DB at the START of each agent run
-(not cached in memory — always reads fresh from DB so changes take effect
- on the next scheduled run without a restart)
-```
-
-## Integration Points
-
-### External Services
-
-| Service | Integration Pattern | Key Constraints | Notes |
-|---------|---------------------|-----------------|-------|
-| X API v2 (Basic) | Direct HTTP via `tweepy` or `httpx`, OAuth 2.0 Bearer Token | 15-min rate limit windows, read-only, 7-day lookback | Track `X-Rate-Limit-Remaining` header; implement exponential backoff; 2h polling interval naturally stays under limits |
-| Apify (Instagram) | Apify Python client, synchronous Actor run-and-fetch | ~$50/mo credit, scraping latency 30-60s per run | Implement retry with 3 attempts; treat partial results as success (best-effort reliability per requirements) |
-| SerpAPI | REST API, simple `requests` call | ~$50/mo, 100 searches/mo on basic plan | Cache results within same Content Agent run to avoid duplicate calls; one call per news topic |
-| RSS Feeds | `feedparser` library, no auth | No rate limits, free | Parse on each Content Agent run; track `etag`/`last-modified` headers to detect new items |
-| Claude API (Anthropic) | `anthropic` Python SDK, direct API calls | ~$30-50/mo budget | Use `claude-3-haiku` for scoring/filtering (cheap), `claude-3-5-sonnet` for drafting (quality); structured output via tool use |
-| Twilio WhatsApp | `twilio` Python SDK, outbound only | WhatsApp Business requires pre-approved message templates for business-initiated messages | Register digest and alert templates in Twilio Console before first deploy |
-| Neon PostgreSQL | `psycopg2` / `asyncpg` via SQLAlchemy | Free tier: 512MB storage; no connection pooling on free tier | Use PgBouncer or SQLAlchemy pool size=5; upgrade to Neon Pro ($19/mo) when approaching 512MB |
-
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Scheduler Worker <-> PostgreSQL | Direct SQLAlchemy writes (drafts, run logs) | Scheduler ONLY writes; never updates draft status after creation |
-| FastAPI Backend <-> PostgreSQL | SQLAlchemy reads + status transition writes | API ONLY updates status/decided_at; never creates draft rows |
-| React Dashboard <-> FastAPI Backend | REST over HTTPS, JSON | Dashboard is stateless — all truth lives in the DB via the API |
-| Senior Agent <-> Twilio | Direct SDK call from scheduler process | Avoids unnecessary HTTP round-trip through the API server for outbound notifications |
-| Twitter Agent -> Senior Agent | In-process Python function call (same scheduler process) | All four agents run in the same worker process — no IPC needed |
-
-## Suggested Build Order
-
-The dependency graph dictates this sequence:
-
-1. **Database schema + migrations** — Everything depends on the schema. Full schema from day one (all columns, JSONB structure, state enum). No iterative schema evolution.
-
-2. **FastAPI backend skeleton** — Auth middleware, basic CRUD for drafts (read + status transitions), settings endpoints. The dashboard cannot function without this.
-
-3. **React dashboard** — Build against the API. Approval cards, tabs, inline editing, clipboard copy. The human workflow needs to be verifiable before agents produce real data.
-
-4. **Scheduler worker skeleton** — APScheduler setup, shared DB session, run logging infrastructure, base agent class. Wire up without real agent logic first.
-
-5. **Twitter Agent** — Highest signal-to-noise, most structured API. Implement X API integration, scoring, and drafting. First end-to-end test of the full pipeline.
-
-6. **Senior Agent core** — Dedup, queue cap, expiry. Needed before adding more agents to avoid queue pollution.
-
-7. **Instagram Agent** — Apify integration is less predictable than X API. Build with retry logic and best-effort semantics after the core pipeline is proven.
-
-8. **Content Agent** — Most complex (RSS + SerpAPI + deep research + format decision logic + infographic brief). Build last when the plumbing is fully tested.
-
-9. **WhatsApp notifications** — Twilio template registration takes 24-48h for WhatsApp Business approval. Register templates early, implement notifications once agents are producing real output.
-
-10. **Settings page + configurability** — Wire all scoring weights, thresholds, and schedules to DB-driven config. Polish once agents are producing correct output.
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Running APScheduler Inside the FastAPI Process
-
-**What people do:** Add `AsyncIOScheduler` to the FastAPI lifespan and run agents in the same process as the API server.
-
-**Why it's wrong:** A long-running agent job (especially Content Agent doing deep research) blocks FastAPI workers. More critically, on Railway with multiple worker processes (Gunicorn), you get N scheduler instances running simultaneously, causing duplicated agent runs and duplicate drafts in the queue. The API server and the scheduler have completely different SLA requirements — coupling them means a scheduler crash takes down the dashboard.
-
-**Do this instead:** Separate Railway services. Scheduler worker runs as a single-process Python script (`python worker.py`). Shares only the PostgreSQL database with the API.
-
-### Anti-Pattern 2: Storing Draft Alternatives as Child Table Rows
-
-**What people do:** Create a `draft_alternatives` table with a foreign key to `drafts`, one row per alternative.
-
-**Why it's wrong:** Alternatives are always fetched together, displayed together, and operated on together. A join on every approval card fetch adds complexity with zero benefit. The set is bounded (2-3 items). Querying "which alternative was chosen" requires JSONB operators either way since the user may edit the text.
-
-**Do this instead:** JSONB array on the draft row. Single-row fetch returns everything needed to render a complete approval card.
-
-### Anti-Pattern 3: Auto-Posting or Removing the Human Gate
-
-**What people do:** Once the pipeline is working well, add a confidence threshold that auto-approves and posts high-scoring drafts.
-
-**Why it's wrong:** The core value proposition of the system — and the non-negotiable constraint — is that every post is manually reviewed. Auto-posting removes the human check on the "no company mention" and "no financial advice" rules. A single hallucinated reply that mentions Seva Mining or implies a buy signal is a reputational risk that no confidence score can fully eliminate.
-
-**Do this instead:** Keep the approval gate forever. The friction of copy-paste is the point.
-
-### Anti-Pattern 4: Per-Run Settings Cache in Agent Memory
-
-**What people do:** Load scoring weights and watchlists once at worker startup and cache them in agent instance variables.
-
-**Why it's wrong:** The user changes watchlist or scoring weights via the dashboard; the scheduler worker never sees the change until it restarts. This is a subtle, hard-to-diagnose bug.
-
-**Do this instead:** Agents read all configurable parameters from PostgreSQL at the start of each run. At this polling frequency (every 2-4h), the DB read is negligible overhead and ensures settings changes take effect on the next run.
-
-### Anti-Pattern 5: Using a Message Queue Between Scheduler and API
-
-**What people do:** Add Redis + Celery (or RabbitMQ) so agents publish draft events and the API consumes them.
-
-**Why it's wrong:** At 15 drafts per cycle and 2-4h intervals, a message queue adds significant operational complexity (another Railway service, connection management, dead-letter handling) with no throughput benefit. The shared PostgreSQL database is a perfectly adequate integration point at this volume.
-
-**Do this instead:** Scheduler writes to PostgreSQL; API reads from PostgreSQL. The DB is the queue. Add a message broker only if volume grows to warrant it (likely never for this single-user system).
-
-## Scaling Considerations
-
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| Single user (current) | Monolith split only at scheduler/API boundary. Neon free tier. Single-instance scheduler. |
-| Second client (v2) | Introduce `client_id` tenant column on all tables. Separate scheduler job sets per client. Upgrade Neon to Pro. |
-| 10+ clients | Extract agents to separate microservices with a proper job queue (Celery + Redis). Multi-tenant auth. Dedicated DB per client or row-level security. |
-
-### Scaling Priorities
-
-1. **First bottleneck:** Neon free tier storage (512MB). Symptom: write errors. Fix: upgrade to Neon Pro ($19/mo). Trigger: approaching 400MB.
-2. **Second bottleneck:** Claude API costs. Symptom: bill exceeds budget. Fix: replace scoring/filtering calls with `claude-3-haiku` (10x cheaper than Sonnet), reserve Sonnet for final draft generation only.
-
-## Sources
-
-- [AI Agent Orchestration Patterns - Azure Architecture Center](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns) — HIGH confidence
-- [Multi-Agent Patterns: Orchestrators, Workers, and Pipelines](https://aiagentsblog.com/blog/multi-agent-patterns/) — MEDIUM confidence
-- [Agent Orchestration Patterns: Swarm vs Mesh vs Hierarchical vs Pipeline](https://dev.to/jose_gurusup_dev/agent-orchestration-patterns-swarm-vs-mesh-vs-hierarchical-vs-pipeline-b40) — MEDIUM confidence
-- [APScheduler PyPI documentation](https://pypi.org/project/APScheduler/) — HIGH confidence
-- [Scheduled Jobs with FastAPI and APScheduler - Sentry](https://sentry.io/answers/schedule-tasks-with-fastapi/) — MEDIUM confidence
-- [X API Rate Limits - Official Docs](https://docs.x.com/x-api/fundamentals/rate-limits) — HIGH confidence
-- [Build a Secure Twilio Webhook with Python and FastAPI - Twilio Official](https://www.twilio.com/en-us/blog/build-secure-twilio-webhook-python-fastapi) — HIGH confidence
-- [Why All Your Workflows Should Be Postgres Rows - DBOS](https://www.dbos.dev/blog/why-workflows-should-be-postgres-rows) — MEDIUM confidence
-- [Human-in-the-Loop patterns - Cloudflare Agents docs](https://developers.cloudflare.com/agents/guides/human-in-the-loop/) — HIGH confidence
-- [How to Build Production-Ready AI Agents with RAG and FastAPI - The New Stack](https://thenewstack.io/how-to-build-production-ready-ai-agents-with-rag-and-fastapi/) — MEDIUM confidence
+# Architecture: v2.0 Daily Summary Feed Integration
+
+**Domain:** Seva Mining — pivot from 6-sub-agent approval dashboard to 2x-daily summary feed
+**Researched:** 2026-05-05
+**Confidence:** HIGH (all findings verified against existing source files)
 
 ---
-*Architecture research for: AI social media monitoring and content drafting system (Seva Mining)*
-*Researched: 2026-03-30*
+
+## What Changes vs What Stays
+
+### Unchanged (reuse as-is)
+- `scheduler/worker.py` — `with_advisory_lock`, `_make_sub_agent_job`, `reconcile_stale_runs`, `build_scheduler` pattern
+- `scheduler/agents/content_agent.py` — `fetch_stories()` called as-is (no signature change)
+- `scheduler/services/whatsapp.py` — `send_whatsapp_message(message: str)` for both delivery and failure alert
+- `scheduler/models/agent_run.py` — write a row per daily_summary fire for observability
+- `backend/app/main.py` — add one `include_router` call
+- `frontend/src/api/client.ts` + auth wiring — no change
+- Neon Postgres + Railway dual-service topology
+
+### New Files
+
+| File | Type |
+|------|------|
+| `backend/alembic/versions/0010_add_daily_summaries.py` | NEW migration |
+| `backend/app/models/daily_summary.py` | NEW SQLAlchemy model (backend) |
+| `scheduler/models/daily_summary.py` | NEW SQLAlchemy model (scheduler parity) |
+| `backend/app/routers/summaries.py` | NEW FastAPI router |
+| `backend/app/schemas/daily_summary.py` | NEW Pydantic schemas |
+| `scheduler/agents/daily_summary.py` | NEW agent module |
+| `scheduler/agents/ontario_law.py` | NEW ingestion module |
+| `scheduler/agents/ontario_stats.py` | NEW ingestion module |
+| `frontend/src/pages/SummaryFeedPage.tsx` | NEW page component |
+| `frontend/src/api/summaries.ts` | NEW API + TanStack Query hook |
+| `frontend/src/components/SummaryCard.tsx` | NEW card component |
+| `frontend/src/components/SectionBlock.tsx` | NEW section renderer |
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| `scheduler/worker.py` | Add `daily_summary` import + tuple in `CONTENT_CRON_AGENTS`; add `daily_summary_prune` as separate scheduled job; update `JOB_LOCK_IDS` |
+| `backend/app/main.py` | Add `from app.routers.summaries import router as summaries_router` + `app.include_router(summaries_router)` |
+| `frontend/src/App.tsx` | Replace `/` Navigate redirect with `<SummaryFeedPage />`; add `/queue` → `/` redirect; retire `/agents/:slug` route (leave in place as dead code or redirect) |
+
+---
+
+## Database Layer
+
+### `daily_summaries` Table Schema
+
+```sql
+CREATE TABLE daily_summaries (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    generated_at    TIMESTAMPTZ NOT NULL,
+    period_label    VARCHAR(20) NOT NULL,       -- '08:00 PT' or '12:00 PT'
+    gold_news_md    TEXT,                       -- markdown bullets, NULL if section failed
+    ontario_law_md  TEXT,                       -- markdown bullets, NULL if section failed
+    ontario_stats_md TEXT,                      -- markdown bullets, NULL if no data
+    raw_sources_jsonb JSONB,                    -- forensics: articles + Ontario hits that fed the summary
+    status          VARCHAR(20) NOT NULL,       -- 'completed' | 'failed' | 'partial'
+    error_text      TEXT,                       -- NULL on success; populated if status='failed'
+    agent_run_id    UUID REFERENCES agent_runs(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX ix_daily_summaries_generated_at ON daily_summaries (generated_at DESC);
+```
+
+**Column decisions:**
+
+- `period_label VARCHAR(20)` — '08:00 PT' or '12:00 PT'. String (not time) because it's a display label for the card header "Summary as of 08:00 PT".
+- `status` — use `VARCHAR(20)` with a `CHECK` constraint (same pattern as migration 0009, not a PG enum — easier to extend). Values: `'completed'`, `'failed'`, `'partial'`. `'partial'` = at least one section succeeded but not all.
+- `raw_sources_jsonb JSONB` — store the raw `list[dict]` from each ingestion call. Shape: `{"gold_news": [story_dicts], "ontario_law": [hit_dicts], "ontario_stats": [hit_dicts]}`. Nil cost to write; forensics value is high.
+- `agent_run_id UUID REFERENCES agent_runs(id)` — `daily_summaries` FK references `agent_runs`. Rationale: the `agent_runs` row is created first (at job start), then the summary row is written on completion. FK from summary → run is the natural "this summary was produced by this run" direction. The `agent_runs` row does NOT reference `daily_summaries` (that would require updating the run row after the summary is written, adding a round-trip). Set `ON DELETE SET NULL` so a cascaded agent_run purge doesn't orphan summary rows.
+- No `UNIQUE` constraint on `(generated_at, period_label)` — if a cron fires twice (advisory lock normally prevents this, but edge cases exist), allow the duplicate row rather than silently swallowing an error. The feed query sorts by `generated_at DESC` and the frontend shows the first result, which is sufficient.
+
+**Index strategy:** Single index on `(generated_at DESC)`. The feed page query is:
+```sql
+SELECT * FROM daily_summaries ORDER BY generated_at DESC LIMIT 60;
+```
+(30 days × 2 per day = 60 rows max — the table will never be large.) The prune cron uses `WHERE generated_at < now() - interval '30 days'` which also benefits from this index.
+
+### Migration 0010
+
+Model after `0009_add_x_post_state_to_draft_items.py`. Key shape:
+
+```python
+# backend/alembic/versions/0010_add_daily_summaries.py
+revision = "0010"
+down_revision = "0009"
+
+def upgrade() -> None:
+    op.create_table(
+        "daily_summaries",
+        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, ...),
+        sa.Column("generated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("period_label", sa.String(length=20), nullable=False),
+        sa.Column("gold_news_md", sa.Text(), nullable=True),
+        sa.Column("ontario_law_md", sa.Text(), nullable=True),
+        sa.Column("ontario_stats_md", sa.Text(), nullable=True),
+        sa.Column("raw_sources_jsonb", postgresql.JSONB(), nullable=True),
+        sa.Column("status", sa.String(length=20), nullable=False, server_default="completed"),
+        sa.Column("error_text", sa.Text(), nullable=True),
+        sa.Column("agent_run_id", postgresql.UUID(as_uuid=True),
+                  sa.ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+    )
+    op.create_check_constraint(
+        "ck_daily_summaries_status",
+        "daily_summaries",
+        "status IN ('completed', 'failed', 'partial')",
+    )
+    op.create_index("ix_daily_summaries_generated_at", "daily_summaries", ["generated_at"])
+```
+
+---
+
+## Scheduler Layer
+
+### New Lock IDs
+
+Current `JOB_LOCK_IDS` uses: 1005 (midday_digest), 1010, 1011, 1013, 1014, 1015, 1016.
+Next free integers: **1017** for `daily_summary`, **1018** for `daily_summary_prune`.
+
+### `CONTENT_CRON_AGENTS` Addition
+
+The `daily_summary` job does NOT belong in `CONTENT_CRON_AGENTS` (that tuple list drives the `_make_sub_agent_job` factory). Register it the same way `midday_digest` is registered — as a dedicated job via a named factory function `_make_daily_summary_job(engine)`.
+
+In `JOB_LOCK_IDS` (MODIFIED `scheduler/worker.py`):
+```python
+JOB_LOCK_IDS: dict[str, int] = {
+    "midday_digest": 1005,
+    "sub_breaking_news": 1010,
+    "sub_threads": 1011,
+    "sub_quotes": 1013,
+    "sub_infographics": 1014,
+    "sub_gold_media": 1015,
+    "sub_gold_history": 1016,
+    "daily_summary": 1017,       # NEW
+    "daily_summary_prune": 1018, # NEW
+}
+```
+
+In `build_scheduler()` (MODIFIED), add after the midday_digest registration:
+```python
+# daily_summary: fires at 08:00 and 12:00 America/Los_Angeles
+scheduler.add_job(
+    _make_daily_summary_job(engine),
+    trigger=CronTrigger(hour="8,12", minute=0, timezone="America/Los_Angeles"),
+    id="daily_summary",
+    name="Daily Summary — 08:00 + 12:00 America/Los_Angeles",
+)
+
+# daily_summary_prune: fires once per day at 03:00 America/Los_Angeles
+scheduler.add_job(
+    _make_daily_summary_prune_job(engine),
+    trigger=CronTrigger(hour=3, minute=0, timezone="America/Los_Angeles"),
+    id="daily_summary_prune",
+    name="Daily Summary Prune — 03:00 America/Los_Angeles",
+)
+```
+
+### `_make_daily_summary_job` Factory
+
+```python
+def _make_daily_summary_job(engine):
+    async def job():
+        async with engine.connect() as conn:
+            from agents.daily_summary import run_daily_summary
+            await with_advisory_lock(
+                conn,
+                JOB_LOCK_IDS["daily_summary"],
+                "daily_summary",
+                run_daily_summary,
+            )
+    return job
+```
+
+### `daily_summary_prune` — Separate Job
+
+Keep it separate (its own lock ID 1018, its own `CronTrigger`). The prune job has no dependency on the summary job. Sharing the summary lock would block prune if a summary is running at 03:00, which is impossible in practice but creates needless coupling. The prune job is trivially simple — a single `DELETE WHERE generated_at < now() - interval '30 days'` — so it warrants its own factory rather than squeezing into the summary job's try/finally.
+
+---
+
+## `scheduler/agents/daily_summary.py` — New Agent Module
+
+**File:** `scheduler/agents/daily_summary.py`
+
+**Key functions:**
+
+```python
+async def run_daily_summary() -> None:
+    """
+    Entry point called by with_advisory_lock in worker.py.
+
+    1. Create agent_run row (status='running')
+    2. Determine period_label from current local time ('08:00 PT' or '12:00 PT')
+    3. Call _build_gold_news_section()   → gold_news_md, gold_raw
+    4. Call _build_ontario_law_section() → ontario_law_md, law_raw
+    5. Call _build_ontario_stats_section() → ontario_stats_md, stats_raw
+    6. Assemble DailySummary row (status='completed'|'partial'|'failed')
+    7. Send WhatsApp message via send_whatsapp_message()
+    8. Update agent_run row (status='completed'|'failed', ended_at=now)
+    On any unhandled exception: update agent_run to failed, send failure alert.
+    """
+
+async def _build_gold_news_section(config: dict) -> tuple[str, list[dict]]:
+    """
+    Call fetch_stories() → filter to score >= 6.0 → take top 5 by score.
+    Call Sonnet to produce a markdown bullet summary.
+    Returns (gold_news_md, raw_stories_list).
+    Falls back to "No major gold news in this window." on empty result.
+    """
+
+async def _build_ontario_law_section() -> tuple[str, list[dict]]:
+    """
+    Call ontario_law.fetch_ontario_law_hits() → Sonnet relevance filter
+    → produce markdown bullets.
+    Returns (ontario_law_md, raw_hits_list).
+    Falls back to "No new mining-favourable legislation detected." on empty.
+    """
+
+async def _build_ontario_stats_section() -> tuple[str, list[dict]]:
+    """
+    Call ontario_stats.fetch_ontario_stats_hits() → produce markdown.
+    Returns (ontario_stats_md, raw_hits_list).
+    Falls back to "No new statistics released since [last_date]." on empty.
+    """
+```
+
+**`fetch_stories()` consumption pattern:**
+
+`fetch_stories()` returns `list[dict]`, each dict having: `title`, `link`, `published` (datetime), `summary`, `source_name`, `score` (0-10), `predicted_format`. The daily_summary agent uses this directly:
+
+```python
+from agents.content_agent import fetch_stories
+
+stories = await fetch_stories()
+# Filter: keep scores >= 6.0 (gold-relevant signal; below this is noise)
+# This is NOT the 7.0 quality threshold used by sub-agents for drafting —
+# for a summary we want broader coverage, not drafting selectivity.
+relevant = [s for s in stories if s.get("score", 0) >= 6.0]
+top5 = sorted(relevant, key=lambda s: s["score"], reverse=True)[:5]
+```
+
+No refactor to `fetch_stories()` is needed. The 30-min TTL cache means if a sub-agent cron fired in the same bucket, the daily_summary agent gets its result for free.
+
+**WhatsApp delivery pattern** (reuse `send_whatsapp_message` directly):
+
+```python
+from services.whatsapp import send_whatsapp_message
+
+# Success delivery
+message = _format_whatsapp_message(period_label, gold_news_md, ontario_law_md, ontario_stats_md)
+await send_whatsapp_message(message)
+
+# Failure alert
+await send_whatsapp_message(f"[daily_summary FAILED at {period_label}] {error_text[:200]}")
+```
+
+`send_whatsapp_message` already handles missing credentials gracefully (returns `None`, logs ERROR) and retries once on `TwilioRestException`. No wrapper needed.
+
+**`agent_runs` telemetry:** Write one `AgentRun` row per fire with `agent_name="daily_summary"`. Use `items_found` = total stories ingested, `items_queued` = sections produced (0-3), `errors` = JSONB array of per-section error strings (empty on full success). This makes existing observability (Settings > Agent Runs tab) show daily_summary history without any backend changes.
+
+---
+
+## Backend / API Layer
+
+### New Router: `backend/app/routers/summaries.py`
+
+Model after `backend/app/routers/digests.py` — it's a GET-only, auth-gated router.
+
+```python
+# backend/app/routers/summaries.py
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.daily_summary import DailySummary
+from app.schemas.daily_summary import SummaryCardResponse, SummaryFeedResponse
+
+router = APIRouter(
+    prefix="/summaries",
+    tags=["summaries"],
+    dependencies=[Depends(get_current_user)],  # single-user auth — always required
+)
+
+@router.get("", response_model=SummaryFeedResponse)
+async def list_summaries(
+    limit: int = Query(60, ge=1, le=120),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return up to 60 summaries ordered by generated_at DESC (30 days × 2/day = 60 max)."""
+    stmt = (
+        select(DailySummary)
+        .order_by(DailySummary.generated_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+    return SummaryFeedResponse(
+        summaries=[SummaryCardResponse.model_validate(r) for r in rows],
+        total=len(rows),
+    )
+```
+
+**Auth:** `dependencies=[Depends(get_current_user)]` at the router level (same pattern as `digests.py` line 14-18). Every endpoint in the router is automatically protected.
+
+**Registration in `backend/app/main.py`** (MODIFIED, after existing includes):
+```python
+from app.routers.summaries import router as summaries_router
+# ...
+app.include_router(summaries_router)
+```
+
+### Pydantic Schemas: `backend/app/schemas/daily_summary.py`
+
+```python
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict
+
+class SummaryCardResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    generated_at: datetime
+    period_label: str
+    gold_news_md: str | None
+    ontario_law_md: str | None
+    ontario_stats_md: str | None
+    status: str
+    error_text: str | None
+    # raw_sources_jsonb intentionally omitted from the list response
+    # (large forensics blob; add a /summaries/{id} detail endpoint in a later phase if needed)
+
+class SummaryFeedResponse(BaseModel):
+    summaries: list[SummaryCardResponse]
+    total: int
+```
+
+---
+
+## Frontend Layer
+
+### Route Wiring: `frontend/src/App.tsx` (MODIFIED)
+
+```tsx
+import { SummaryFeedPage } from '@/pages/SummaryFeedPage'
+
+// Replace the / redirect with the real feed page:
+<Route path="/" element={<SummaryFeedPage />} />
+
+// Bookmark grace redirect (keeps /queue working for 30 days):
+<Route path="/queue" element={<Navigate to="/" replace />} />
+
+// Retire (keep as redirect, don't delete — single-user tool, bookmarks acceptable to break):
+<Route path="/agents/:slug" element={<Navigate to="/" replace />} />
+<Route path="/digest" element={<Navigate to="/" replace />} />
+```
+
+### New API Module: `frontend/src/api/summaries.ts`
+
+```typescript
+import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from './client'
+
+export interface SummaryCard {
+  id: string
+  generated_at: string      // ISO datetime
+  period_label: string      // '08:00 PT' | '12:00 PT'
+  gold_news_md: string | null
+  ontario_law_md: string | null
+  ontario_stats_md: string | null
+  status: 'completed' | 'failed' | 'partial'
+  error_text: string | null
+}
+
+export interface SummaryFeedResponse {
+  summaries: SummaryCard[]
+  total: number
+}
+
+export async function getSummaries(limit = 60): Promise<SummaryFeedResponse> {
+  return apiFetch<SummaryFeedResponse>(`/summaries?limit=${limit}`)
+}
+
+export function useSummaries(limit = 60) {
+  return useQuery({
+    queryKey: ['summaries', limit],
+    queryFn: () => getSummaries(limit),
+    staleTime: 5 * 60 * 1000,   // 5 min — summaries only update 2x/day
+    refetchOnWindowFocus: false,
+  })
+}
+```
+
+### New Page: `frontend/src/pages/SummaryFeedPage.tsx`
+
+```tsx
+// Structure:
+// - useSummaries() hook
+// - Loading / error states (same pattern as DigestPage)
+// - Vertical scroll of SummaryCard components, newest first
+// - No approval flow, no actions — read-only feed
+
+import { useSummaries } from '@/api/summaries'
+import { SummaryCard } from '@/components/SummaryCard'
+
+export function SummaryFeedPage() {
+  const { data, isLoading, error } = useSummaries()
+  // ...
+  return (
+    <div className="max-w-2xl mx-auto py-6 space-y-4">
+      {data?.summaries.map(s => <SummaryCard key={s.id} summary={s} />)}
+    </div>
+  )
+}
+```
+
+### New Components
+
+**`frontend/src/components/SummaryCard.tsx`**
+- Props: `summary: SummaryCard`
+- Header: "Summary as of {period_label}" + formatted date (use `date-fns format`)
+- Status badge: green (completed), yellow (partial), red (failed)
+- Three `<SectionBlock>` instances for the three sections
+- On `status='failed'`: show `error_text` in a red callout instead of sections
+
+**`frontend/src/components/SectionBlock.tsx`**
+- Props: `title: string`, `markdown: string | null`
+- Renders markdown as formatted HTML (use `react-markdown` if already in deps, or a simple whitespace/newline renderer for bullet points)
+- Empty state: renders a muted italic placeholder ("No new data." etc.)
+
+**Reuse from retired components:** Check `PerAgentQueuePage.tsx` and any `ContentSummaryCard` — the approval-flow components have no direct transferable UI. The `DigestPage.tsx` date formatting pattern (`date-fns`, relative time) transfers directly to `SummaryCard.tsx`.
+
+---
+
+## Build Order (Phase Decomposition)
+
+### Phase 1: Database + API Skeleton (returns mock data)
+
+**Goal:** End-to-end wiring is proven before any agent work begins.
+
+1. Write `backend/alembic/versions/0010_add_daily_summaries.py`
+2. Write `backend/app/models/daily_summary.py`
+3. Write `scheduler/models/daily_summary.py` (parity copy — same columns, `scheduler/models/base.py` import)
+4. Write `backend/app/schemas/daily_summary.py`
+5. Write `backend/app/routers/summaries.py` (real query, will return 0 rows until Phase 2)
+6. MODIFY `backend/app/main.py` — add router
+7. Run `alembic upgrade head` — table exists in Neon
+
+**Dependency unblocked:** Frontend can now call `GET /summaries` and receive `{"summaries": [], "total": 0}`.
+
+### Phase 2: `daily_summary` Agent + Ingestion Stub
+
+**Goal:** The cron fires, writes real rows to `daily_summaries`, WhatsApp delivers.
+
+1. Write `scheduler/agents/daily_summary.py` — `run_daily_summary()` + `_build_gold_news_section()` (uses real `fetch_stories()`). `_build_ontario_law_section()` and `_build_ontario_stats_section()` are stubs that return hardcoded placeholder markdown and empty raw lists.
+2. MODIFY `scheduler/worker.py` — add lock IDs 1017/1018, add `_make_daily_summary_job` factory, register `daily_summary` in `build_scheduler()`
+3. Deploy scheduler worker — verify Railway logs show job registered, fires at 08:00/12:00 PT
+4. Verify `daily_summaries` row written, `agent_runs` row written, WhatsApp sent
+
+**Dependency unblocked:** Frontend feed page can show real cards after Phase 3.
+
+### Phase 3: Frontend Feed Page
+
+**Goal:** Web feed is usable — the primary daily-use surface.
+
+1. Write `frontend/src/api/summaries.ts`
+2. Write `frontend/src/components/SectionBlock.tsx`
+3. Write `frontend/src/components/SummaryCard.tsx`
+4. Write `frontend/src/pages/SummaryFeedPage.tsx`
+5. MODIFY `frontend/src/App.tsx` — wire `/` route, add `/queue` redirect
+
+**Rationale for Phase 3 before Ontario sources:** The feed page can show real gold-news sections (from Phase 2) while Ontario sections show placeholder text. User gets immediate value; Ontario sources are a Phase 4 enhancement.
+
+### Phase 4: Ontario Law Ingestion
+
+**Goal:** Replace ontario_law stub with real source + Sonnet relevance filter.
+
+1. Research source (Ontario Gazette RSS at `https://www.ontario.ca/laws/rss` or equivalent — confirm the actual feed URL; this is the open research question)
+2. Write `scheduler/agents/ontario_law.py` — `fetch_ontario_law_hits() -> list[dict]` — fetch + Sonnet "is this mining-favourable?" binary classification
+3. Wire into `_build_ontario_law_section()` in `daily_summary.py`
+
+**Why deferred:** Source selection requires a research sub-task (PROJECT.md flags this as "no clean machine-readable feed exists"). Building the plumbing first (Phases 1-3) means Ontario law can be dropped in without touching anything else.
+
+### Phase 5: Ontario Stats Ingestion
+
+**Goal:** Replace ontario_stats stub with real StatCan / OGS source.
+
+1. Research source (StatCan mineral production table, Ontario Geological Survey releases)
+2. Write `scheduler/agents/ontario_stats.py` — `fetch_ontario_stats_hits() -> list[dict]`
+3. Design the "no new data since {date}" empty state in `_build_ontario_stats_section()`
+4. Wire into `daily_summary.py`
+
+**Why after Ontario law:** Law and stats are independent; defer stats because releases are monthly/quarterly (lower urgency than law monitoring).
+
+### Phase 6: Prune Cron + Cleanup
+
+**Goal:** 30-day retention enforced; dead code decommissioned.
+
+1. Write `_make_daily_summary_prune_job(engine)` in `scheduler/worker.py`
+2. Register `daily_summary_prune` cron (03:00 PT) in `build_scheduler()`
+3. Tag retired routes/components in frontend as dead code (or delete if safe)
+
+**Why last:** Prune is the most independent concern. Nothing blocks on it; retention can also be enforced manually until this phase ships.
+
+---
+
+## Integration Points and Surprises
+
+### `fetch_stories()` Score Filter
+
+`fetch_stories()` returns stories with `score` in 0-10 range. The sub-agents use a 7.0 threshold for drafting selectivity. For a summary, use **6.0** — broader coverage is better for a news digest than for a social post. No refactor to `fetch_stories()` needed; just filter in the daily_summary agent.
+
+### `period_label` Derivation
+
+The cron fires at 08:00 and 12:00 PT. Derive the label inside `run_daily_summary()`:
+
+```python
+from datetime import datetime, timezone
+import zoneinfo
+
+la_tz = zoneinfo.ZoneInfo("America/Los_Angeles")
+now_la = datetime.now(la_tz)
+period_label = "08:00 PT" if now_la.hour < 11 else "12:00 PT"
+```
+
+This is robust to minor clock skew (APScheduler `misfire_grace_time=1800`).
+
+### WhatsApp Message Length
+
+`send_whatsapp_message` sends a single message. Twilio's 1600-char hard cap applies. The `build_chunks` helper in `whatsapp.py` chunks at 1500 chars. For daily_summary delivery, use `build_chunks` with a synthetic agent name if the assembled summary exceeds 1500 chars. More likely: cap each section to 3-5 bullets in the Sonnet prompt so the total message stays under 1500 chars. No structural change to `whatsapp.py` needed.
+
+### Dual-Model Parity (Scheduler + Backend)
+
+The existing pattern (confirmed in CLAUDE.md) requires the same table to have SQLAlchemy models in BOTH `scheduler/models/` and `backend/app/models/`. The scheduler model needs `scheduler/models/daily_summary.py` to write rows; the backend model needs `backend/app/models/daily_summary.py` to read them. They must define identical columns. Phase 1 must create both together.
+
+### Slow 12:00 PT Summary
+
+The 12:00 PT summary fires 4 hours after the 08:00 PT one. On slow news days, the gold news section may be identical (same top-5 stories in cache, since the 30-min TTL expired long before noon). The Sonnet prompt for `_build_gold_news_section()` should receive the `generated_at` of the last summary as context and instruct: "If the same stories appeared in the prior summary, note 'No major moves since 08:00 summary.'" Pass `last_summary_generated_at` as a parameter from `run_daily_summary()` (query the most recent row before writing the new one).
+
+### Advisory Lock on a Multi-Fire CronTrigger
+
+`CronTrigger(hour="8,12", minute=0)` registers one job that fires twice daily. The advisory lock ID 1017 is the same for both fires — this is correct and intentional. Each fire acquires and releases the lock independently. No collision is possible because the fires are 4 hours apart.
+
+---
+
+## Confidence Assessment
+
+| Area | Confidence | Basis |
+|------|------------|-------|
+| CONTENT_CRON_AGENTS tuple shape | HIGH | Read `scheduler/worker.py` lines 141-184 directly |
+| Lock ID allocation (1017, 1018) | HIGH | Read `JOB_LOCK_IDS` dict, confirmed 1012 unused, 1017/1018 next free |
+| `fetch_stories()` return shape | HIGH | Read `content_agent.py` — score + predicted_format confirmed on scored dict |
+| `send_whatsapp_message` signature | HIGH | Read `whatsapp.py` — single `message: str` arg, returns `str | None` |
+| `agent_runs` model columns | HIGH | Read `scheduler/models/agent_run.py` — full column list confirmed |
+| Digests router pattern | HIGH | Read `backend/app/routers/digests.py` — exact auth pattern confirmed |
+| Migration 0009 style | HIGH | Read migration file — `op.create_check_constraint`, index pattern confirmed |
+| App.tsx route registration | HIGH | Read `frontend/src/App.tsx` — current routes confirmed |
+| Ontario law source selection | LOW | Flagged in PROJECT.md as an open question; requires separate research |
+| Ontario stats source selection | LOW | Same — StatCan / OGS feed URLs need verification |

@@ -1,245 +1,510 @@
-# Feature Research
+# Feature Research — v2.0 Daily Summary Feed
 
-**Domain:** AI social media monitoring and engagement drafting system (single-operator, niche industry)
-**Researched:** 2026-03-30
-**Confidence:** HIGH (core features), MEDIUM (differentiators specific to niche sector)
+**Domain:** Scheduled daily news summary feed (single-operator, gold sector, Ontario mining focus)
+**Researched:** 2026-05-05
+**Confidence:** HIGH (core summary mechanics, StatCan sources), MEDIUM (Ontario law sources — feed structure unconfirmed), LOW (OLA bill tracker RSS — no RSS feed confirmed to exist)
+
+> **Scope note:** This file supersedes the v1.0 approval-dashboard FEATURES.md for the v2.0 milestone.
+> Existing features already built (fetch_stories, Sonnet scoring, APScheduler, FastAPI auth, Twilio WhatsApp,
+> Neon Postgres) are not re-researched here. Focus is entirely on new v2.0 surface area.
+
+---
+
+## How Daily Summary Products Work in Production
+
+### Patterns Stolen from Morning Brew / Axios / Stratechery
+
+**Morning Brew pattern (steal this):**
+- Fixed section structure every issue — reader knows where to look for "markets" vs "tech" vs "the kicker"
+- Each section: 1-sentence headline, 2-4 bullets, source attribution at bullet level (not section level)
+- "TLDR" is implicit — bullet 1 IS the TLDR; bullets 2-4 are supporting detail
+
+**Axios Smart Brevity pattern (steal this):**
+- "What's new" + "Why it matters" as the first two micro-sections of every story
+- Paragraphs are 1-2 sentences max; white space is a feature not waste
+- Section headers are anchor links — reader can jump to Gold / Laws / Stats without scrolling
+- "Be Smart" closer: one synthesis sentence at the end of each section that the reader can quote
+
+**Stratechery pattern (steal selectively):**
+- Cross-issue continuity: "As I noted on Tuesday…" references are normal, expected, valued
+- "Building on this morning's update: gold has now broken $X" is a native pattern for that audience
+- Daily subscribers tolerate and enjoy callbacks; it signals the author is tracking a narrative arc
+
+**Recommended synthesis for v2.0:**
+Each summary card should follow this structure per section:
+
+```
+## Section Title (e.g., "Gold News")
+**Headline:** [One-sentence lead]
+- [Bullet 1 — the TLDR fact]
+- [Bullet 2 — supporting context]
+- [Bullet 3 — so-what or implication]  ← optional, omit on slow news days
+*(Source, HH:MM ET)*
+```
+
+For the 12:00 PT card, Sonnet should receive the 08:00 card's gold news section in its context
+window and be instructed to note continuity where prices have moved materially. This is more
+reliable than a stylistic tone instruction alone — it grounds the cross-reference in actual data.
 
 ---
 
 ## Feature Landscape
 
-### Table Stakes (Users Expect These)
+### Table Stakes (Must Ship in v2.0)
 
-Features the operator will assume exist from day one. Missing these makes the system feel broken or unusable.
+| Feature | Why Expected | Complexity | Dependencies |
+|---------|--------------|------------|--------------|
+| `daily_summary` cron at 08:00 PT + 12:00 PT | Core product premise; without it nothing exists | MEDIUM | APScheduler CronTrigger (existing), `daily_summaries` table (new) |
+| Three-section card: Gold News / Ontario Laws / Ontario Stats | Defined product contract; operator expects all three | MEDIUM | New ingestion modules for laws + stats sections |
+| Gold News section via existing `fetch_stories()` | fetch_stories is already scored and deduped — reuse it | LOW | `fetch_stories()` (existing) |
+| Ontario Laws ingestion + Sonnet filter | Core product requirement; no machine-readable feed — needs custom approach | HIGH | Ontario Newsroom RSS + Sonnet relevance gate (new) |
+| Ontario Stats section with empty-state design | StatCan publishes monthly; most days have no new data | MEDIUM | StatCan "The Daily" RSS (new); empty-state copy template |
+| Web feed at `/` — vertical scroll, latest 30 days | Replace retired approval dashboard; primary reading surface | MEDIUM | `GET /summaries` endpoint (new), React feed page (new) |
+| WhatsApp delivery on each successful summary fire | Operator reads on phone; WhatsApp is the existing delivery channel | LOW | Twilio (existing), summary content formatted for WhatsApp |
+| WhatsApp failure alert when cron errors | Silent failures are invisible; operator must know | LOW | Twilio (existing), APScheduler error hook (new) |
+| 30-day auto-prune cron | Prevents unbounded DB growth; operator expectation from project spec | LOW | Neon Postgres, daily prune job (new) |
+| "No major moves since 08:00" template for 12:00 card | Slow news day at noon is normal; card must still fire | LOW | Sonnet prompt variant, prior summary in context |
+| Dedup within summary (same story from Kitco + Reuters = one bullet) | fetch_stories SequenceMatcher 0.85 threshold already handles URL+headline dedup | LOW | `deduplicate_stories()` (existing) — confirmed sufficient |
+| Source attribution per bullet — inline "(Kitco, 06:34 ET)" | Operator needs to verify claims; inline citation is the newsletter standard | LOW | Stored in story dict as `source_name` + `published` (existing) |
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Keyword / hashtag / cashtag monitoring | Core premise of the product — no monitoring = no system | MEDIUM | X Basic API + Apify handle this; query design matters more than implementation |
-| Engagement threshold filtering | Without signal/noise filtering the queue floods with irrelevant posts | MEDIUM | Hard numeric gates (500+ likes, 200+ IG likes) are standard; configurable post-launch |
-| AI-drafted response alternatives per post | Single draft is too limiting; user expects choice | MEDIUM | 2-3 alternatives per post is the accepted convention in HITL workflows |
-| Approval queue with approve / reject actions | Human-in-loop is the whole model; no queue = no product | MEDIUM | State machine: pending → approved / rejected / expired |
-| Inline editing on draft before approval | Drafts are always imperfect; edit-then-approve is the standard workflow pattern | LOW | Rich text editing on card; saves edited version alongside original |
-| One-click copy to clipboard | User manually posts; friction here is felt every single session | LOW | Copy final draft to clipboard with toast confirmation |
-| Direct link to original post | Cannot engage without seeing the source | LOW | URL stored at ingest; opens in new tab |
-| Platform badge on each queue card | Without at-a-glance platform identification the queue is confusing | LOW | X vs Instagram visual distinction |
-| Account info on each queue card | Authority context informs whether to engage | LOW | Handle, follower count, platform |
-| Automatic expiry of stale items | Stale drafts clog the queue and erode trust in the system | LOW | Twitter: 6h, Instagram: 12h; Senior Agent handles sweep |
-| Configurable watchlist (bypass engagement gate) | Tier-1 accounts always matter regardless of engagement volume | LOW | DB-stored list, editable from Settings |
-| Settings page for thresholds and keywords | Operators always want to tune signal/noise after first use | MEDIUM | Scoring weights, decay curves, keyword lists, watchlist management |
-| Run logs per agent | Operators need to verify the system is running and diagnose failures | LOW | Timestamp, items found/queued/filtered/errors per execution |
-| Simple authentication | Single-user dashboard still needs a password | LOW | Bcrypt hashed password, JWT session token |
-| Mobile-appropriate notification delivery | Operator reviews on desktop but gets alerted on phone | LOW | WhatsApp via Twilio is purpose-built for this; email is the obvious fallback |
+### Differentiators (Nice-to-Have — Ship if Scope Allows)
 
----
+| Feature | Value Proposition | Complexity | Dependencies |
+|---------|-------------------|------------|--------------|
+| Cross-summary continuity reference (noon → morning) | "Gold has now broken $2,500 since this morning's update" — turns two separate cards into a narrative arc | MEDIUM | Pass 08:00 card's gold section into 12:00 Sonnet context; requires `daily_summaries` table with content stored as JSONB |
+| Section anchor links in web feed | Reader can jump to "Ontario Laws" without scrolling past gold news | LOW | CSS `id` anchors on section headers; no backend change |
+| "Last updated" pointer in empty-state sections | Empty stats section shows "No new data. Last release: Apr 20, 2026 (Feb 2026 data)" | LOW | Query `daily_summaries` for last non-empty stats section; render link |
+| Click-through to source URL per bullet | Operator can read full article from the feed | LOW | Store `story.link` in summary JSONB; render as hyperlink in feed |
+| WhatsApp formatting: section emoji prefixes | Gold section gets a gold-colored emoji prefix; Laws gets ⚖; Stats gets 📊 | LOW | Twilio WhatsApp message template only |
+| Statcan release detection: auto-note when new data drops | "New StatCan data released today (Feb 2026 production figures):" surfaces prominently | MEDIUM | Poll StatCan "The Daily" RSS for table 16-10-0019-01 release notices |
 
-### Differentiators (Competitive Advantage)
+### Anti-Features (Never Ship)
 
-Features that set this system apart from generic social listening tools like Hootsuite or Sprout Social. These align with the project's core value: every drafted response must be genuinely valuable to the gold conversation.
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Niche-domain scoring (gold sector relevance) | Generic tools score by raw engagement; this system scores by topic relevance to gold/mining, making a 600-like post about gold price more valuable than a 5,000-like post about crypto | HIGH | Requires prompt-based relevance classification layered on top of engagement scoring |
-| Recency decay curve | A 4-hour-old post is worth half a fresh post; without decay the queue surfaces stale opportunities | MEDIUM | Full score at 1h, 50% at 4h, expired at 6h; configurable decay function |
-| Dual-format drafting (reply + retweet-with-comment) | Generic tools draft one response type; giving the operator both options per post doubles decision speed | MEDIUM | Two distinct drafts per X post with format labeling |
-| Event mode (engagement spike + price movement trigger) | Gold price movement is a defined, high-value signal that generic tools don't model; event mode scales output 8-10x during these windows | HIGH | Requires gold price feed integration OR engagement spike detection (3x baseline); this is novel in the monitoring space |
-| Agent self-evaluation quality gate | Content Agent scores its own output before queuing (relevance, originality, tone match, no company mention, no financial advice); items below 7.0/10 don't exist | MEDIUM | Rubric is defined and consistent; reduces human review burden by surfacing only quality-cleared items |
-| Senior Agent deduplication with visual linking | Same story appearing across platforms is presented as related cards, not duplicate noise; rare in monitoring tools which treat platforms in isolation | MEDIUM | Story fingerprinting via semantic similarity; "related" label and visual grouping in dashboard |
-| Performance-driven learning loop | Senior Agent tracks which content types get engagement online and adjusts scoring weights accordingly; most tools require manual tuning | HIGH | Requires logging of posted content and feedback mechanism; Phase 2 or later |
-| Infographic brief generation | Moving beyond text replies to structured visual content briefs is uncommon in monitoring tools; relevant for Instagram | HIGH | HTML templates for data-heavy pieces; AI image generation for editorial pieces |
-| Content Agent with deep research pass | Most monitoring tools draft from surface-level post context; this agent corroborates claims and connects to broader sector trends before drafting | HIGH | Multi-step: RSS ingest → SerpAPI search → web research → format decision → draft |
-| "No story today" flag | Most tools always produce output to justify their existence; explicitly flagging when nothing clears the quality bar is honest signal and builds operator trust | LOW | 7.0/10 threshold produces this naturally; surface clearly in dashboard |
-| WhatsApp morning digest + breaking news alerts | Operators of single-company monitoring systems don't live in dashboards; push notification to their primary communication channel is meaningful | LOW | Twilio integration; morning digest + threshold-triggered breaking alerts + expiry warnings |
-| Queue hard cap with priority scoring | Prevents dashboard overwhelm; 15-item cap forces the system to surface only the highest-value opportunities | LOW | Senior Agent enforces cap with priority score tiebreaking |
+| Feature | Why Requested | Why Problematic |
+|---------|---------------|-----------------|
+| User comments / reactions on feed cards | Feels like a "complete" feed product | Single-user product — comments are talking to yourself. Adds DB schema complexity for zero value. |
+| Sharing / social export of summary cards | "Share today's summary with followers" | Defeats the personal intelligence tool positioning. Adds auth/public-access complexity. Out of scope per locked decisions. |
+| Multi-user / multi-operator access | "What if I want to share with a colleague?" | Multi-tenancy is explicitly out of scope until second client exists. Password auth is single-user by design. |
+| Custom keyword configuration for summary sections | "I want to add 'platinum' to the gold section" | Operator locked decisions say no custom keywords. Keywords are hard-coded per section; SerpAPI queries are fixed. |
+| Push notifications beyond WhatsApp (email, SMS, Slack) | "Redundant delivery channels" | Twilio WhatsApp is sufficient for single-user. Adding channels adds cost and maintenance without value. |
+| Archival beyond 30 days | "I want to read summaries from 6 months ago" | 30-day retention is a locked decision. Unlimited retention compounds storage cost with no demonstrated need. |
+| "Mark as read" / read-state tracking | Feels like a proper feed app | Single-user vertical scroll; chronological order is self-evidencing. State tracking adds complexity for no functional improvement. |
+| Auto-posting summary content to social media | Scope creep from original product pivot | Core value is operator intelligence, not content broadcasting. Explicitly out of scope. |
 
 ---
 
-### Anti-Features (Commonly Requested, Often Problematic)
+## Source Viability Assessment
 
-Features that seem like obvious additions but create serious problems for this specific product.
+### Section 1: Gold News
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Auto-posting to platforms | "Why review manually if the AI is good enough?" | Brand risk: a single bad auto-post in the gold/finance space (implying buy/sell, misattributing data, mentioning Seva Mining) cannot be recalled and causes credibility damage that takes months to repair. The product's value is the human judgment layer. | Copy-to-clipboard + direct link; operator posts manually in under 10 seconds |
-| Two-way WhatsApp approval (approve via chat reply) | "I should be able to approve from WhatsApp without opening the dashboard" | Adds significant backend complexity (Twilio webhook handling, session state, security surface). The dashboard is already mobile-accessible. The time savings are marginal. | WhatsApp notifications link directly to dashboard; single click to open the relevant card |
-| LinkedIn agent | Covers more surface area | LinkedIn's API is restrictive and expensive at scale. Gold sector conversation on LinkedIn is lower-signal than X. Engineering cost is disproportionate. | X + Instagram covers the highest-value conversations; add LinkedIn only if signal quality proves insufficient |
-| Reddit monitoring | More comprehensive signal | Reddit API restrictions post-2023 make reliable monitoring expensive. Scraping risks TOS violations. RSS + SerpAPI already captures Reddit-sourced stories when they reach mainstream coverage. | SerpAPI news search surfaces Reddit-originated stories once they have traction |
-| Multi-tenancy / multi-client architecture | "Build it right from the start" | Premature optimization. Multi-tenancy requires tenant isolation, separate config scopes, billing, and onboarding flows. None of that creates value for a single-operator system. | Refactor when second client actually exists; schema design should not block this but should not over-engineer for it |
-| Analytics dashboard | "I want to see my performance over time" | Requires defining what to measure, building data collection, designing meaningful visualizations — a separate product essentially. Zero value until enough content has been posted to generate meaningful trends. | Defer to v2; all data is retained in DB so analytics can be added later without migration |
-| Mobile-responsive dashboard | "I might want to review from my phone" | Single-user desktop workflow; mobile responsiveness adds CSS complexity and testing surface for zero stated need. WhatsApp notifications handle mobile touchpoints. | Desktop-only v1; WhatsApp covers mobile alerts |
-| Real-time streaming monitoring | "Shouldn't monitoring be instantaneous?" | X Basic API does not support streaming; polling every 2h is the constraint. Instagram via Apify is inherently polling-based. Streaming would require X Enterprise tier ($5,000+/mo). Polling at 2h/4h intervals is appropriate for a 1-person review workflow anyway — faster would just produce more items faster than they can be reviewed. | Scheduled polling at defined intervals; event mode handles true urgency windows |
-| Sentiment analytics on monitored posts | "Knowing whether a post is positive/negative about gold would be useful" | Adds classification step to every monitored post; for a niche domain (gold sector), generic sentiment models are unreliable. The engagement score + topic relevance score already proxy for this. | Topic relevance scoring captures most of the signal; add sentiment only if a clear decision depends on it |
+**Primary source: existing `fetch_stories()`**
+The pipeline (RSS: Kitco/Mining.com/JMN/WGC/BNN/Bloomberg/Goldseek + SerpAPI 17 keywords) already
+covers gold news comprehensively. `deduplicate_stories()` handles the Kitco-Reuters same-story problem
+via URL dedup + SequenceMatcher 0.85 headline similarity. The composite score
+(relevance×0.4 + recency×0.3 + credibility×0.3)×10 is already calibrated.
+
+**Recommended approach for summary generation:**
+Pass top 5-7 stories (score ≥ 6.0) to a Sonnet summary call. Do NOT re-score for the summary —
+reuse scores already computed by fetch_stories. Group bullets by theme if possible (price moves /
+institutional demand / macro backdrop), but do not over-engineer the grouping.
+
+**Dedup verdict:** SUFFICIENT — existing `deduplicate_stories()` covers URL + headline similarity.
+The 0.85 ratio threshold correctly collapses "Gold hits $3,200" (Kitco) and "Gold price reaches $3,200
+record" (Reuters) into one entry, keeping the higher-credibility source. No new dedup work needed.
+
+---
+
+### Section 2: Ontario Mining-Favourable Laws
+
+This is the hardest section. No clean machine-readable feed delivers "Ontario just passed a
+mining-favourable law." Every candidate source requires a Sonnet filter.
+
+**Source A: Ontario Newsroom RSS — `https://news.ontario.ca/en/release/feed`**
+Verdict: **VIABLE (with mandatory Sonnet filter)**
+
+Confidence: MEDIUM (URL confirmed in project spec; feed structure inferred from standard Ontario govt pattern; content verified by external search results showing active 2025 mining legislation)
+
+- The feed covers all Ontario government press releases — energy, mining, health, transit, everything
+- Mining-relevant signal rate: approximately 1-2 items/week when legislation is active; 0-1 items/week in quiet periods
+- High noise: ministerial speeches, unrelated announcements dominate
+- Requires Sonnet filter to separate "minister gives speech about supporting mining" from "Ontario passes Bill X amending Mining Act"
+- The Bill 5 / "Protect Ontario by Unleashing our Economy Act, 2025" example shows actual mining legislation does appear here — it received Royal Assent June 5, 2025
+
+**Source B: Ontario Environmental Registry (ERO) — `https://ero.ontario.ca/`**
+Verdict: **MARGINAL**
+
+Confidence: MEDIUM (ERO confirmed active; RSS availability unconfirmed)
+
+- ERO publishes proposed regulatory changes before they become law — mining notices do appear here
+- Useful for "proposed amendments to the Mining Act" coverage, but lags behind actual Royal Assent
+- No confirmed RSS feed URL; scraping ERO search results is an option but fragile
+- Make viable by: adding `ero.ontario.ca` to a SerpAPI keyword search for "Ontario Mining Act" rather than relying on direct RSS
+
+**Source C: Ontario Legislative Assembly bills tracker — `https://www.ola.org/en/legislative-business/bills/current`**
+Verdict: **MARGINAL**
+
+Confidence: LOW (no RSS feed confirmed; web interface only)
+
+- Definitive source for bill status (first reading / second reading / committee / Royal Assent)
+- No confirmed RSS feed; OLA website is HTML-only for bill listing
+- Make viable by: SerpAPI query `"Ontario bill" "Mining Act" OR "mining" site:ola.org` — low yield but catches bill-passage events
+- Alternatively: scrape the current bills page weekly, not daily
+
+**Source D: CanLII — `https://www.canlii.org/rss`**
+Verdict: **MARGINAL**
+
+Confidence: MEDIUM (CanLII RSS confirmed to exist; mining act consolidation confirmed updated to Jan 1, 2026)
+
+- CanLII publishes updated legislation consolidations; the Ontario Mining Act is tracked here
+- RSO 1990, c M.14 last amendment: 2025, c. 17, Sched. 1 (confirmed)
+- CanLII RSS covers new legislation and regulation releases across all Canadian jurisdictions
+- Noise level is high — covers all legislation, not just mining
+- Filter approach: subscribe to CanLII Ontario RSS, Sonnet-filter for Mining Act / Ontario mineral-related content
+
+**Source E: Natural Resources Canada News RSS — `https://natural-resources.canada.ca/corporate/rss-feeds`**
+Verdict: **VIABLE (supplementary)**
+
+Confidence: MEDIUM (NRCan RSS confirmed to exist; mining/minerals subset available)
+
+- NRCan publishes federal mining-related announcements, budget impacts, critical minerals policy
+- Covers federal (not Ontario-specific) regulatory changes — still relevant for "mining-favourable laws" at federal level
+- Cadence: 2-4 items/week across all NRCan topics; mining-specific subset is lower
+- Add to ingestion alongside Ontario Newsroom; Sonnet filter handles both feeds with same prompt
+
+**Source F: Mining Association of Canada (MAC) news — `https://mining.ca/resources/`**
+Verdict: **VIABLE (supplementary)**
+
+Confidence: MEDIUM (MAC website confirmed active; RSS availability not confirmed)
+
+- MAC publishes policy commentary, budget reactions, regulatory analysis — exactly the "mining-favourable" framing
+- Less noisy than government feeds because MAC already filters for mining relevance
+- No confirmed RSS feed; use SerpAPI query `"Mining Association of Canada" legislation policy 2026`
+
+**Source G: Ontario Mining Association (OMA) — `https://www.oma.on.ca/news/`**
+Verdict: **VIABLE (supplementary)**
+
+Confidence: MEDIUM (OMA website confirmed active with regular news posts; RSS availability unconfirmed)
+
+- OMA releases Ontario-specific mining industry news, regulatory commentary, annual State of Ontario Mining report
+- Published State of Mining Sector March 2025 — the type of stats-heavy content that belongs in Section 3
+- Use SerpAPI keyword `"Ontario Mining Association" site:oma.on.ca` or add OMA news feed if RSS is available at `oma.on.ca/modules/news/en`
+
+**Recommended Ontario Laws ingestion stack:**
+1. Ontario Newsroom RSS (`news.ontario.ca/en/release/feed`) — PRIMARY
+2. NRCan news RSS (`natural-resources.canada.ca/corporate/rss-feeds`) — SECONDARY
+3. SerpAPI keyword query: `"Ontario" "mining" ("bill" OR "act" OR "regulation" OR "policy") Canada` — TERTIARY
+4. Sonnet filter on ALL results (see prompt recommendation below)
+
+**Realistic frequency:** 1-3 genuinely new mining-favourable law items per week when the legislature is sitting; near-zero during summer recess (June–August) and winter break. Section will be empty 3-4 days out of 5 on average. Empty-state design is mandatory, not an edge case.
+
+---
+
+### Section 3: Ontario Gold Mining Statistics
+
+**Source A: StatCan Table 16-10-0019-01 (Monthly Mineral Production, metallic minerals)**
+Verdict: **VIABLE — but monthly, ~2-month lag**
+
+Confidence: HIGH (table confirmed active; release cadence confirmed from search results)
+
+URL: `https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1610001901`
+API: `https://www150.statcan.gc.ca/t1/wds/rest/` (StatCan WDS JSON API, confirmed)
+
+Release pattern (confirmed from actual release dates):
+- April 2025 data → released June 20, 2025
+- September 2025 data → released November 20, 2025
+- February 2026 data → released April 20, 2026
+- Pattern: data for month M releases approximately the 19th–21st of month M+2
+
+Practical implication: Ontario gold production figures for January 2026 will not be available until
+approximately March 20, 2026. The summary will have genuine new StatCan data roughly once per month
+on the 19th-21st. All other days → empty state for this sub-source.
+
+StatCan WDS API access pattern:
+```
+GET https://www150.statcan.gc.ca/t1/wds/rest/getSeriesInfoFromVector/{vectorId}
+GET https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods/{vectorId}/1
+```
+No API key required. JSON response. Vector IDs for Ontario gold production need to be resolved
+once at setup by querying table 16-10-0019-01 metadata for Ontario + Gold rows.
+
+**Source B: StatCan "The Daily" RSS for mineral production releases**
+Verdict: **VIABLE — the best trigger mechanism**
+
+Confidence: HIGH (The Daily confirmed to publish mineral production release notices; RSS feeds confirmed at statcan.gc.ca)
+
+"The Daily" (`https://www150.statcan.gc.ca/n1/dai-quo/index-eng.htm`) publishes a release notice
+the same day StatCan publishes new mineral production data. Subscribe to The Daily RSS and Sonnet-filter
+for "mineral production" releases — this is the trigger event for Section 3 having real content.
+
+**Source C: Natural Resources Canada — Annual Statistics of Mineral Production**
+Verdict: **VIABLE (annual, supplementary)**
+
+Confidence: HIGH (NRCan confirmed to publish annual mineral production; URL confirmed active)
+
+URL: `https://mmsd.nrcan-rncan.gc.ca/prod-prod/ann-ann-eng.aspx`
+
+Annual data for 2024 was released February 25, 2026. Useful once per year for the annual summary
+bulletin. Not a daily source.
+
+**Source D: Ontario Geological Survey (OGS) — Mineral Exploration Activity Reports**
+Verdict: **MARGINAL**
+
+Confidence: MEDIUM (OGS confirmed active; activity reports confirmed; cadence unclear)
+
+URL: `https://www.geologyontario.mndm.gov.on.ca/mines/ogs/rgp/mer_listing_e.html`
+
+- OGS publishes monthly and year-to-date mineral exploration activity reports
+- These are exploration activity counts (new claims staked, drill holes reported) — useful context but not production figures
+- No confirmed RSS feed; HTML-only listing
+- Make viable by: SerpAPI query `"Ontario Geological Survey" gold production OR exploration statistics`
+
+**Source E: OMA State of Ontario Mining report (annual)**
+Verdict: **VIABLE (annual, high-value when it drops)**
+
+Confidence: MEDIUM (2025 report confirmed published March 2025; annual cadence confirmed)
+
+The OMA State of Ontario Mining Sector report publishes in Q1 each year and contains:
+- Ontario GDP contribution from mining
+- Employment figures (~22,000 direct jobs, $150k avg salary)
+- Capital expenditures ($5.2B in 2023)
+- Mineral export values ($64B in 2023)
+
+This is exactly the type of stats that belong in Section 3 when the report drops. When it does, Section 3
+should feature it prominently even though it is technically not "new today" data.
+
+**Recommended Ontario Stats ingestion stack:**
+1. StatCan "The Daily" RSS — monitor for mineral production release notices (monthly event, ~19th-21st)
+2. StatCan WDS API call on confirmed release day to pull Ontario gold production figures
+3. SerpAPI query `"Ontario gold" production statistics site:statcan.gc.ca OR site:nrcan.gc.ca OR site:oma.on.ca`
+4. Section fires with real data approximately once/month; empty state all other days
+
+---
+
+## Sonnet Filter Prompts (Recommended)
+
+### Ontario Laws Relevance Filter
+
+Minimize false positives (minister speeches, unrelated bills) while catching genuine law/policy changes.
+
+```
+You are a regulatory filter for an Ontario gold mining industry intelligence feed.
+
+Evaluate this Ontario government news item and respond with a JSON object only.
+
+Rules:
+- KEEP if: The item announces passage, Royal Assent, or coming-into-force of a law, bill, regulation, or
+  Order in Council that DIRECTLY affects mining operations, mineral exploration, mine permitting, land
+  access, environmental assessment for mines, or mineral rights in Ontario.
+- KEEP if: A federal or Ontario government policy change (budget measure, critical minerals strategy,
+  Indigenous consultation framework change) materially affects the economics or regulatory burden
+  of gold mining in Ontario.
+- REJECT if: A minister gives a speech, attends an event, or "supports" mining without announcing
+  a concrete regulatory change.
+- REJECT if: The item is about a specific company's mine (company-specific news, not sector-wide).
+- REJECT if: The regulatory change is unrelated to mining (e.g., healthcare, transit, housing).
+- REJECT if: The item is about environmental opposition to a mining project without a regulatory change.
+
+Respond ONLY with:
+{"keep": true|false, "reason": "one sentence", "law_name": "Bill X / Act name or null", "favour_or_neutral": "favourable|neutral|unfavourable|unclear"}
+
+Title: {title}
+Summary: {summary}
+```
+
+Key discrimination logic: "minister announces support for mining" → REJECT; "Ontario passes Bill 5 amending Mining Act" → KEEP. The `law_name` field forces the model to name the actual legislation, which is a strong signal for false-positive detection — if it cannot name a law, the item is probably a speech.
+
+### Ontario Stats Relevance Filter (simpler — less noise in this feed)
+
+```
+You are a statistics filter for an Ontario gold mining feed.
+
+Evaluate this item and respond with JSON only.
+
+KEEP if: The item contains new statistical data about Ontario gold/mineral production, exploration
+activity, investment figures, employment numbers, or jurisdictional rankings published by StatCan,
+NRCan, Ontario Geological Survey, or Ontario Mining Association.
+REJECT if: The item is opinion, forecast, or commentary without new data.
+REJECT if: The data is about a specific company only (not sector-wide).
+
+{"keep": true|false, "data_type": "production|exploration|employment|investment|ranking|other|null", "source_org": "StatCan|NRCan|OGS|OMA|other|null"}
+```
+
+---
+
+## Empty-State Copy (Recommended Defaults)
+
+### Gold News — slow day (12:00 summary, nothing material since 08:00)
+
+> **No major moves since the 08:00 summary.** Gold is holding near {last_price}. Next scheduled update: 08:00 PT tomorrow.
+
+Note: pass `last_price` from a spot price API call (Kitco or metals-api.com) at summary generation time — a static "no news" message without current price is less useful than one grounding the user.
+
+### Ontario Laws — no new items today
+
+> **No new Ontario mining-related laws or regulatory changes today.** Last update: {date of last non-empty laws section} — {law_name with link if stored}.
+
+Do NOT say "check back later" — it feels like a broken app. The pointer to the last real item is more useful than a blank state.
+
+### Ontario Stats — between monthly StatCan releases
+
+> **No new production statistics released today.** StatCan's next Monthly Mineral Production Survey release is expected around {next_release_estimate}. Last data: {month/year of last StatCan release} — Ontario gold production: {last_known_figure} oz.
+
+Storing `last_known_figure` in the DB as part of the summary JSONB means the agent can always fill this in without re-querying StatCan. Update it each time a real StatCan release is processed.
+
+---
+
+## Deduplication Strategy (Confirmed Sufficient)
+
+`fetch_stories()` runs `deduplicate_stories()` before scoring. Two-step process:
+1. URL exact match — first occurrence wins
+2. SequenceMatcher headline similarity ≥ 0.85 — higher-credibility source wins on tie
+
+For v2.0 summary generation, the gold news bullets are generated from the top-N already-deduped stories.
+No additional dedup layer is needed. The existing approach correctly handles the Kitco/Reuters case.
+
+**One gap:** Cross-session dedup (same story appearing in both 08:00 and 12:00 summaries). The 30-min
+cache refreshes between summary fires. A story published at 07:30 will appear in both the 08:00 and
+potentially the 12:00 summary if it is still the top-scoring item.
+
+**Recommendation:** In the Sonnet 12:00 prompt, pass the 08:00 summary's bullet list and instruct
+Sonnet to omit any story already covered there unless there is material new development. This is the
+same mechanism as the cross-summary continuity differentiator — solving both problems with one prompt
+addition.
 
 ---
 
 ## Feature Dependencies
 
 ```
-[WhatsApp Notifications]
-    └──requires──> [Senior Agent: queue management]
-                       └──requires──> [Twitter Agent: monitoring + scoring]
-                       └──requires──> [Instagram Agent: monitoring + scoring]
-                       └──requires──> [Content Agent: story pipeline]
+[daily_summary cron fires at 08:00 PT]
+    └──requires──> [APScheduler CronTrigger America/Los_Angeles (existing)]
+    └──requires──> [daily_summaries table (new)]
+    └──requires──> [Gold News ingestion: fetch_stories() (existing)]
+    └──requires──> [Ontario Laws ingestion module (new)]
+    └──requires──> [Ontario Stats ingestion module (new)]
+    └──requires──> [Sonnet summary generation call (new)]
+    └──triggers──> [WhatsApp delivery on success (Twilio existing)]
+    └──triggers──> [WhatsApp failure alert on cron error (new hook)]
 
-[Approval Dashboard]
-    └──requires──> [Senior Agent: queue management]
-    └──requires──> [State machine: pending/approved/rejected/expired]
+[daily_summary cron fires at 12:00 PT]
+    └──requires──> [Same as 08:00 above]
+    └──enhances-with──> [08:00 summary JSONB from daily_summaries (differentiator)]
 
-[Inline Editing]
-    └──requires──> [Approval Dashboard]
-    └──requires──> [Draft storage (JSONB alternatives array)]
+[Web feed at /]
+    └──requires──> [GET /summaries API endpoint (new)]
+    └──requires──> [daily_summaries table with content JSONB (new)]
+    └──requires──> [React feed page replacing /queue (new)]
 
-[Deduplication / Related Cards]
-    └──requires──> [Senior Agent]
-    └──requires──> [Both Twitter Agent AND Instagram Agent running]
+[30-day prune cron]
+    └──requires──> [daily_summaries table (new)]
+    └──independent-of──> [summary generation — runs on separate schedule]
 
-[Event Mode]
-    └──requires──> [Twitter Agent: baseline engagement tracking]
-    └──enhances──> [Senior Agent: queue cap management] (cap may need to flex during event mode)
+[Ontario Laws section — real content]
+    └──requires──> [Ontario Newsroom RSS ingestion (new)]
+    └──requires──> [NRCan news RSS ingestion (new)]
+    └──requires──> [Sonnet laws relevance filter (new)]
 
-[Infographic Generation]
-    └──requires──> [Content Agent: story pipeline]
-    └──requires──> [Format decision logic]
+[Ontario Stats section — real content]
+    └──requires──> [StatCan "The Daily" RSS monitor (new)]
+    └──requires──> [StatCan WDS API call on release day (new)]
 
-[Performance-Driven Learning Loop]
-    └──requires──> [Run logs]
-    └──requires──> [Approval state tracking (what got approved vs rejected)]
-    └──requires──> [External engagement tracking (what performed online)]
-    (Defer to v2 — dependency chain is longest, value requires historical data)
+[Empty-state copy for Laws + Stats]
+    └──requires──> [daily_summaries table queryable for last non-empty section (new)]
 
-[Settings Page: Scoring Parameters]
-    └──enhances──> [Twitter Agent scoring]
-    └──enhances──> [Instagram Agent scoring]
-    └──enhances──> [Content Agent quality threshold]
+[Cross-summary continuity — differentiator]
+    └──requires──> [08:00 daily_summaries row committed before 12:00 cron fires]
+    └──requires──> [JSONB structure storing section content separately (new schema decision)]
 
-[Agent Self-Evaluation]
-    └──requires──> [Quality rubric definition]
-    └──requires──> [Claude API integration]
-    └──feeds into──> [Senior Agent queue management] (only quality-cleared items reach queue)
-
-[Event Mode] ──conflicts-with──> [Queue Hard Cap 15]
-    (Resolution: event mode temporarily expands cap to handle 8-10 posts during spike windows)
+[Source attribution per bullet]
+    └──requires──> [story.source_name + story.published stored in summary JSONB alongside each bullet (new schema field)]
+    └──independent-of──> [dedup — attribution happens after dedup, not before]
 ```
 
 ### Dependency Notes
 
-- **Approval Dashboard requires Senior Agent:** The dashboard is a read layer on top of what Senior Agent has queued and scored. Senior Agent must exist before dashboard has anything to show.
-- **WhatsApp requires queue management:** Morning digest and breaking alerts are derived from queue state. No queue, no meaningful notifications.
-- **Performance-driven learning loop requires approval tracking + external data:** This is fundamentally a v2 feature. The feedback loop cannot close until there is historical data on what got approved and what performed well after posting.
-- **Event mode conflicts with hard cap:** The 15-item cap must yield during event mode (engagement spike / price movement), or the event will crowd out normal monitoring. Design the cap as "soft" during event windows.
-- **Deduplication requires both agents running:** Cross-platform story linking only becomes valuable once both X and Instagram agents are operational. In practice, this means it is a Phase 2 refinement, not a Phase 1 blocker.
+- **Ontario Laws ingestion is the only net-new pipeline complexity** — all other sections reuse existing
+  infrastructure (fetch_stories for Gold, StatCan API for Stats which is a simple HTTP call).
+- **30-day prune is independent** — does not need to coordinate with summary generation; safe to ship
+  in a separate phase and run from day one.
+- **Cross-summary continuity requires JSONB schema design** — the `daily_summaries` table must store
+  gold news bullets as a structured field, not just a rendered string, for the 12:00 Sonnet call to
+  reference them. This is a schema decision to lock early.
+- **WhatsApp failure alert requires APScheduler error hook** — APScheduler v3 supports `add_listener`
+  with `EVENT_JOB_ERROR`; this is a small addition to the scheduler worker, not a new service.
 
 ---
 
-## MVP Definition
+## MVP Definition for v2.0
 
-### Launch With (v1)
+### Must Ship
 
-Minimum viable product — what is needed for the operator to actually use the system daily.
+- [ ] `daily_summaries` table with `id`, `fired_at`, `summary_type` (08:00/12:00), `content` (JSONB), `whatsapp_sent` bool
+- [ ] `daily_summary` APScheduler job: 08:00 PT + 12:00 PT CronTrigger
+- [ ] Gold News section: pass top-5 stories from fetch_stories() to Sonnet; return headline + 3 bullets + source attribution
+- [ ] Ontario Laws ingestion: Ontario Newsroom RSS + NRCan RSS + SerpAPI query; Sonnet relevance filter
+- [ ] Ontario Stats ingestion: StatCan "The Daily" RSS monitor; StatCan WDS API call on release day
+- [ ] Empty-state copy for all three sections (strings, not magic — just correct copy in the prompt)
+- [ ] "No major moves since 08:00" template for 12:00 gold section on slow days
+- [ ] `GET /summaries` — returns latest 30 days of summary cards, paginated
+- [ ] React feed page at `/` — vertical scroll, one card per summary, three sections rendered
+- [ ] WhatsApp delivery: send formatted summary on successful fire
+- [ ] WhatsApp failure alert: send alert on APScheduler `EVENT_JOB_ERROR` for daily_summary job
+- [ ] 30-day prune cron: delete `daily_summaries` rows where `fired_at < now() - interval '30 days'`
 
-- [ ] Twitter Agent: monitoring, scoring, engagement gate, watchlist bypass, draft alternatives (reply + RT-with-comment), recency decay
-- [ ] Instagram Agent: monitoring, scoring, engagement gate, draft alternatives (comment only, no hashtags)
-- [ ] Content Agent: RSS ingest, SerpAPI search, deep research pass, format decision, quality threshold (7.0/10), thread + single-post dual format
-- [ ] Senior Agent: queue management, deduplication, expiry, hard cap 15, priority scoring
-- [ ] Approval Dashboard: feed/timeline layout, approval cards with full context, approve/edit+approve/reject, inline editing, copy-to-clipboard, direct link
-- [ ] WhatsApp notifications: morning digest, breaking news alert, expiry alert
-- [ ] Agent self-evaluation quality gate
-- [ ] Settings page: watchlist, keywords, scoring parameters, run logs, notification prefs, agent schedule
-- [ ] Simple password authentication
-- [ ] Run logging per agent execution
+### Ship After Core is Validated
 
-### Add After Validation (v1.x)
+- [ ] Cross-summary continuity: pass 08:00 gold bullets into 12:00 Sonnet context
+- [ ] Section anchor links in web feed (`#gold-news`, `#ontario-laws`, `#ontario-stats`)
+- [ ] "Last updated" pointer in empty-state sections (query for last non-empty section row)
+- [ ] Click-through source URLs per bullet in web feed
 
-Features to add once core workflow is proven useful.
+### Never Ship (v2.0 and beyond)
 
-- [ ] Event mode (engagement spike + price movement) — add once baseline engagement data exists to define "3x normal"
-- [ ] Infographic generation — add once Content Agent story pipeline is calibrated and producing consistent quality
-- [ ] Performance-driven learning loop — requires several weeks of approval data before the feedback signal is meaningful
-- [ ] Deduplication visual linking — implement after both agents have been running for several cycles; the pattern will be obvious from real data
-
-### Future Consideration (v2+)
-
-Features to defer until product-market fit is established.
-
-- [ ] Analytics dashboard — requires enough historical data for trends to be meaningful; all data is retained so this is purely a build decision
-- [ ] Multi-client platform (multi-tenancy) — refactor only when a second client exists
-- [ ] LinkedIn agent — only if X + Instagram prove insufficient signal
-- [ ] Two-way WhatsApp approval — reconsider if operator friction on approval workflow proves to be the primary bottleneck
+- [ ] User comments, sharing, public access to feed
+- [ ] Multi-user / multi-operator support
+- [ ] Custom keyword configuration per section
+- [ ] Notification channels beyond WhatsApp
+- [ ] Archival beyond 30 days
+- [ ] Auto-posting summaries to social media
 
 ---
 
-## Feature Prioritization Matrix
+## Phase Sequencing Recommendation
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Twitter Agent monitoring + scoring + drafting | HIGH | MEDIUM | P1 |
-| Instagram Agent monitoring + scoring + drafting | HIGH | MEDIUM | P1 |
-| Content Agent story pipeline | HIGH | HIGH | P1 |
-| Approval Dashboard (cards, state machine, inline edit) | HIGH | MEDIUM | P1 |
-| Senior Agent (queue, dedup, expiry, cap) | HIGH | MEDIUM | P1 |
-| Agent self-evaluation quality gate | HIGH | LOW | P1 |
-| WhatsApp notifications | HIGH | LOW | P1 |
-| Settings page (watchlist, keywords, thresholds) | HIGH | MEDIUM | P1 |
-| Simple authentication | HIGH | LOW | P1 |
-| Run logging | MEDIUM | LOW | P1 |
-| Event mode | HIGH | HIGH | P2 |
-| Infographic generation | MEDIUM | HIGH | P2 |
-| Performance-driven learning loop | HIGH | HIGH | P2 |
-| Deduplication visual linking | MEDIUM | MEDIUM | P2 |
-| Analytics dashboard | MEDIUM | HIGH | P3 |
-| Multi-tenancy | LOW | HIGH | P3 |
-| LinkedIn agent | LOW | MEDIUM | P3 |
+**Phase 1 (foundation):** `daily_summaries` table + `daily_summary` cron stub + Gold News section + WhatsApp delivery + failure alert + 30-day prune. The cron fires, produces a Gold News card, delivers to WhatsApp. Ontario sections are placeholders ("Coming soon").
 
-**Priority key:**
-- P1: Must have for launch
-- P2: Should have, add when possible
-- P3: Nice to have, future consideration
+**Phase 2 (complete the card):** Ontario Laws ingestion + Sonnet filter + Ontario Stats ingestion + empty-state copy for all sections. Now the full three-section card works.
 
----
+**Phase 3 (web feed):** `GET /summaries` endpoint + React feed page replacing /queue. Now the operator has a reading surface beyond WhatsApp.
 
-## Competitor Feature Analysis
+**Phase 4 (polish):** Cross-summary continuity, anchor links, click-through URLs, "last updated" pointers.
 
-This system is a custom-built, single-operator product. The relevant comparators are the general-purpose tools the operator would otherwise use.
-
-| Feature | Sprout Social | Hootsuite | This System |
-|---------|--------------|-----------|-------------|
-| Multi-platform monitoring | Yes (30+ platforms) | Yes (30+ networks) | X + Instagram (niche focus) |
-| Engagement scoring | Basic (raw engagement metrics) | Basic (raw engagement metrics) | Custom-weighted: engagement x decay x topic relevance |
-| Industry-specific relevance scoring | No | No | Yes — gold sector relevance layer on every post |
-| Approval workflow | Yes (multi-step, team-based) | Yes (lighter, enterprise tier only) | Yes (single-operator, inline edit, copy-to-clipboard) |
-| AI draft alternatives | 1 suggestion (Sprout AI helper) | 1 suggestion (OwlyWriter AI) | 2-3 alternatives per post, dual format (reply + RT) |
-| Content Agent (proactive story creation) | No | No | Yes — RSS + SerpAPI + deep research + format decision |
-| Recency decay on queue items | No | No | Yes — configurable decay curve |
-| Hard queue cap | No | No | Yes — 15 items, priority-ranked |
-| WhatsApp notifications | No (email/Slack) | No (email/Slack) | Yes — Twilio WhatsApp |
-| Event mode (price spike response) | No | No | Yes — 3x engagement spike OR gold price movement |
-| "No story today" quality gate | No (always produces output) | No | Yes — 7.0/10 threshold with explicit flag |
-| Auto-posting | Yes (core feature) | Yes (core feature) | Deliberately excluded |
-| Multi-platform publishing | Yes | Yes | Out of scope (operator posts manually) |
-| Team collaboration | Yes | Yes | Out of scope (single operator) |
-| Analytics | Yes (deep) | Yes (moderate) | Deferred to v2 |
-| Pricing | $249/mo+ | $99/mo+ | ~$255-275/mo (operating costs, no license fee) |
+**Rationale:** Phase 1 delivers the highest-value piece (gold news on WhatsApp) immediately. Phase 2 completes the card. Phase 3 adds the web surface. Phase 4 adds differentiators. The dependency chain is linear — each phase is independently shippable.
 
 ---
 
 ## Sources
 
-- [12 Best AI Agents for Social Media Management in 2026 — ema.ai](https://www.ema.ai/additional-blogs/addition-blogs/best-social-media-ai-agents)
-- [Best AI Social Media Automation Tools in 2026 — Enrich Labs](https://www.enrichlabs.ai/blog/best-ai-social-media-automation-tools)
-- [Top 10 Social Listening Platforms for 2026 — Pulsar Platform](https://www.pulsarplatform.com/blog/2025/best-social-listening-tools-2026)
-- [13 Best Social Media Listening Tools for 2026 — Nextiva](https://www.nextiva.com/blog/social-media-listening-software.html)
-- [Content Approval Workflows Guide 2026 — InfluenceFlow](https://influenceflow.io/resources/content-approval-workflows-a-complete-guide-for-2026-1/)
-- [Building Human-In-The-Loop Agentic Workflows — Towards Data Science](https://towardsdatascience.com/building-human-in-the-loop-agentic-workflows/)
-- [Hootsuite vs Sprout Social 2026 — Planable](https://planable.io/blog/hootsuite-vs-sprout-social/)
-- [Sprout Social Review 2026 — Copywriters Now](https://copywritersnow.com/sprout-social-review/)
-- [The Social Media Metrics to Track in 2026 — Sprout Social](https://sproutsocial.com/insights/social-media-metrics/)
-- [Social Media Engagement in 2025: An Expanded Overview — Global Banking and Finance](https://www.globalbankingandfinance.com/social-media-engagement-in-2025-an-expanded-overview/)
-- [Social Media Mistakes to Avoid in 2025 — Metricool](https://metricool.com/biggest-social-media-mistakes/)
-- [Top 5 Social Media Pitfalls to Avoid in 2025 — Vista Social](https://vistasocial.com/insights/5-social-media-pitfalls-to-avoid-in-2025/)
-- [Brand Safety on Social Media in 2025 — eMarketer](https://www.emarketer.com/content/brand-safety-on-social-media-2025)
-- [2026 State of Content Workflows — Averi AI](https://www.averi.ai/guides/2026-state-content-workflows)
-- [AI in Social Media: Everything You Need to Know for 2026 — Metricool](https://metricool.com/ai-social-media-marketing/)
+- [StatCan Table 16-10-0019-01 — Monthly Mineral Production, metallic minerals](https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1610001901)
+- [StatCan WDS API documentation](https://www.statcan.gc.ca/en/developers/wds/user-guide)
+- [StatCan "The Daily" — Monthly Mineral Production, February 2026 (released Apr 20, 2026)](https://www150.statcan.gc.ca/n1/daily-quotidien/260420/dq260420c-eng.htm)
+- [StatCan Annual Mineral Production Survey 2024 (released Feb 25, 2026)](https://www150.statcan.gc.ca/n1/daily-quotidien/260225/dq260225f-eng.htm)
+- [NRCan Annual Statistics of Mineral Production](https://mmsd.nrcan-rncan.gc.ca/prod-prod/ann-ann-eng.aspx)
+- [NRCan RSS Feeds](https://natural-resources.canada.ca/corporate/rss-feeds)
+- [Ontario Newsroom](https://news.ontario.ca/releases/en)
+- [Ontario Legislative Assembly — Current Bills](https://www.ola.org/en/legislative-business/bills/current)
+- [CanLII RSS Feeds](https://www.canlii.org/rss)
+- [CanLII — Ontario Mining Act RSO 1990 c M.14 (latest amendment: 2025, c. 17, Sched. 1)](https://www.canlii.org/en/on/laws/stat/rso-1990-c-m14/latest/rso-1990-c-m14.html)
+- [Ontario Mining Association News](https://www.oma.on.ca/news/)
+- [OMA State of Ontario Mining Sector Report 2025](https://www.oma.on.ca/media/jy3f0tgd/oma-economic-published-march-2025-final.pdf)
+- [Mining Association of Canada Resources](https://mining.ca/resources/)
+- [Ontario ERO — Mining Act Notice](https://ero.ontario.ca/notice/025-0409)
+- [Bill 5 analysis — DLA Piper](https://www.dlapiper.com/en-us/insights/publications/2025/06/what-foreign-mining-investors-should-know-about-ontario-bill-5)
+- [Axios Smart Brevity format description](https://help.axios.com/hc/en-us/articles/36222626161435-What-is-the-Axios-Smart-Brevity-style)
+- [OGS Mineral Exploration Activity Reports](https://www.geologyontario.mndm.gov.on.ca/mines/ogs/rgp/mer_listing_e.html)
+- [NRCan Mining Data, Statistics and Analysis](https://natural-resources.canada.ca/minerals-mining/mining-data-statistics-analysis)
 
 ---
 
-*Feature research for: AI social media monitoring and engagement drafting system (gold sector)*
-*Researched: 2026-03-30*
+*Feature research for: v2.0 Daily Summary Feed — Seva Mining*
+*Researched: 2026-05-05*

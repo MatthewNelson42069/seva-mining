@@ -1,246 +1,269 @@
-# Project Research Summary
+# Research Summary — v2.0 Daily Summary Feed
 
-**Project:** Seva Mining — AI Social Media Monitoring and Engagement Drafting System
-**Domain:** AI-powered social listening, content drafting, and human-in-the-loop approval workflow (gold/mining sector)
-**Researched:** 2026-03-30
-**Confidence:** HIGH
+**Project:** Seva Mining — AI Social Media Agency
+**Milestone:** v2.0 Daily Summary Feed
+**Researched:** 2026-05-05
+**Confidence:** HIGH (stack + architecture), MEDIUM (Ontario law sources), HIGH (StatCan stats cadence)
+
+---
 
 ## Executive Summary
 
-Seva Mining requires a custom-built, single-operator social intelligence system that monitors X (Twitter) and Instagram for gold sector conversations, drafts AI-generated engagement responses, and routes them through a human approval workflow before manual posting. This is a well-understood problem class — a "human-in-the-loop agentic pipeline" — with established architectural patterns: an orchestrator-worker multi-agent system backed by a shared PostgreSQL database, a separate scheduler process, and a lightweight React approval dashboard. The stack is almost entirely pre-decided: FastAPI backend on Railway, APScheduler worker (separate process), Neon PostgreSQL, React 19 + Vite + Tailwind v4 frontend on Vercel, and Claude API for all LLM operations. The total operating cost is approximately $255-275/mo, directly competitive with Sprout Social ($249/mo+) while delivering capabilities generic tools cannot provide: gold-sector relevance scoring, recency decay curves, dual-format drafting, and a proactive Content Agent with deep research.
+The v2.0 pivot replaces the 6-sub-agent approval dashboard with a 2x-daily structured summary feed delivered via WhatsApp and a minimal web feed. The product is a personal intelligence digest — not a broadcast tool — and that framing drives every architectural decision: single DB table, read-only API, teaser-style WhatsApp notification pointing to the web feed as the primary reading surface. The existing stack (fetch_stories, APScheduler CronTrigger, Twilio, FastAPI, React 19) handles 90% of the work; net-new installs are exactly two npm packages (react-markdown, rehype-sanitize) and zero pip packages.
 
-The recommended approach is a sequential build ordered by dependency graph: database schema first (everything depends on it), then FastAPI backend skeleton, then React dashboard (so the human workflow is testable before agents produce real data), then the scheduler worker, then agents in ascending complexity order (Twitter → Senior Agent core → Instagram → Content Agent). This ordering ensures every layer is verifiable before the next is added. The single most important architectural decision — already made correctly — is running APScheduler as a completely separate Railway service, not embedded in the FastAPI process. This prevents crash coupling, duplicate execution, and worker-count scheduler multiplication.
+The critical implementation risk is not the technology — it is the Ontario law section. No clean machine-readable feed delivers "Ontario just passed a mining-favourable law." The recommended approach is Ontario Newsroom RSS + NRCan RSS + a SerpAPI fallback, all routed through a Haiku relevance filter with explicit REJECT examples for political speech. Without the negative examples the filter will accept ministerial speeches as laws. The Ontario stats section is a solved problem operationally: StatCan Table 16-10-0019-01 releases monthly (~19th-21st of M+2), so the correct design treats the empty state as the default, not an edge case. The stat snapshot (last_known_figure, snapshot_date) must be stored in daily_summaries.raw_sources_jsonb.ontario_stats.snapshot_date so the empty-state copy can always render "data through {YYYY-MM}" without re-querying StatCan.
 
-The key risks are operational, not architectural. X Basic API's 10,000 monthly tweet read cap will be exhausted in days without explicit budget tracking and hard-stop logic. Instagram scraping via Apify returns empty results silently when throttled, masking a real data gap as a quiet day. Claude will produce draft language that subtly implies financial advice unless a separate compliance checker Claude call (not the same prompt as draft generation) enforces the "no financial advice, no Seva mention" rules structurally. Twilio WhatsApp requires Meta-approved message templates for all production notifications — designing this at the end of development rather than the beginning blocks go-live. All four of these risks have concrete mitigations defined in research; they must be designed in from the start, not retrofitted.
+The recommended build order — gold-only summary card + WhatsApp + minimal web feed first, then Ontario law, then Ontario stats, then prune — delivers user-visible value at the end of every phase. The alternative (ARCHITECTURE.md's original 6-phase split that deferred the web feed to Phase 3 after Ontario law) would make the operator wait 3 phases before seeing anything in a browser. Shipping the web feed alongside the gold-only card in Phase 1 costs only a few additional frontend files and unlocks the reading surface immediately.
+
+---
+
+## Recommended Stack Additions
+
+The existing validated stack is unchanged. These are the only additions:
+
+| Addition | Type | Verdict | Rationale |
+|----------|------|---------|-----------|
+| react-markdown ^10.1.0 | npm | ADD | Claude returns markdown; split-on-newline loses heading hierarchy; AST pipeline, never dangerouslySetInnerHTML |
+| rehype-sanitize ^6.0.0 | npm | ADD | Pairs with react-markdown; sanitises HTML nodes at AST level before DOM; defence-in-depth for LLM output |
+| zoneinfo (stdlib) | Python 3.12 | ALREADY PRESENT | Use ZoneInfo("America/Los_Angeles") for CronTrigger; do NOT pass pytz zones (triggers APScheduler DST bug) |
+| feedparser (existing) | pip | NO NEW INSTALL | Add two new feed URLs; no new library needed |
+| httpx (existing) | pip | NO NEW INSTALL | StatCan WDS is a public JSON REST API; existing httpx handles it identically to fetch_article() |
+
+Install command (frontend only):
+  npm install react-markdown rehype-sanitize
+
+What NOT to add: Celery, ARQ, APScheduler 4.0 alpha, marked, markdown-to-jsx (CVE-2024-21535 XSS), DOMPurify (redundant given rehype-sanitize), remark-gfm (Claude will not emit GFM tables in summaries), pytz.
+
+---
 
 ## Key Findings
 
-### Recommended Stack
+### From STACK.md
 
-See `/Users/matthewnelson/seva-mining/.planning/research/STACK.md` for full details.
+The existing stack covers all v2.0 requirements without new backend dependencies. The Ontario Newsroom RSS URL is unconfirmed — attempt https://news.ontario.ca/newsroom/en?format=rss or https://news.ontario.ca/en/releases.rss at build time. The Ontario Regulatory Registry RSS is confirmed at https://www.ontariocanada.com/registry/rss.do?feedName=news. StatCan WDS endpoint pattern is GET https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods/{vectorId}/1 — unauthenticated, existing httpx handles it. APScheduler CronTrigger(hour="8,12", minute=0, timezone="America/Los_Angeles") is correct; 08:00 and 12:00 are well outside the DST-ambiguous 01:00-02:00 window. WhatsApp teaser design (< 400 chars, link to web feed) sidesteps the 1600-char Twilio hard cap entirely.
 
-The stack pairs a Python async backend with a modern React frontend. Two Railway services share one Neon PostgreSQL database — the only coupling point. All LLM operations use the `anthropic` SDK with `AsyncAnthropic`. Instagram is handled exclusively via Apify managed scraping (not direct scraping, which violates Instagram ToS and breaks constantly). X monitoring uses Tweepy v2 with the Basic API tier. The scheduler uses APScheduler 3.11.2 stable — version 4.x alpha must be avoided.
+### From FEATURES.md
 
-**Core technologies:**
-- FastAPI 0.135.1 + Python 3.12: async-first API framework, auto OpenAPI docs, Pydantic v2 native
-- APScheduler 3.11.2 (separate Railway worker): cron-based agent scheduling, single-process isolation mandatory
-- SQLAlchemy 2.0 + asyncpg + Alembic: async ORM with migration discipline; `create_async_engine` only, never sync
-- Neon PostgreSQL 16 (managed): free tier sufficient for v1; PgBouncer connection pooling via `-pooler` endpoint
-- anthropic 0.86.0 (`AsyncAnthropic`): all Claude calls — scoring, drafting, evaluation, compliance checking
-- apify-client 2.5.0: Instagram scraping via managed Apify Actors; handles bot detection, proxy rotation
-- tweepy 4.x (`Client`, not legacy `API` class): X API v2 read-only monitoring
-- React 19 + Vite 6 + Tailwind CSS 4: single-user approval dashboard, shadcn/ui components (tailwind-v4 branch)
-- TanStack Query 5 + Zustand 5: server state (React Query) and UI state (Zustand) cleanly separated
-- Twilio 9.x: outbound-only WhatsApp notifications (digest + breaking alerts)
+Must ship in v2.0:
+- daily_summary cron at 08:00 PT + 12:00 PT with daily_summaries table
+- Three-section card: Gold News / Ontario Laws / Ontario Stats
+- Gold News from fetch_stories() (score >= 6.0, top 5 stories) — reuse as-is
+- Ontario Laws: Ontario Newsroom RSS + NRCan RSS + SerpAPI tertiary; Haiku relevance filter
+- Ontario Stats: StatCan "The Daily" RSS trigger + WDS API call on release day; monthly cadence
+- Empty-state copy for all three sections (the default for Ontario Stats and Laws on most days — not an edge case)
+- "No major moves since 08:00" template for 12:00 gold section on slow days
+- GET /summaries endpoint — 30 days x 2 per day = 60 rows max
+- Web feed at / — vertical scroll, replaces /queue
+- WhatsApp teaser delivery on each fire + failure alert on cron error
+- 30-day auto-prune cron
 
-**Critical version constraints:**
-- APScheduler: 3.11.2 only — v4.x alpha has breaking API changes
-- shadcn/ui: tailwind-v4 branch only — main branch targets Tailwind v3
-- SQLAlchemy: v2 patterns only — v1 `Session` blocks the async event loop
-- Tailwind CSS 4: use `@tailwindcss/vite` plugin, not PostCSS
+Ship after core is validated (v2.0 differentiators):
+- Cross-summary continuity: pass 08:00 gold bullets into 12:00 Sonnet context (eliminates same-story repetition and enables narrative arc)
+- Section anchor links (#gold-news, #ontario-laws, #ontario-stats)
+- "Last updated" pointer in empty-state sections
+- Click-through source URLs per bullet
 
-### Expected Features
+Never ship:
+- User comments, sharing, public access, multi-user, custom keywords, additional notification channels, archival beyond 30 days, auto-posting summaries
 
-See `/Users/matthewnelson/seva-mining/.planning/research/FEATURES.md` for full details.
+StatCan cadence resolution (FEATURES.md supersedes STACK.md): Table 16-10-0019-01 (Monthly Mineral Production, metallic minerals) releases monthly, approximately the 19th-21st of M+2. Confirmed release dates: April 2025 data released June 20 2025; September 2025 data released November 20 2025; February 2026 data released April 20 2026. STACK.md referenced Table 16-10-0022 (annual data). Use Table 16-10-0019-01 (monthly). Empty-state copy must show "data through {YYYY-MM}" with snapshot_date stored in daily_summaries.raw_sources_jsonb.ontario_stats.snapshot_date.
 
-**Must have (table stakes) — all required for launch:**
-- Twitter Agent: keyword/hashtag/cashtag monitoring, engagement gate (500+ likes), recency decay, dual-format drafting (reply + RT-with-comment), watchlist bypass
-- Instagram Agent: Apify-based monitoring, engagement gate (200+ likes), comment draft alternatives
-- Content Agent: RSS ingest, SerpAPI news search, deep research pass, format decision (thread/single/infographic brief), 7.0/10 quality threshold
-- Senior Agent: queue management, deduplication, 15-item hard cap with priority scoring, auto-expiry, WhatsApp dispatch
-- Approval Dashboard: platform-tabbed feed layout, approval cards with full context, inline editing, approve/edit+approve/reject with mandatory rejection reason, copy-to-clipboard, direct link to source
-- Agent self-evaluation quality gate: separate compliance Claude call (not same prompt as generation) enforcing "no financial advice, no Seva mention" rules
-- WhatsApp notifications: morning digest, breaking news alert, expiring draft alert (all as pre-approved Meta templates)
-- Settings page: watchlist management, keyword configuration, scoring weights, agent schedule, run logs
-- Simple password auth: bcrypt hashed password in environment variable, JWT session tokens
+### From ARCHITECTURE.md
 
-**Should have (differentiators — add after core validation):**
-- Event mode: engagement spike (3x baseline) or gold price movement trigger; temporarily expands 15-item cap
-- Infographic brief generation: structured visual content briefs for data-heavy Instagram posts
-- Deduplication visual linking: cross-platform "related" card badges with story fingerprint matching
-- Performance-driven learning loop: approval tracking feeding back into scoring weight adjustment
+New files are well-bounded: one migration (0010), dual SQLAlchemy models (scheduler + backend parity — a confirmed pattern), one FastAPI router (GET-only, auth-gated, modelled after digests.py), one agent module (daily_summary.py) calling three section builders, two ingestion modules (ontario_law.py, ontario_stats.py), and four frontend files (feed page, API hook, SummaryCard, SectionBlock). Modified files: worker.py (add lock IDs + job registrations), main.py (one include_router call), App.tsx (replace / redirect, add /queue redirect). Single CronTrigger with hour="8,12" fires the same lock ID (1017) twice daily — intentional; the 4-hour gap makes lock collision impossible.
 
-**Defer (v2+):**
-- Analytics dashboard — requires weeks of historical data before trends are meaningful
-- Multi-tenancy — build only when second client exists
-- LinkedIn agent — add only if X + Instagram signal proves insufficient
-- Two-way WhatsApp approval — reconsider only if dashboard friction proves to be the primary bottleneck
+DB schema locked decisions:
+- daily_summaries has separate TEXT columns per section (gold_news_md, ontario_law_md, ontario_stats_md) plus raw_sources_jsonb JSONB for forensics
+- status as VARCHAR(20) with CHECK constraint (completed | failed | partial) — not a PG enum
+- agent_run_id UUID FK -> agent_runs(id) ON DELETE SET NULL
+- Single index on (generated_at DESC) — table max 60 rows
 
-**Explicit anti-features (never implement):**
-- Auto-posting to any platform — brand and compliance risk in gold/finance space cannot be mitigated by any confidence threshold
-- Mobile-responsive dashboard — desktop-only v1; WhatsApp handles mobile touchpoints
+### From PITFALLS.md
 
-### Architecture Approach
+1. CRIT-1 — Duplicate WhatsApp from midday_digest + daily_summary both registered. In the SAME commit that registers daily_summary, remove the scheduler.add_job(...) call for midday_digest from build_scheduler(). Factory and lock ID entry can remain as dead code. Verify: midday_digest absent from scheduler.get_jobs() in startup logs.
 
-See `/Users/matthewnelson/seva-mining/.planning/research/ARCHITECTURE.md` for full details.
+2. CRIT-2 — Lock ID collision. ARCHITECTURE.md verified via direct grep that 1017 and 1018 are the next free IDs. PITFALLS.md proposed 1020 + 1021 with a buffer. Locked pick: 1017 (daily_summary) + 1018 (daily_summary_prune). Add startup assertion: assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS).
 
-The system uses an orchestrator-worker hub-and-spoke pattern: Twitter, Instagram, and Content agents are independent workers that produce scored candidate drafts; Senior Agent is the sole orchestrator handling cross-cutting concerns (dedup, queue cap, expiry, notifications). All agents run in the same scheduler worker process — they communicate via function calls, not queues. The PostgreSQL database is the only integration point between the scheduler worker and the FastAPI API server. No message broker is needed at this volume. The React dashboard is a pure read/write layer against the FastAPI REST API; all truth lives in the database.
+3. CRIT-3 — Multiple fires during Railway restart churn. APScheduler misfire_grace_time=1800 causes a fresh scheduler instance to fire a coalesced missed run. Three flappy restarts in the 08:00 window = three summaries + three WhatsApp messages. Fix: DB-level idempotency guard in run_daily_summary() — query for any row where generated_at >= now - 30min AND status IN ('running', 'completed'); if found, skip and log.
 
-**Major components:**
-1. Scheduler Worker (Railway service 1) — APScheduler cron triggers, four agent modules, shared DB writes
-2. FastAPI Backend (Railway service 2) — REST API for dashboard, auth middleware, status transition enforcement, Twilio outbound
-3. Neon PostgreSQL — drafts (JSONB alternatives array), watchlists, agent_runs, settings tables
-4. React Dashboard (Vercel) — tabbed approval interface, settings management, read-only against FastAPI
-5. Claude API — called by all four agents for scoring, drafting, self-evaluation, and compliance checking
+4. HIGH-1/HIGH-2 — Ontario law filter false positives AND false negatives. False positives: political speech accepted as enacted law. False negatives: cross-domain bills with non-obvious names (e.g., "Building Ontario Act" amends the Mining Act). Fix: use Haiku (not Sonnet), pass article body (first 1500 chars), include explicit REJECT examples, require bill_or_reg_number in structured JSON response, add synthetic test case before merge.
 
-**Key patterns:**
-- State machine on draft lifecycle: `pending` → `approved` | `edited_approved` | `rejected` | `expired`; transitions enforced at API layer with rejection reason required
-- JSONB array for draft alternatives: single-row fetch per card, no child table join
-- Scheduler reads settings from DB on every run: never caches config in memory, so settings changes take effect on next run without restart
-- Senior Agent calls Twilio SDK directly: avoids unnecessary HTTP round-trip through API server for outbound notifications
+5. HIGH-5 — WhatsApp > 1600 chars. Do NOT use build_chunks() for daily_summary delivery. Send a teaser (< 400 chars) with link to web feed. Log len(teaser_message) and assert < 400.
 
-### Critical Pitfalls
+---
 
-See `/Users/matthewnelson/seva-mining/.planning/research/PITFALLS.md` for full details.
+## Phase Build Order
 
-1. **X Basic API 10,000 tweet/month cap exhaustion** — Budget by tweet reads (not search calls); implement monthly quota counter in DB; hard-stop Twitter Agent at 500 remaining with dashboard alert and WhatsApp notification; deduplicate tweet IDs to prevent re-fetching; cap event mode fetch at 150 tweets per run.
+Recommended: 4 phases. This merges ARCHITECTURE.md's original 6 phases into a delivery cadence where every phase produces something the operator can use immediately.
 
-2. **Instagram Apify scraper silent partial/empty results** — Compare result counts against per-hashtag baselines stored in DB; flag zero-result runs as scraper health events (not valid empty days); implement retry once at +2h; stagger run timing ±15 minutes; pin Apify Actor versions and update deliberately.
+The core disagreement between ARCHITECTURE.md (6 phases: DB+API -> agent + gold news -> frontend -> Ontario law -> Ontario stats -> prune) and FEATURES.md (4 phases: gold news + WhatsApp -> Ontario both -> web feed -> polish) is about when to ship the web feed. ARCHITECTURE.md defers frontend to Phase 3. FEATURES.md defers Ontario sections so web feed ships earlier.
 
-3. **Claude compliance violations despite prompt instructions** — Run a separate second Claude call as a compliance checker after draft generation (never in the same prompt); define "no financial advice" and "no Seva mention" with concrete example violations; track compliance rejection rate in run logs; alert if rate exceeds 2 rejections in a single run.
+The correct order: Ship the gold-only summary card to WhatsApp + a minimal web feed in Phase 1. Ontario sections are independent of the web feed rendering — they are TEXT columns in the same table and SectionBlock components on the same card. The feed renders whatever columns are non-null and shows empty states for null ones. Combining DB + API skeleton + agent (gold-only) + frontend into one phase adds only a few frontend files beyond ARCHITECTURE.md's Phase 1+2 combined.
 
-4. **APScheduler duplicate execution during Railway deploys** — Separate scheduler worker (already designed correctly); configure Railway replica count to exactly 1 with autoscaling disabled; add DB-level job lock (TTL row written before each agent run) as defense-in-depth.
+---
 
-5. **Twilio WhatsApp sandbox masks production template requirements** — Design all three notification types as WhatsApp message templates from day one; submit to Meta for approval during Phase 1 infrastructure (approval takes 1-7 business days); never treat sandbox success as production validation.
+### Phase 1: Gold News Card + Web Feed (Shippable Slice)
 
-6. **Content quality threshold drift** — Store quality score + rationale for every draft permanently; track weekly approval rate in Settings page; include 3-5 "gold standard" example stories as scoring anchors in the rubric prompt; treat the compliance checker prompt as a system constraint, not a tunable parameter.
+Rationale: Ship the highest-value piece end-to-end in one phase. Ontario sections appear as empty states. The operator can use the product on day 1 of this phase completing.
 
-7. **Senior Agent cross-platform deduplication context loss** — Extract structured story fingerprints via Claude (`{event, direction, level}`) for each incoming item; store in JSONB column; match against fingerprints from last 24-48h window, not full text; if fingerprint extraction is uncertain, queue both items without "related" link rather than silently dropping either.
+Delivers:
+- Migration 0010: daily_summaries table (hand-written, no --autogenerate)
+- Dual SQLAlchemy models (scheduler + backend)
+- GET /summaries FastAPI router (auth-gated, returns real rows)
+- Pydantic schemas with RawSource Pydantic model for JSONB write validation
+- scheduler/agents/daily_summary.py — run_daily_summary() + _build_gold_news_section() (real fetch_stories(), score >= 6.0, top 5); Ontario section builders are stubs
+- scheduler/worker.py — lock IDs 1017 + 1018, _make_daily_summary_job factory, daily_summary CronTrigger registered, midday_digest registration REMOVED in same commit
+- WhatsApp teaser delivery (< 400 chars, link to feed) + failure alert hook wrapped in its own try/except
+- frontend/src/api/summaries.ts + useSummaries() hook with refetchInterval: 5 * 60 * 1000
+- SectionBlock.tsx + SummaryCard.tsx (react-markdown + rehype-sanitize)
+- SummaryFeedPage.tsx
+- App.tsx — / wired to feed page, /queue -> / redirect
 
-## Implications for Roadmap
+Pitfalls addressed: CRIT-1, CRIT-2, CRIT-3, CRIT-4, HIGH-4, HIGH-5, MOD-2, MOD-3, MOD-4, MOD-5, MOD-6, MIN-1, MIN-3
 
-Based on research, the dependency graph dictates a clear build order. Each phase delivers a verifiable layer before the next is added. The critical insight from architecture research is: build the human workflow (database schema, API, dashboard) before building agents, so there is a testable interface before any automated output exists.
+Research flag: SKIP research-phase — architecture researcher verified source files directly.
 
-### Phase 1: Infrastructure and Foundation
-**Rationale:** Everything else depends on the database schema and deployment configuration. Twilio WhatsApp template approval takes 1-7 business days — submission must happen here, not at the end. The DB job lock and Railway single-replica configuration for the scheduler must be established before any agent runs.
-**Delivers:** Complete database schema (all tables, JSONB structure, state enum, indexes), Alembic migration pipeline, Railway project configuration (two services), environment variables and secrets setup, Twilio WhatsApp templates submitted to Meta for approval, APScheduler worker skeleton with DB job lock.
-**Addresses:** Simple authentication, run logging infrastructure, environment configuration
-**Avoids:** APScheduler duplicate execution (Pitfall 4), Twilio production template block (Pitfall 6), API key exposure (security)
+---
 
-### Phase 2: FastAPI Backend Skeleton
-**Rationale:** The dashboard cannot function without the API. Auth middleware, draft CRUD, and the state machine transitions must exist before the React frontend has anything to render or act on.
-**Delivers:** Password auth (bcrypt + JWT), REST endpoints for drafts (GET, PATCH approve/reject/edit), settings CRUD, watchlist CRUD, agent run log queries, state machine transition enforcement with rejection reason requirement, Twilio outbound notification service.
-**Addresses:** State machine (approved/rejected/expired transitions), rejection reason mandatory capture, settings API
-**Avoids:** Auto-posting (never implement), raw prompt exposure via Settings API (security)
+### Phase 2: Ontario Law Ingestion
 
-### Phase 3: React Approval Dashboard
-**Rationale:** Build the human review interface against the API skeleton before agents produce real data. This makes the human workflow independently testable with seeded mock data. Inline editing, copy-to-clipboard, platform tabs, and expiry urgency indicators should all function correctly before any agent ever runs.
-**Delivers:** Tabbed approval interface (Twitter / Instagram / Content tabs), approval cards with full context display, inline editing with side-by-side source context, approve / edit+approve / reject actions, mandatory rejection reason dropdown, copy-to-clipboard with toast, direct source link, score component breakdown on hover, expiry countdown color indicator, Settings page UI.
-**Addresses:** Full approval card feature set, platform badges, account info, settings page, run logs view
-**Avoids:** Modal-based inline editor losing source context (UX Pitfall), missing visual distinction between reply and RT-with-comment alternatives (UX Pitfall)
+Rationale: Ontario law is the hardest new pipeline and the most time-sensitive (legislation appears any weekday the legislature is sitting). Ships before Ontario stats which is monthly and predictable.
 
-### Phase 4: Twitter Agent
-**Rationale:** X API is the most structured and predictable data source — best choice for first end-to-end pipeline test. Building Twitter Agent first validates the full pipeline (fetch → score → draft → queue) before adding more complex integrations.
-**Delivers:** X API v2 integration (OAuth 2.0 Bearer, keyword + watchlist search), engagement gate (500+ likes, watchlist 50+), recency decay curve, scoring formula, dual-format draft generation (reply + RT-with-comment alternatives), separate compliance checker Claude call, monthly quota counter and hard-stop logic, tweet ID deduplication in DB.
-**Addresses:** Twitter monitoring, dual-format drafting, agent self-evaluation quality gate, quota tracking
-**Avoids:** X API cap exhaustion (Pitfall 1) — quota counter MUST ship with this phase, not later
+Delivers:
+- scheduler/agents/ontario_law.py — fetch_ontario_law_hits(): Ontario Newsroom RSS (primary) + NRCan RSS (secondary) + SerpAPI tertiary
+- Haiku relevance filter: {"is_law": bool, "bill_or_reg_number": str|null, "reason": str, "favour_or_neutral": str}
+- ontario_law_filter_model config key defaulting to "claude-haiku-4-5"
+- Wire _build_ontario_law_section() in daily_summary.py (replace stub)
+- Synthetic test: "Building Ontario Act amends Mining Act" -> is_law=True
+- Empty-state copy: "No new Ontario mining-related laws today. Last update: {date} — {law_name}"
 
-### Phase 5: Senior Agent Core
-**Rationale:** Deduplication, queue cap enforcement, and expiry must exist before adding more agents to the queue — otherwise the second and third agents produce unchecked queue pollution.
-**Delivers:** Story fingerprint extraction via Claude, cross-platform deduplication logic (related vs. duplicate distinction), 15-item hard queue cap with priority score tiebreaking, auto-expiry sweep (Twitter: 6h, Instagram: 12h), story fingerprint JSONB storage, WhatsApp morning digest and breaking alert dispatch via Twilio.
-**Addresses:** Senior Agent queue management, deduplication, expiry, WhatsApp notifications
-**Avoids:** Cross-platform story fingerprint context loss (Pitfall 7), queue cap conflict with event mode (soft cap design for later event mode)
+Pitfalls addressed: HIGH-1, HIGH-2, HIGH-6
 
-### Phase 6: Instagram Agent
-**Rationale:** Apify integration is less predictable than X API (silent partial results, version pinning, anti-bot measures). Build after core pipeline is proven. Cross-platform deduplication (Senior Agent) must be in place before Instagram items enter the queue.
-**Delivers:** Apify Actor integration with retry logic, per-hashtag baseline result count tracking in DB, zero-result health alert, run timing stagger (±15 minutes), comment draft alternatives, engagement gate (200+ IG likes), Actor version pinning.
-**Addresses:** Instagram monitoring, scraper health monitoring, comment drafting
-**Avoids:** Instagram silent partial failure (Pitfall 2)
+Research flag: NEEDS source verification at build time. Verify Ontario Newsroom RSS URL before writing ingestion module. OLA bill tracker has no confirmed RSS — SerpAPI fallback already specified.
 
-### Phase 7: Content Agent
-**Rationale:** Most complex agent — RSS + SerpAPI + multi-step deep research + format decision logic. Build last when the full pipeline plumbing is proven. Hourly SerpAPI quota cap tracking must be designed in from the start.
-**Delivers:** RSS feed ingestion (feedparser, etag/last-modified tracking), SerpAPI news search with result caching, multi-step deep research pass via Claude, format decision logic (thread / single post / infographic brief), 7.0/10 quality threshold with "no story today" explicit flag, approval-rate calibration tracking in DB, SerpAPI hourly consumption tracking and alert.
-**Addresses:** Content Agent story pipeline, proactive story creation, quality gate, infographic brief generation skeleton
-**Avoids:** Content quality threshold drift (Pitfall 5), SerpAPI hourly cap burst (integration gotcha)
+Open source research required (verify at build time, not pre-planning):
+- Ontario Newsroom RSS: try https://news.ontario.ca/newsroom/en?format=rss then https://news.ontario.ca/en/releases.rss
+- OMA RSS: check https://www.oma.on.ca/modules/news/en — if absent, use SerpAPI "Ontario Mining Association" site:oma.on.ca
+- OLA bill tracker: no RSS confirmed; SerpAPI "Ontario bill" "Mining Act" site:ola.org is the fallback
 
-### Phase 8: Settings and Configurability
-**Rationale:** Wire all hardcoded scoring weights, thresholds, and schedules to DB-driven config via the Settings page. Polish once agents are producing correct output and the operator has enough experience to know what needs tuning.
-**Delivers:** All scoring weights configurable from Settings page, keyword list management, watchlist CRUD, agent schedule configuration, weekly approval-rate calibration view, quota status dashboard display, run log viewer with items found/queued/filtered/errors per execution.
-**Addresses:** Settings page full configurability, run logs, weekly approval rate calibration surface
-**Avoids:** Hardcoded scoring weights requiring code deploys (technical debt pattern), settings cache in agent memory (Anti-Pattern 4)
+---
 
-### Phase 9: v1.x Enhancements
-**Rationale:** Add differentiating features after the core workflow is validated with real usage data. Event mode requires baseline engagement data to define "3x normal." Deduplication visual linking is most valuable after both agents have run for several cycles.
-**Delivers:** Event mode (engagement spike trigger + gold price movement trigger, soft queue cap expansion), cross-platform deduplication visual linking in dashboard, infographic generation full implementation, performance-driven learning loop foundation.
-**Addresses:** Event mode, infographic generation, deduplication visual linking, learning loop
-**Note:** These are P2 features — schedule based on operator feedback after v1 launch.
+### Phase 3: Ontario Stats Ingestion
+
+Rationale: Ontario stats releases are monthly and predictable (~19th-21st of M+2). Empty state is the correct default on most days. This phase designs two distinct states (no_new_data vs error) so the operator can distinguish expected silence from broken ingestion.
+
+Delivers:
+- scheduler/agents/ontario_stats.py — fetch_ontario_stats_hits(): StatCan "The Daily" RSS monitor (trigger) + WDS API call on release day for Table 16-10-0019-01
+- Two distinct empty states: no_new_data (with snapshot_date) and error (distinct visual treatment, links to agent-runs log)
+- snapshot_date stored in raw_sources_jsonb.ontario_stats.snapshot_date (YYYY-MM)
+- Empty-state copy: "No new production statistics released today. Next Monthly Mineral Production Survey release expected around {next_release_estimate}. Last data: {YYYY-MM} — Ontario gold production: {last_known_figure} oz."
+- last_known_figure updated in JSONB each time a real StatCan release is processed
+- Wire _build_ontario_stats_section() in daily_summary.py (replace stub)
+
+Pitfalls addressed: MIN-2, HIGH-3 (frontend 404 handling)
+
+Research flag: NEEDS one-time source setup at build time. StatCan WDS vector IDs for Ontario + Gold must be resolved by querying Table 16-10-0019-01 metadata. Documented in WDS User Guide. This is a setup step, not ongoing research.
+
+---
+
+### Phase 4: Prune Cron + Differentiators
+
+Rationale: Prune is fully independent — nothing blocks on it and retention can be managed manually. Polish features require validated content in the DB from prior phases.
+
+Delivers:
+- _make_daily_summary_prune_job(engine) in scheduler/worker.py
+- daily_summary_prune CronTrigger at 03:00 PT with lock ID 1018
+- Cross-summary continuity: 12:00 Sonnet call receives 08:00 gold bullets in context (also resolves cross-session dedup)
+- Section anchor links (id="gold-news" etc. on section headers in SectionBlock.tsx)
+- "Last updated" pointer in empty-state sections
+- Click-through source URLs per bullet (requires story.link stored in summary JSONB)
+
+Pitfalls addressed: HIGH-3 (prune-vs-read race; soft-delete option if hard-delete causes UX issues)
+
+Research flag: SKIP research-phase — prune is a trivial DELETE; cross-summary continuity is a prompt engineering addition.
+
+---
 
 ### Phase Ordering Rationale
 
-- **Infrastructure before application:** Twilio template approval and DB job lock cannot be deferred. Both have external dependencies (Meta approval, Railway config) that block production unless started early.
-- **Human workflow before automation:** Database → API → Dashboard ensures the approval workflow is correct and testable before any agent generates real output. This means the operator can validate UX with seeded data.
-- **Simpler agent before complex:** Twitter Agent first (structured API, well-documented), Instagram second (managed scraping, requires retry design), Content Agent last (multi-step pipeline, most failure modes).
-- **Senior Agent core between Twitter and Instagram:** Deduplication and queue cap must be in place before multiple agents contribute to the same queue. Otherwise queue management must be retrofitted to handle cross-platform scenarios it was never designed for.
-- **Settings page last:** Configurability is polished, not foundational. All thresholds must be configurable in the DB from day one (no hardcoding), but the Settings UI can come after agents are producing verified output.
+- Phase 1 is a combined shippable slice (DB + API + agent + frontend) because the web feed renders whatever columns are non-null and shows empty states for null ones. No technical reason to ship DB+API before frontend — they deploy together.
+- Phase 2 before Phase 3 because Ontario law appears any weekday the legislature is sitting (higher urgency) while Ontario stats releases are monthly and predictable.
+- Phase 4 last because prune and differentiators have zero dependencies on being early.
+- Every phase ends with something the operator can read and trust.
 
-### Research Flags
+---
 
-Phases likely needing `/gsd:research-phase` during planning:
-- **Phase 4 (Twitter Agent):** X API v2 search endpoints, rate limit window behavior, and OAuth 2.0 Bearer token setup have enough operational nuance that targeted API research during planning will save implementation time.
-- **Phase 6 (Instagram Agent):** Apify Actor-specific configuration (proxy settings, run parameters, version pinning strategy) warrants Actor-level research during planning rather than discovering options mid-implementation.
-- **Phase 7 (Content Agent):** Multi-step Claude research pipeline (chained prompts, structured output via tool use, format decision logic) benefits from a dedicated prompt engineering research pass before implementation.
+## Locked Defaults
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (Infrastructure):** Railway two-service configuration, Alembic migrations, and Neon PostgreSQL connection config are all well-documented with high-confidence sources already in STACK.md.
-- **Phase 2 (FastAPI Backend):** bcrypt + JWT single-user auth, SQLAlchemy async CRUD, FastAPI router patterns — all standard, verified against official docs.
-- **Phase 3 (React Dashboard):** React 19 + TanStack Query + Zustand + shadcn/ui patterns are well-established. The main risk (shadcn tailwind-v4 branch) is already identified.
-- **Phase 5 (Senior Agent):** Orchestrator-worker pattern is well-documented. Claude story fingerprint extraction is a standard structured output use case.
+These values are locked by research and must not be re-litigated during planning:
+
+| Decision | Locked Value | Basis |
+|----------|-------------|-------|
+| Lock ID: daily_summary | 1017 | ARCHITECTURE.md direct grep of JOB_LOCK_IDS — 1016 is highest current; 1017 is next free |
+| Lock ID: daily_summary_prune | 1018 | ARCHITECTURE.md same grep; 1018 is next free |
+| PITFALLS.md proposal (1020+1021) | REJECTED — 1017+1018 are confirmed free | Architecture researcher read the actual source file |
+| WhatsApp delivery pattern | Teaser < 400 chars, link to feed — NOT full content, NOT build_chunks() | HIGH-5; web feed is the primary surface |
+| Ontario law filter model | claude-haiku-4-5 via ontario_law_filter_model DB config key | HIGH-6; Sonnet at filter volume exceeds AI budget |
+| Ontario stats table | Table 16-10-0019-01 (monthly, M+2 lag) — NOT Table 16-10-0022 (annual) | FEATURES.md actual release dates cited; STACK.md referenced annual table |
+| StatCan empty-state copy | Must show "data through {YYYY-MM}"; snapshot_date in raw_sources_jsonb.ontario_stats.snapshot_date | Synthesis decision resolving STACK.md vs FEATURES.md |
+| Ontario stats cadence | Monthly, ~19th-21st of M+2. Empty state is the DEFAULT, not an edge case. | FEATURES.md HIGH confidence — actual release dates cited |
+| Sonnet char budget target | ~1200 chars for summary body; teaser bounded at < 400 chars separately | STACK.md heavy-day estimate 1700-1800 chars without constraint |
+| Score threshold for gold news | >= 6.0 (broader than 7.0 sub-agent drafting threshold — summaries need coverage, not selectivity) | ARCHITECTURE.md |
+| SerpAPI keywords for summary | SUMMARY_SERPAPI_KEYWORDS constant <= 10 keywords (separate from existing 17-keyword sub-agent list) | MOD-3; SerpAPI quota right at limit with 17 keywords x 2 fires/day |
+| Migration 0010 | Hand-written (no --autogenerate) — ONLY op.create_table + op.create_index | MOD-2; autogenerate risks touching ApprovalState enum |
+| Status column type | VARCHAR(20) with CHECK constraint — NOT a PG enum | MOD-2; PG enums are hard to modify post-creation |
+
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Core technologies pre-decided and version-verified against PyPI and official docs. Supporting library patterns confirmed from multiple consistent sources. One medium-confidence item: TanStack Query v5 + Zustand recommended pattern sourced from community blog, not official docs — but the recommendation is well-established in practice. |
-| Features | HIGH (core), MEDIUM (differentiators) | Table stakes features confirmed against competitor analysis (Sprout Social, Hootsuite) and HITL workflow research. Gold-sector specific differentiators (event mode, niche relevance scoring) are novel — confidence is medium because there are no direct comparators to validate against. |
-| Architecture | HIGH | Orchestrator-worker pattern confirmed against Azure Architecture Center (HIGH confidence source). Separate scheduler worker, JSONB alternatives, state machine, and shared-DB integration patterns all verified against multiple sources including official APScheduler and FastAPI documentation. |
-| Pitfalls | HIGH | X API quota limits verified against official X API documentation. Apify Instagram scraping pitfalls confirmed against Apify official docs and blog. APScheduler multi-worker issue confirmed against official APScheduler FAQ. Twilio WhatsApp template requirements confirmed against Twilio official documentation. Claude compliance drift confirmed against Anthropic best practices documentation. |
+| Stack | HIGH | All findings verified against installed library versions and existing source files |
+| Features | HIGH (gold + stats cadence), MEDIUM (Ontario law sources) | StatCan monthly cadence confirmed from actual release dates; Ontario law feed URLs require build-time verification |
+| Architecture | HIGH | Architecture researcher read worker.py, content_agent.py, whatsapp.py, digests.py, and migration 0009 directly |
+| Pitfalls | HIGH | Based on direct code inspection of production files; critical pitfalls grounded in specific observed behaviors |
 
-**Overall confidence:** HIGH
+Overall confidence: HIGH — this is a well-scoped addition to a proven system. The only genuine uncertainty is Ontario law source URLs, verified at Phase 2 build time.
 
 ### Gaps to Address
 
-- **Gold price feed for Event Mode:** Event mode can trigger on engagement spike (3x baseline — derivable from agent history) OR gold price movement. The gold price feed integration is not yet researched. During Phase 9 planning, validate whether a free gold price API (e.g., metals-api.com, XE API) is suitable, or whether the engagement-spike trigger alone is sufficient for v1 event mode.
-- **SerpAPI monthly plan selection:** STACK.md references SerpAPI at ~$50/mo with 100 searches/mo on the basic plan. The Content Agent runs daily — 100 searches/mo is approximately 3 searches per day, which may be insufficient if the agent queries multiple news topics per run. Validate the required search volume before selecting a SerpAPI plan.
-- **WhatsApp Business account setup time:** The research identifies Meta template approval as taking 1-7 business days, but WhatsApp Business account registration itself (if not already done) can add additional lead time. Verify whether a WhatsApp Business account exists for Seva Mining before Phase 1 planning.
-- **Neon free tier connection limit:** STACK.md specifies `pool_size=5, max_overflow=10` for the Neon free tier. The exact connection limit for Neon's free tier should be verified at setup — if the free tier caps at fewer than 15 connections, the pool config needs adjustment.
+- Ontario Newsroom RSS URL: attempt two candidate URLs at Phase 2 build time. Fall back to SerpAPI if neither resolves.
+- OMA RSS availability: check at Phase 2 build time. If absent, use SerpAPI. OMA is supplementary; not a blocker.
+- OLA bill tracker RSS: no RSS confirmed. SerpAPI fallback specified. Not a blocker.
+- StatCan WDS vector IDs for Ontario gold production: resolve once by querying Table 16-10-0019-01 metadata at Phase 3 build time.
+- Twilio sandbox vs production: move to production Twilio sender before v2.0 go-live. Sandbox session expires after 24h inactivity; send_whatsapp_message returns None on lapsed session, indistinguishable from success. Flag for Phase 1 deploy checklist.
+
+---
 
 ## Sources
 
-### Primary (HIGH confidence)
-- FastAPI PyPI (v0.135.1 confirmed): https://pypi.org/project/fastapi/
-- Anthropic SDK PyPI (v0.86.0 confirmed): https://pypi.org/project/anthropic/
-- APScheduler PyPI (stable 3.11.2, alpha 4.0.0a6): https://pypi.org/project/APScheduler/
-- apify-client PyPI (v2.5.0 confirmed): https://pypi.org/project/apify-client/
-- Neon connection pooling docs: https://neon.com/docs/connect/connection-pooling
-- Neon + FastAPI async guide: https://neon.com/guides/fastapi-async
-- X API Rate Limits (official): https://docs.x.com/x-api/fundamentals/rate-limits
-- Twilio WhatsApp sandbox vs. production (official): https://www.twilio.com/docs/whatsapp/sandbox
-- Twilio WhatsApp rules and best practices (official): https://support.twilio.com/hc/en-us/articles/360017773294
-- APScheduler FAQ — interprocess synchronization (official): https://apscheduler.readthedocs.io/en/3.x/faq.html
-- Anthropic Claude prompting best practices (official): https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices
-- AI Agent Orchestration Patterns — Azure Architecture Center (HIGH): https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns
-- Human-in-the-Loop patterns — Cloudflare Agents docs (HIGH): https://developers.cloudflare.com/agents/guides/human-in-the-loop/
-- shadcn Tailwind v4 compatibility: https://ui.shadcn.com/docs/tailwind-v4
-- Railway FastAPI deployment guide: https://docs.railway.com/guides/fastapi
-- Apify Instagram scraper official: https://apify.com/apify/instagram-scraper
+### Primary (HIGH confidence — direct code inspection or official docs)
 
-### Secondary (MEDIUM confidence)
-- SQLAlchemy 2.0 + asyncpg patterns: https://leapcell.io/blog/building-high-performance-async-apis-with-fastapi-sqlalchemy-2-0-and-asyncpg
-- APScheduler multi-worker caution (community discussion): https://github.com/fastapi/fastapi/discussions/9143
-- TanStack Query v5 + Zustand pattern: https://reactdeveloperx.blogspot.com/2025/08/next-gen-react-state-management-with_14.html
-- Multi-agent patterns (orchestrators/workers): https://aiagentsblog.com/blog/multi-agent-patterns/
-- ARQ vs APScheduler vs Celery comparison: https://leapcell.io/blog/celery-versus-arq-choosing-the-right-task-queue-for-python-applications
-- Content approval workflows guide: https://influenceflow.io/resources/content-approval-workflows-a-complete-guide-for-2026-1/
-- AI in Social Media monitoring tools 2026: https://www.ema.ai/additional-blogs/addition-blogs/best-social-media-ai-agents
-- Ensuring reliability in AI agents — drift/hallucination in production: https://medium.com/@kamyashah2018/ensuring-reliability-in-ai-agents-preventing-drift-and-hallucinations-in-production-4b8f8600ec69
-- Scheduled jobs with FastAPI and APScheduler — Sentry: https://sentry.io/answers/schedule-tasks-with-fastapi/
+- /Users/matthewnelson/seva-mining/scheduler/worker.py — JOB_LOCK_IDS (1005, 1010-1016 confirmed), midday_digest registration, misfire_grace_time=1800
+- /Users/matthewnelson/seva-mining/scheduler/agents/content_agent.py — fetch_stories() return shape, score field, cache bucket, model constants
+- /Users/matthewnelson/seva-mining/scheduler/services/whatsapp.py — send_whatsapp_message signature, build_chunks() 1500-char safety margin
+- /Users/matthewnelson/seva-mining/backend/app/routers/digests.py — auth pattern confirmed
+- StatCan Table 16-10-0019-01 confirmed release dates: June 20 2025, Nov 20 2025, April 20 2026
+- react-markdown npm 10.1.0: https://www.npmjs.com/package/react-markdown
+- rehype-sanitize npm 6.0.0: https://www.npmjs.com/package/rehype-sanitize
+- APScheduler 3.11.2 CronTrigger + DST: https://apscheduler.readthedocs.io/en/3.x/modules/triggers/cron.html
+- StatCan WDS API: https://www.statcan.gc.ca/en/developers/wds/user-guide
+- Twilio 1600-char cap: https://help.twilio.com/articles/360033806753
 
-### Tertiary (informational)
-- SerpAPI hourly quota cap behavior: https://blog.apify.com/best-serpapi-alternatives/
-- SEC Risk Alert: Investment Adviser Use of Social Media: https://www.sec.gov/about/offices/ocie/riskalert-socialmedia.pdf
-- feedparser PyPI (last release Sep 2025): https://pypi.org/project/feedparser/
-- Twitter API Basic tier limits guide: https://www.gramfunnels.com/blog/twitter-api-limits
+### Secondary (MEDIUM confidence — inferred from standard patterns or partially confirmed)
+
+- Ontario Newsroom RSS URL: unconfirmed; verify at Phase 2 build time
+- Ontario Regulatory Registry RSS: standard Drupal pattern; verify at Phase 2 build time
+- StatCan WDS endpoint pattern: confirmed from developer docs; vector IDs require one-time resolution
+- SerpAPI 5,000-6,000 searches/month on $50 plan: community sources
+- Twilio non-template 1024-char limit: sandbox behaviour differs; test before treating as hard ceiling
+
+### Tertiary (LOW confidence — requires build-time verification)
+
+- OMA RSS at oma.on.ca/modules/news/en: not confirmed; check at Phase 2 build time
+- OLA bill tracker RSS: no RSS confirmed; SerpAPI fallback specified
 
 ---
-*Research completed: 2026-03-30*
+*Research completed: 2026-05-05*
 *Ready for roadmap: yes*

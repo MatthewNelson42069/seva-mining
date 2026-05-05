@@ -1,175 +1,448 @@
 # Pitfalls Research
 
-**Domain:** AI social media monitoring and engagement drafting system (gold sector)
-**Researched:** 2026-03-30
-**Confidence:** HIGH (critical pitfalls verified across multiple sources; integration-specific items HIGH from official docs)
+**Domain:** v2.0 Daily Summary Feed — integrating a scheduled daily news summary into an existing news-ingestion system
+**Researched:** 2026-05-05
+**Confidence:** HIGH (based on direct code inspection of m49/m51-era production files in worker.py, content_agent.py, whatsapp.py)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: X Basic API — 10,000 Tweet Monthly Cap Is Exhausted in Days
+### CRIT-1: Duplicate WhatsApp delivery — morning_digest + daily_summary both registered
 
 **What goes wrong:**
-The X Basic tier ($100/mo) provides 10,000 tweet reads per month. A 2-hour monitoring cycle running across multiple keyword/cashtag/hashtag searches can consume this quota in 3-5 days if not carefully budgeted. The system then goes dark for the remainder of the month with no Twitter signal.
+`morning_digest` (lock ID 1005, job ID `midday_digest`) is still registered in `worker.py`'s `build_scheduler()` when the new `daily_summary` cron is added. Both jobs fire, both call `send_whatsapp_message`. The user receives two separate messages per fire window. Worse: if `morning_digest` references the old approval-flow pipeline while `daily_summary` references the new `daily_summaries` table, the user sees a duplicate plus a stale message within the same minute.
 
 **Why it happens:**
-Developers plan for "searches" without calculating actual tweet read volume. Each search result counts as individual tweet reads against the monthly cap. Monitoring a live market event (gold price spike, FOMC announcement) with event mode enabled at 8-10 posts can burn hundreds of reads in a single cycle.
+v2.0 retires `morning_digest` "as dead code, don't strip" — it is natural to add the new cron in a separate commit without removing the old one, especially because the retirement instruction says not to delete code.
 
 **How to avoid:**
-- Budget the cap explicitly before writing a single line: assume 2,000 tweets/week (rough ceiling), leaving headroom for event mode bursts.
-- Implement a monthly quota tracker in the database. Track reads consumed and reads remaining via the `X-Rate-Limit-Remaining` response header.
-- Hard-stop the Twitter Agent when monthly remaining falls below 500 — surface this as a dashboard alert and WhatsApp notification, not a silent failure.
-- Deduplicate tweet IDs in the database so re-runs at the same cycle do not re-fetch already-seen tweets.
-- During event mode (3x spike or gold price movement), cap the run at a configurable tweet fetch limit (e.g., 150 tweets per event run) to prevent burst exhaustion.
+In the SAME commit that adds `daily_summary` to `CONTENT_CRON_AGENTS` (or as its own standalone `scheduler.add_job` call), remove the `scheduler.add_job(...)` call for `midday_digest` from `build_scheduler()`. The `_make_midday_digest_job` factory and the `"midday_digest": 1005` dict entry in `JOB_LOCK_IDS` can remain as dead code — but the registration MUST be removed. Test: confirm `len(_scheduler.get_jobs())` in startup logs reflects the new count and no `midday_digest` appears in `_scheduler.get_jobs()`.
 
 **Warning signs:**
-- Twitter Agent returning empty queues more than one cycle without other error — likely 429 (Too Many Requests)
-- Monthly cap exhaustion mid-month appearing in agent run logs
-- Dashboard showing Twitter items drying up abruptly mid-month
+Two WhatsApp messages arriving within seconds of each other on the first post-pivot cron fire.
 
-**Phase to address:** Twitter Agent phase (early). The budget model must be built before any production monitoring begins. Cap tracking and dashboard alerting for quota status must ship with the Twitter Agent, not as a later addition.
+**Phase to address:**
+The phase that registers `daily_summary` in `worker.py` — same commit, not a follow-up.
 
 ---
 
-### Pitfall 2: Instagram Apify Scraper Returns Partial or Empty Results Without Errors
+### CRIT-2: Advisory lock ID collision — accidental reuse of retired or gap IDs
 
 **What goes wrong:**
-Apify's Instagram scraper frequently returns partial datasets — fewer posts than requested, truncated hashtag results, or silently empty runs — without raising an error code. The system interprets this as "nothing relevant today" rather than "scraper was throttled or blocked." The Instagram Agent queue stays empty not because the gold conversation is quiet, but because Instagram's anti-bot system silently degraded the scrape.
+`JOB_LOCK_IDS` in `worker.py` uses 1005 (`midday_digest`) and 1010-1016 (six sub-agents). Lock ID 1012 is a gap left by `sub_long_form` retirement. If `daily_summary` or `daily_summary_prune` is assigned 1012 (or any ID currently in the dict), `pg_try_advisory_lock` either silently refuses to acquire when the retired-but-still-registered old job holds the lock, or the two jobs race — producing zero output with no error log. The log message would read `"Job daily_summary: skipped (advisory lock held by another instance)"` with no concurrent instance running.
 
 **Why it happens:**
-Instagram employs session-based tracking and behavioral analysis that reduces data returned to suspected bots gradually rather than hard-blocking them. The platform throttles aggressively after detecting patterns — frequent runs against the same hashtags, consistent proxy fingerprints, or unusual timing. Apify actors can return HTTP 200 with empty arrays when Instagram withholds data.
+Advisory locks are bare integers in Postgres — no semantic ownership. A developer scanning the dict and seeing 1012 is unused would naturally fill it.
 
 **How to avoid:**
-- Implement a result-count sanity check: if an actor run returns 0 posts for a hashtag that historically returns 20+, flag it as a potential scraper health issue, not a silent success.
-- Store baseline post counts per hashtag per run in the database. A drop to zero for two consecutive runs should trigger a WhatsApp alert.
-- Stagger Instagram scraping runs — vary start times by ±15 minutes across cycles to avoid predictable timing fingerprints.
-- Follow Apify's official guidance: use managed proxy pools (Apify residential proxies), not datacenter IPs. The Actor's README specifies the correct proxy configuration.
-- Keep Apify Actor versions pinned and update deliberately — Instagram layout changes break specific Actor versions silently.
-- Build retry logic with exponential backoff into the Instagram Agent: if a run returns 0 results, retry once at +2h before logging as empty.
+Reserve IDs 1020 and 1021 explicitly. Add to `JOB_LOCK_IDS`:
+```python
+"daily_summary": 1020,
+"daily_summary_prune": 1021,
+# Gap 1017-1019 reserved for future use — do NOT fill without checking production
+```
+Assert uniqueness at startup: `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` — this costs nothing and catches collisions immediately.
 
 **Warning signs:**
-- Instagram Agent returns 0 items for multiple consecutive cycles without system errors
-- Run logs show actor completing successfully but with empty `results` arrays
-- Account watchlist items that previously produced consistent results suddenly go quiet
+`Job daily_summary: skipped (advisory lock held by another instance)` appearing at the scheduled fire time with no other scheduler process running.
 
-**Phase to address:** Instagram Agent phase. Scraper health monitoring must be designed in, not retrofitted. The retry logic and baseline-comparison alert belong in the initial build, not v2.
+**Phase to address:**
+Phase that creates the `daily_summary` cron registration.
 
 ---
 
-### Pitfall 3: Claude Drafts Violate the "No Financial Advice" and "No Seva Mention" Rules Despite Prompt Instructions
+### CRIT-3: Multiple summary fires during Railway restart churn — misfire_grace_time interaction
 
 **What goes wrong:**
-Claude generates drafts that subtly imply price direction ("this typically precedes a breakout"), reference the company indirectly ("accounts covering the gold space like ours"), or use soft buy/sell signals dressed as analysis ("gold bulls will be watching this level closely"). These drafts pass the agent's self-evaluation because the prompt constraints are stated but not enforced structurally. Over time, as prompts are iteratively modified, constraint language weakens or edge cases accumulate.
+`build_scheduler()` sets `misfire_grace_time=1800` (30 min) globally. APScheduler fires a coalesced missed run once when the scheduler restarts if the missed fire was within the grace window. With `coalesce=True` and `max_instances=1`, this is correct for a single process lifetime. The danger: Railway occasionally produces a flappy restart sequence (start → crash → start → crash → start) across the 08:00 PT window. Each process restart creates a new scheduler instance. Three restarts within the 30-minute grace window = three scheduler lifetimes = three coalesced fires = three summaries + three WhatsApp messages. The m49 fix (CronTrigger + coalesce) prevents the IntervalTrigger "fire every 10 seconds" pattern but does NOT prevent "fire once per process start if within grace window."
 
 **Why it happens:**
-Constraint violations in LLM outputs are probabilistic, not deterministic. Even well-crafted system prompts with explicit prohibitions will fail on some percentage of outputs — especially for nuanced constraints like "no implied financial advice" versus "no explicit buy/sell signals." Claude 3.x/4.x models take instructions literally; if constraints are in the system prompt but not re-stated in the scoring rubric with concrete examples, the model interprets borderline cases charitably.
+The m49 pattern was validated against a single clean restart. Flappy restarts during a bad Railway deploy expose the per-lifetime coalesce behavior.
 
 **How to avoid:**
-- Build a structured self-evaluation step that runs after draft generation — a second Claude call acting as a compliance checker against a concrete rubric (not the same prompt that generated the draft).
-- Define the "no financial advice" constraint with explicit examples of violations: "examples of forbidden phrasing include: 'gold looks bullish here,' 'support at $X,' 'accumulation signal,' 'this could be a buying opportunity.'"
-- Define the "no Seva mention" constraint with examples: "Seva Mining, @sevamining, 'our company,' 'we cover this space' — all forbidden."
-- Track violations in the agent run log. If the compliance checker rejects more than 2 drafts in a single run, surface as an alert — it signals a prompt degradation or edge-case accumulation.
-- Never modify the compliance checker prompt without a deliberate review. Treat it as a system constraint, not a tunable parameter.
+Add a database-level idempotency guard in the `daily_summary` agent function, BEFORE writing any row or sending any WhatsApp:
+```python
+existing = await session.execute(
+    select(DailySummary).where(
+        DailySummary.fire_time >= now - timedelta(minutes=30),
+        DailySummary.status.in_(["running", "complete"]),
+    )
+)
+if existing.scalar_one_or_none():
+    logger.info("daily_summary: skipping — recent run already exists within grace window")
+    return
+```
+This mirrors what `reconcile_stale_runs` does for `agent_runs` rows. It is the correct defense for any job where exactly-once semantics matter.
 
 **Warning signs:**
-- Compliance checker rejection rate increasing over time in run logs
-- Approved drafts accumulating in the dashboard that feel "investment-advice-adjacent" on review
-- Self-evaluation quality score (7.0+ threshold) inflating — model learning to approve its own constraint violations
+Multiple `daily_summaries` rows with `generated_at` within 5 minutes of each other on the same day. WhatsApp burst of identical summaries.
 
-**Phase to address:** Content Agent and Twitter/Instagram Agent phases. The compliance checker must be built into the initial draft pipeline, not added after the first problematic draft surfaces. Scoring rubric with concrete examples belongs in the Phase 1 architecture.
+**Phase to address:**
+Phase that writes the `daily_summary` agent run logic.
 
 ---
 
-### Pitfall 4: APScheduler in a Multi-Worker Environment Causes Duplicate Agent Runs
+### CRIT-4: fetch_stories() cache contamination — sharing sub-agent scored results with the summary
 
 **What goes wrong:**
-If the Railway backend ever runs with more than one process (Gunicorn workers, autoscaling replicas, or a deploy that briefly runs two instances during rollover), APScheduler runs in each process independently. The Twitter Agent fires twice simultaneously — two identical sets of API calls, two duplicate queues, two sets of drafts. The database receives duplicate items that the deduplication logic was not designed to handle because they arrive at the same millisecond.
+`fetch_stories()` caches on `int(time.time() // 1800)`. The `daily_summary` cron fires at 08:00 PT and 12:00 PT. `sub_breaking_news` fires every hour at HH:00 UTC — that is 00:00, 01:00, 02:00, ... 15:00 PT. If `sub_breaking_news` fires at 08:00 UTC (= 01:00 PT) and `daily_summary` fires at 08:00 PT (= 15:00 UTC), they do NOT share a bucket — different 30-minute windows. So the contamination is not from a concurrent hit but from a different concern: the `score` field on cached stories is calibrated for sub-agent approval queue selection (relevance × 0.4, recency × 0.3, credibility × 0.3), and the `predicted_format` label is an artifact for sub-agent content-type routing. If `daily_summary` calls `fetch_stories()` and uses `story['score']` to rank the top 5 gold headlines, it is using approval-queue scores — which are reasonable but subtly wrong for summary ranking (recency matters more for summaries; credibility should be weighted higher).
 
-**Why it happens:**
-APScheduler has no interprocess synchronization. It does not know other processes exist. The project design correctly isolates the scheduler in a separate Railway worker process, which mitigates this — but Railway's deployment model can briefly run two overlapping instances during zero-downtime deploys. The scheduler process is already separated, but the risk exists in the scheduler process itself if it ever scales horizontally.
+More importantly: if a sub-agent fires within the same 30-minute bucket as `daily_summary` (e.g., `sub_breaking_news` at HH:00 UTC fires at 15:00 UTC = 08:00 PT on the nose), `daily_summary` will get a cache hit. This is harmless performance-wise but means the summary gets sub-agent-scored stories with `predicted_format` keys that have no meaning in the summary context — and a future developer might accidentally filter on `predicted_format` to get "only breaking news stories," excluding valid summary material.
 
 **How to avoid:**
-- The separate scheduler worker (already in project design) is the correct mitigation — do not run APScheduler inside the FastAPI API process.
-- Configure Railway to run the scheduler worker with exactly 1 replica and disable autoscaling for that service. Document this explicitly in deployment config.
-- Add a database-level job lock: before any agent run, write a `job_running` row with a TTL. If the lock exists, skip the run and log "skipped: lock held." This is the final safety net for overlapping deploys.
-- If the scheduler worker ever needs to be replaced by a more robust solution, ARQ (Redis-backed, async-native) is the right upgrade path — it was designed for this exact problem.
+Do NOT use `fetch_stories()` directly in `daily_summary`. Implement a thin `fetch_stories_for_summary()` wrapper that bypasses the shared bucket cache and uses its own isolated cache key (e.g., `"summary_" + str(bucket)`), or simply calls `_do_fetch()` directly. Strip `predicted_format` from the returned stories before passing to the summary agent — or assert its absence in tests.
 
 **Warning signs:**
-- Duplicate items appearing in the approval queue with identical source URLs
-- Agent run logs showing two overlapping runs at the same timestamp
-- Railway deploy logs showing two scheduler worker instances simultaneously active
+Summary cards showing `predicted_format` in `raw_sources_jsonb` JSONB. Sub-agent run logs showing "cache hit" at the same timestamp as a daily_summary fire.
 
-**Phase to address:** Infrastructure/scheduler phase. The job lock mechanism must be part of the initial scheduler design. The Railway replica constraint must be in the deploy configuration from day one.
+**Phase to address:**
+Phase that implements the `daily_summary` agent's gold news ingestion.
 
 ---
 
-### Pitfall 5: Content Quality Drift — The 7.0 Quality Threshold Becomes Meaningless Over Time
+## High Pitfalls
+
+### HIGH-1: Ontario law filter — false positives from political speech
 
 **What goes wrong:**
-The self-evaluation rubric starts calibrated to produce content 4-5 days per week. Over weeks of operation, the scoring prompt subtly drifts: examples in the prompt age, gold sector context in the system prompt becomes stale, or iterative prompt tuning to "get more stories" lowers the effective bar without explicitly changing the 7.0 threshold. The dashboard fills with mediocre drafts that technically score 7.1 but wouldn't stop a senior gold analyst scrolling.
+A Sonnet prompt asking "Is this a new Ontario mining-favourable law or policy?" returns `keep=True` for: "Ontario Premier announces intention to streamline mining permits" (political intent, no enacted law), "Mining industry welcomes government's pro-development stance" (editorial), "Ontario minister praises mining sector at conference" (speech). None of these are new laws. Over 30 days, the Ontario law section fills with noise and the user stops trusting it.
 
 **Why it happens:**
-LLM self-evaluation is not a static function — the same rubric produces different score distributions as the model encounters different input distributions, prompt modifications accumulate, or the surrounding system prompt changes. There is no objective anchor keeping "7.0" pegged to actual quality. The model can also learn to be lenient with itself when the user repeatedly approves borderline content.
+Without explicit negative examples, Sonnet pattern-matches on "Ontario + mining + positive sentiment" — exactly what the existing `is_gold_relevant_or_systemic_shock` function in `content_agent.py` avoids by including detailed REJECT examples with specific company names and scenarios.
 
 **How to avoid:**
-- Store the quality score and rationale for every draft in the database permanently (schema already plans for this).
-- Build a weekly calibration check: what percentage of drafts scored above 7.0? What percentage were approved vs. rejected by the user? If approval rate drops below 50% on 7.0+ drafts, the rubric is inflated — surface this in the Settings page.
-- Include 3-5 concrete "gold standard" example stories in the scoring prompt that cannot be modified without deliberate review. These serve as anchors.
-- Add a "no story today" flag path that is frictionless to trigger — if producing a weak story is easier than flagging no story, the quality bar will erode from the path of least resistance.
+The Ontario law filter prompt MUST include:
+
+Positive examples (KEEP): "Bill 71, Building Ontario Act, amends Mining Act s.XX effective Jan 1 2026" — "Ontario Regulation 123/26 reduces royalty rates for junior explorers, effective April 2026"
+
+Negative examples (REJECT): "Premier says Ontario is open for business" (intent, not law) — "Mining association praises new policy direction" (industry reaction) — "Ontario government studying changes to permitting" (study, not enacted) — "Government announces consultation on mining reform" (pre-legislative)
+
+Require: the article must mention a specific bill number, regulation number, or enacted/effective date to qualify. Return structured JSON: `{"is_law": bool, "bill_or_reg_number": str|null, "reason": str}` for auditability.
+
+Pass the article BODY (first 1500 chars via the existing `fetch_article()` in `content_agent.py`), not just headline + snippet.
 
 **Warning signs:**
-- Approval rate in the dashboard falling week-over-week while queue volume holds steady
-- Stories that score 7.5+ on the rubric but feel thin, generic, or recycled on human review
-- "No story today" flag never triggering across multiple weeks
+Ontario law section averaging more than 1 article per 3 days in the first two weeks — that rate is too high for enacted Ontario mining law.
 
-**Phase to address:** Content Agent phase. The approval-rate tracking and calibration mechanism must ship with the Content Agent, not as a v2 analytics feature. The quality rubric anchor examples belong in the initial prompt design.
+**Phase to address:**
+Phase that implements Ontario law ingestion + Sonnet filter.
 
 ---
 
-### Pitfall 6: Twilio WhatsApp — Sandbox Testing Masks Production Template Requirements
+### HIGH-2: Ontario law filter — false negatives on bills with opaque names
 
 **What goes wrong:**
-Development and testing proceed entirely in the Twilio Sandbox, where free-form messages work without restriction. The system is built, tested, and considered "done." On switch to production, Meta requires all business-initiated messages (morning digest, breaking alerts, expiring draft alerts) to use pre-approved message templates. Every notification type must be templated and approved by Meta before it can be sent, which takes days. The go-live is blocked.
+"Bill 71, the Building Ontario Act, 2026" amends the Mining Act in section 47. The bill name does not say "mining." A headline-only filter rejects this. This is the highest-value signal for the Ontario law section — the cross-domain legislative change the user most wants surfaced — and it disappears silently.
 
 **Why it happens:**
-The Twilio Sandbox deliberately relaxes template requirements to speed up development. It uses a shared Twilio number, accepts free-form messages, and sends to any user who has joined the sandbox with a keyword. None of this reflects production behavior for business-initiated messages outside the 24-hour customer service window — which is the exact scenario for scheduled digests and alerts.
+The existing `is_gold_relevant_or_systemic_shock` function explicitly avoids this by checking `title + summary`, not title alone. An Ontario law filter built hastily from the headline would make the same mistake.
 
 **How to avoid:**
-- Design all three notification types (morning digest, breaking alert, expiring draft alert) as WhatsApp message templates from the start, even in development. Template structure constrains what dynamic content can be included — design the notification content around template constraints, not the reverse.
-- Submit templates for Meta approval during the earliest infrastructure phase, not at the end. Approval takes 1-7 business days and cannot be expedited.
-- In development, test the exact template format in the sandbox before submission — sandbox does accept templates and this catches formatting issues early.
-- The single-user system (Seva Mining owner) has already opted in by design; document this opt-in proof per Meta's requirements at setup.
+Pass the full article body (first 1500 chars) to the Ontario law filter. If `fetch_article()` returns `success=False`, fall back to headline + snippet — do not discard. Add to the filter prompt: "Search the article body for references to: Mining Act, Mineral Tenure Act, Ontario Geological Survey Act, Aggregate Resources Act, Crown lands, royalty, exploration permit, or staking regulation."
+
+Synthetic test: pass "Building Ontario Act amends Mining Act" — confirm `is_law=True`. This test case must be in the test suite before merge.
 
 **Warning signs:**
-- Notification system tested end-to-end only in Sandbox mode
-- No Meta-approved message templates in the Twilio console before go-live
-- Template variables (dynamic content like date, score, post title) not defined before approval submission
+Zero Ontario law hits in a month when the Ontario legislature was actively in session (Ontario Hansard is publicly searchable — verify against it).
 
-**Phase to address:** Infrastructure phase (alongside Twilio setup). Template design and Meta submission must happen in the first working sprint — not after the notification logic is built.
+**Phase to address:**
+Phase that implements Ontario law ingestion + Sonnet filter.
 
 ---
 
-### Pitfall 7: Agent Handoff Context Loss — Senior Agent Deduplication Loses Cross-Platform Story Linking
+### HIGH-3: Prune-vs-read race — frontend 404 on a just-deleted row
 
 **What goes wrong:**
-The Senior Agent is responsible for deduplicating the same story across platforms (Twitter item and Instagram item about the same gold price event should be visually linked as "related" in the dashboard). This requires the Senior Agent to compare semantic similarity of items arriving from different agents on different cycles. Without explicit context passing and a stored story fingerprint, items arrive as isolated records. The "related" linking never works reliably and is silently dropped because it "mostly works."
+The `daily_summary_prune` cron runs `DELETE FROM daily_summaries WHERE generated_at < NOW() - INTERVAL '30 days'`. Simultaneously, the feed page has rendered a card. The user clicks the card to view the detail route `GET /summaries/{id}`. If the row was deleted between the list render and the detail fetch, the API returns 404. Neon PgBouncer in transaction mode handles MVCC correctly (reads see a consistent snapshot), so the race is not a data integrity issue — it is a UX issue.
 
 **Why it happens:**
-Multi-agent systems fail most often at handoff points. Each agent (Twitter, Instagram, Content) produces items with its own schema. The Senior Agent must normalize these into a comparable format, extract a story fingerprint (e.g., the core claim or event), and match against recently-queued items. This matching logic is subtle — a Twitter post about "gold hits $2,800" and an Instagram post about "gold price surge" should match. String matching won't work. Without a deliberate design for this, it gets implemented as fuzzy string similarity that fails on paraphrase.
+Prune crons are typically implemented as simple DELETEs without considering in-flight frontend requests against just-pruned rows.
 
 **How to avoid:**
-- The Senior Agent should extract a structured "story fingerprint" using Claude — a normalized event descriptor (e.g., `{event: "gold price", direction: "increase", level: "$2800"}`) for each incoming item. Store this in a JSONB column.
-- Deduplication matching runs against fingerprints of items queued in the last 24h (Twitter) / 48h (Instagram), not against full text.
-- Define "related" vs "duplicate" explicitly: same story, different platform = related (both cards shown, visually linked); same story, same platform within 2h = duplicate (second card dropped with log note).
-- If Claude's fingerprint extraction fails or returns low-confidence output, fall back to queuing both items without the "related" link — never silently drop an item because deduplication was uncertain.
+Two-part mitigation:
+1. Frontend: `GET /summaries/{id}` returning 404 must produce "This summary is no longer available" toast + auto-redirect to `/`, not an unhandled error screen.
+2. Backend: consider soft delete — add a `pruned_at TIMESTAMP` column; the prune cron sets it instead of hard-deleting; the feed query filters `WHERE pruned_at IS NULL`; an optional weekly hard-delete batch runs during low-traffic hours.
+
+Additionally: Neon PgBouncer in transaction mode routes each statement to potentially a different backend connection. Advisory locks acquired in one statement do NOT persist to the next statement in the same "logical session." The prune cron MUST acquire and release its advisory lock within the same `engine.connect()` context (which `with_advisory_lock` already does correctly) — do not attempt to hold the lock across a disconnection.
 
 **Warning signs:**
-- Related items appearing as completely unlinked cards on the dashboard
-- Deduplication logic running but "related" field always empty in the database
-- Senior Agent logs showing high drop rates due to "duplicate" classification that are actually different stories
+Frontend 404 errors in browser console appearing at predictable clock times (around the prune cron schedule). Visible in Railway API access logs as `GET /summaries/{id} 404` in bursts.
 
-**Phase to address:** Senior Agent / orchestration phase. Story fingerprint schema and extraction logic must be designed before building the queue management system — retrofitting this after the queue is built requires schema changes and logic rewrites.
+**Phase to address:**
+Phase that implements the 30-day prune cron + `GET /summaries/{id}` detail endpoint.
+
+---
+
+### HIGH-4: JSONB schema drift on raw_sources_jsonb — no validation gate
+
+**What goes wrong:**
+`raw_sources_jsonb` on `daily_summaries` stores article URLs + headlines per section. Future shape changes (rename `url` to `link`, add `published_date`, add `section` discriminator) are not caught by Alembic migrations — Postgres JSONB has no column-level schema enforcement. A phase-3 change renames a key; the phase-1 read query silently returns `None` for every affected field. The breakage reaches production because there is no migration gate to enforce the change.
+
+**Why it happens:**
+The existing codebase uses JSONB for `draft_items.alternatives` with no Pydantic model validating the output shape — a developer extending that pattern to `raw_sources_jsonb` would naturally skip the validation layer.
+
+**How to avoid:**
+Define and use a Pydantic model on write:
+```python
+class RawSource(BaseModel):
+    url: str
+    headline: str
+    section: Literal["gold_news", "ontario_law", "ontario_stats"]
+    published_date: datetime | None = None
+
+class DailySummaryRawSources(BaseModel):
+    sources: list[RawSource]
+```
+The `daily_summary` agent writes: `raw_sources=DailySummaryRawSources(sources=[...]).model_dump()`. The `GET /summaries/{id}` endpoint validates on read using the same model. Any future schema change requires updating the Pydantic model — that is a code change surfaced in review, not a silent JSONB mutation.
+
+**Warning signs:**
+Frontend showing empty source lists or `undefined` for source fields after a backend change that touched the summary writer.
+
+**Phase to address:**
+Phase that creates the `daily_summaries` table migration.
+
+---
+
+### HIGH-5: WhatsApp message length — 3-section summary exceeds 1600 chars
+
+**What goes wrong:**
+Twilio's hard limit is 1600 characters per message. A 3-section summary with 5 gold headlines + 2 Ontario law hits + 1 Ontario stats note easily reaches 1200-2500 characters. The existing `build_chunks()` in `whatsapp.py` handles chunking at a 1500-char safety margin, but it was designed for numbered draft-item lists. A 3-section summary chunked mid-section produces incoherent messages — the gold section header appears in message 1, the gold bullets split across messages 1 and 2.
+
+**Why it happens:**
+`send_agent_run_notification` and `build_chunks` were designed for the approval-flow firehose. v2.0's summary has structured sections that do not fit the item-list chunking pattern.
+
+**How to avoid:**
+Do NOT use `build_chunks` for `daily_summary` WhatsApp delivery. Instead, send a teaser message that links to the web feed:
+```
+Summary as of 08:00 PT — 2026-05-05
+• Gold: 5 stories (markets up 0.8% on tariff news)
+• Ontario law: 1 update
+• Ontario stats: no new data
+Full summary: https://seva-mining-smm.vercel.app/
+```
+This fits under 300 characters, never chunks, and is the correct architecture — the web feed is the primary surface; WhatsApp is the notification. Log `len(teaser_message)` on every send and assert < 400 chars.
+
+**Warning signs:**
+WhatsApp messages arriving as `[daily_summary 1/3]`, `[daily_summary 2/3]`, `[daily_summary 3/3]` — technically correct but signals the wrong design choice.
+
+**Phase to address:**
+Phase that implements WhatsApp delivery for `daily_summary`.
+
+---
+
+### HIGH-6: Anthropic cost overrun — using Sonnet for the Ontario law relevance filter
+
+**What goes wrong:**
+If the Ontario law filter uses `claude-sonnet-4-6` (the model used in `_score_relevance` in `content_agent.py`), the cost calculation is: ~30 Ontario articles × Sonnet × 2 fires/day × 30 days ≈ 1800 Sonnet calls/month for the Ontario law filter alone. Combined with gold news scoring (~120 articles × 2 fires/day = 7200 calls/month) and 2 summary write calls/day, total Anthropic spend exceeds the $30-50 AI budget.
+
+**Why it happens:**
+`content_agent.py` uses `claude-sonnet-4-6` for `_score_relevance` — a developer extending that pattern to the Ontario law filter would naturally reach for the same model without recalculating the cost at new call volume.
+
+**How to avoid:**
+Ontario law relevance filter: use `claude-haiku-4-5` — the same model as `classify_format_lightweight` and the gold gate `is_gold_relevant_or_systemic_shock` (which defaults to `config.get("content_gold_gate_model", "claude-haiku-4-5")`). Only the final summary WRITE call (one per fire) should use Sonnet.
+
+Budget estimate with Haiku for filtering:
+- ~30 Ontario articles × Haiku × 2/day × 30 days ≈ $5/month
+- ~120 gold articles × Haiku × 2/day × 30 days ≈ $20/month
+- 2 Sonnet summary writes/day × 30 days ≈ $2/month
+- Total ≈ $27/month — within the $30-50 budget with headroom
+
+Make the filter model configurable: `ontario_law_filter_model` DB config key defaulting to `"claude-haiku-4-5"`, matching the pattern of `content_gold_gate_model`.
+
+**Warning signs:**
+Anthropic dashboard showing unexpectedly high Sonnet usage from the scheduler service starting after v2.0 deploy.
+
+**Phase to address:**
+Phase that implements the Ontario law ingestion + relevance filter.
+
+---
+
+## Moderate Pitfalls
+
+### MOD-1: DST transitions — 08:00 and 12:00 PT are safe, but document why
+
+**What goes wrong:**
+Nothing — these specific times are safe. APScheduler with `timezone='America/Los_Angeles'` handles DST correctly. The 08:00 and 12:00 fire times do not fall in the ambiguous 01:00-02:00 window during fall-back. However, if the fire times are ever changed in a future sprint, a developer might not know that times between 01:00-02:00 PT are problematic.
+
+**How to avoid:**
+Add a comment at the CronTrigger registration:
+```python
+CronTrigger(hour=8, minute=0, timezone="America/Los_Angeles")
+# 08:00 PT is outside the DST-ambiguous 01:00-02:00 window.
+# If you change this time, verify the new time is not 01:00-02:00 PT.
+```
+No additional code needed — the CronTrigger handles spring-forward and fall-back automatically.
+
+**Warning signs:**
+Missing or duplicate fire on the first Sunday in November or second Sunday in March. Check the `daily_summaries` table on those dates.
+
+**Phase to address:**
+Phase that creates the `daily_summary` CronTrigger registration.
+
+---
+
+### MOD-2: Alembic migration 0010 — accidentally touching the ApprovalState enum
+
+**What goes wrong:**
+Migration 0010 adds the `daily_summaries` table. If Alembic autogenerate is used (`alembic revision --autogenerate`), it compares ALL models to the current DB state. If any model drift exists in the `ApprovalState` enum (defined in migration 0009), autogenerate emits spurious `op.execute("CREATE TYPE ...")` or `op.alter_column` DDL. Postgres enums are notoriously difficult to modify post-creation — a failed migration on an enum in production can leave the database in a partial state requiring manual repair.
+
+**Why it happens:**
+Alembic autogenerate is convenient but inspects every model, not just the changed one. It is easy to run `--autogenerate` without reviewing the generated diff carefully.
+
+**How to avoid:**
+Write migration 0010 by hand: `alembic revision -m "add_daily_summaries"` (no `--autogenerate`). The migration body should contain ONLY:
+1. `op.create_table("daily_summaries", ...)`
+2. `op.create_index(...)` on `generated_at` (needed for the prune `WHERE generated_at < NOW() - INTERVAL '30 days'` query)
+
+Review the migration file before running `alembic upgrade head` in production. Confirm the file contains no `op.execute` statements referencing `approvalstate` or any existing enum type.
+
+**Warning signs:**
+Migration 0010's `upgrade()` function contains `CREATE TYPE` or `ALTER TYPE` DDL referencing `approvalstate`.
+
+**Phase to address:**
+Phase that creates the `daily_summaries` table migration.
+
+---
+
+### MOD-3: SerpAPI quota — daily_summary fires are cache-cold by design
+
+**What goes wrong:**
+`fetch_stories()` caches on a 30-minute bucket. In v1.0, `sub_breaking_news` fires every hour — the cache was warm for most of the day, amortizing SerpAPI calls across many hits. With v2.0 retiring those sub-agents, only `daily_summary` calls the ingestion — at 08:00 and 12:00 PT, 4 hours apart. Each fire is a fresh full ingestion: 17 `SERPAPI_KEYWORDS` × 5 results each = 85 SerpAPI searches. Two fires/day × 30 days = 60 full ingestions/month, ~5,100 search result fetches/month.
+
+The $50/mo SerpAPI plan provides approximately 5,000-6,000 searches/month depending on tier. This is right at the limit with minimal headroom.
+
+**How to avoid:**
+Reduce `SERPAPI_KEYWORDS` from 17 to 10 for the summary use case. The sub-agents needed broad coverage for format diversity (infographics needed different signals than threads). The summary only needs the top gold + macro stories. A `SUMMARY_SERPAPI_KEYWORDS` constant with the 10 highest-signal keywords avoids modifying the existing `SERPAPI_KEYWORDS` constant (which should remain in place for any future sub-agent resurrection).
+
+Verify the SerpAPI plan quota in the dashboard before v2.0 go-live.
+
+**Warning signs:**
+SerpAPI returning empty results or 429 errors in Railway logs after day 15-20 of the month.
+
+**Phase to address:**
+Phase that implements the `daily_summary` agent's gold news ingestion.
+
+---
+
+### MOD-4: Stale TanStack Query cache — new summary not appearing while tab is open
+
+**What goes wrong:**
+TanStack Query's default stale time is 0ms — it refetches on every mount. But the feed component is mounted once when the user opens the page. If the 12:00 PT summary fires while the tab is open (user opened it after the 08:00 summary), the new summary does not appear until the user navigates away and back. The data is stale in the query cache but no refetch fires while the component is mounted.
+
+**How to avoid:**
+Set `refetchInterval: 5 * 60 * 1000` on the `useSummaries()` hook. This is safe — `GET /summaries` is a lightweight `SELECT * FROM daily_summaries ORDER BY generated_at DESC LIMIT 30`. When the refetch detects a new `id` or `generated_at` that wasn't in the previous result, show a "New summary available" banner prompting the user to scroll to the top.
+
+**Warning signs:**
+User reports "I don't see the 12:00 summary until I hard-refresh the page."
+
+**Phase to address:**
+Phase that implements the web feed frontend.
+
+---
+
+### MOD-5: Hallucinated dates in Sonnet summary output
+
+**What goes wrong:**
+When Sonnet writes the summary narrative, it may produce "The Bank of Canada raised rates in March 2025" when the article is from March 2024. For the Ontario stats section, Sonnet might write "as of Q1 2025" when the most recent StatCan release is Q3 2024. This is a known Sonnet pattern — it anchors to training data rather than the article's stated date.
+
+**Why it happens:**
+Sonnet is prompted to write a narrative but is not explicitly grounded to each article's `published_date`.
+
+**How to avoid:**
+Include `published_date` in every article passed to the summary write prompt. Add an explicit instruction:
+```
+For every factual claim in your summary, use ONLY dates explicitly stated in the provided articles.
+Do NOT infer, estimate, or use training knowledge for dates.
+If an article does not include a date, write "recently" rather than inventing a date.
+```
+Post-process: scan the output for 4-digit years outside the range `[current_year - 1, current_year]` and log a WARNING if found — do not send a summary containing dates from 3+ years ago without review.
+
+**Warning signs:**
+Summary cards showing dates 1-2 years in the past for what were presented as current news articles.
+
+**Phase to address:**
+Phase that implements the Sonnet summary write prompt.
+
+---
+
+### MOD-6: Failure alert deadlock — WhatsApp send failure during summary failure
+
+**What goes wrong:**
+If `daily_summary` fails AND the failure-alert WhatsApp send also fails (Twilio sandbox session expired, credentials rotated), `send_whatsapp_message` raises `TwilioRestException` after one retry. If the failure-alert call is made inline in the `daily_summary` job function, the `TwilioRestException` propagates up to `with_advisory_lock`, which catches it (EXEC-04 — worker must survive), logs it, and releases the lock. The original error is lost. The user never learns the summary failed.
+
+**Why it happens:**
+The natural pattern is `try: run_summary() except: send_failure_alert()` — but this does not protect against the alert itself failing.
+
+**How to avoid:**
+Wrap the failure alert send in its own try/except that NEVER re-raises:
+```python
+try:
+    await send_whatsapp_message(
+        f"SUMMARY FAILED: {section_name} — {type(original_exc).__name__}: {str(original_exc)[:200]}"
+    )
+except Exception as alert_exc:
+    logger.error(
+        "daily_summary failure alert ALSO failed (%s) — original error was: %s. "
+        "Check Railway logs at %s.",
+        type(alert_exc).__name__,
+        original_exc,
+        datetime.now(timezone.utc).isoformat(),
+    )
+    # Do not re-raise — EXEC-04
+```
+The alert message MUST include which section failed (gold_news / ontario_law / ontario_stats), the error type, and a timestamp so the user can locate the Railway log entry.
+
+**Warning signs:**
+A `daily_summaries` row with `status='failed'` in the DB and no corresponding WhatsApp notification received on that date.
+
+**Phase to address:**
+Phase that implements the WhatsApp failure-alert hook for `daily_summary`.
+
+---
+
+## Minor Pitfalls
+
+### MIN-1: Markdown XSS — rendering Claude output without sanitization
+
+**What goes wrong:**
+Sonnet returns markdown. If the frontend renders it with `dangerouslySetInnerHTML` or an unsanitized renderer, a `<script>` tag in the Sonnet output creates an XSS vector. Probability is low (Sonnet does not typically emit script tags in summaries), but it is a trivially-preventable class of vulnerability.
+
+**How to avoid:**
+Use `react-markdown` (which rejects `<script>` tags by default) with `allowedElements` explicitly set to `['p', 'ul', 'ol', 'li', 'strong', 'em', 'a', 'h3', 'h4', 'blockquote']`. Never use `dangerouslySetInnerHTML` on LLM output.
+
+**Phase to address:**
+Phase that implements the web feed frontend rendering.
+
+---
+
+### MIN-2: Ontario stats empty-state indistinguishable from ingestion failure
+
+**What goes wrong:**
+Ontario stats (StatCan / OGS) release monthly or quarterly. Most daily fires produce no new stats — this is expected. If the empty state renders as a blank section or a generic "No data" message, the user cannot distinguish "no new stats released this month" (correct) from "the stats ingestion is broken" (problem). After weeks of correct empty states, the user stops noticing — and when the ingestion actually breaks, it looks the same.
+
+**How to avoid:**
+Two distinct states persisted in the `daily_summaries` row:
+1. `ontario_stats_status = "no_new_data"` + `ontario_stats_last_data_date = <date>` → render: "No new Ontario stats since 2026-04-01"
+2. `ontario_stats_status = "error"` → render: "Ontario stats unavailable — check agent logs" (distinct visual treatment, links to `/settings/agent-runs`)
+
+The `last_data_date` should be a column on `daily_summaries`, not inferred by querying previous rows — querying previous rows is fragile when the prune cron runs.
+
+**Phase to address:**
+Phase that implements the Ontario stats section + empty-state design.
+
+---
+
+### MIN-3: Frontend route /queue bookmark breaks on pivot day
+
+**What goes wrong:**
+The old `/queue` route was the primary URL used by the user. After v2.0 replaces it with `/`, any browser bookmark pointing to `/queue` returns a 404 — a bad first impression on the first open after deploy.
+
+**How to avoid:**
+Add a React Router redirect: `<Route path="/queue" element={<Navigate to="/" replace />} />`. Include it in the phase that ships the new feed page. Add a `// TODO: remove after 2026-07-05` comment. Remove after 60 days.
+
+**Phase to address:**
+Phase that implements the web feed frontend.
 
 ---
 
@@ -177,12 +450,10 @@ Multi-agent systems fail most often at handoff points. Each agent (Twitter, Inst
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Hardcoded scoring weights instead of Settings page | Faster initial build | Every threshold change requires a code deploy, not a settings change | Never — Settings page is a core requirement |
-| Single monolithic Claude prompt per agent instead of chained generation + evaluation | Simpler code | Constraint violations (financial advice, Seva mention) catch rate degrades; no audit trail per step | Never for compliance-sensitive drafts |
-| Skipping monthly quota tracking for X API | Saves a few DB columns | Twitter Agent silently goes dark mid-month; no alerting | Never — quota exhaustion is a primary failure mode |
-| Storing only the approved draft alternative, not all alternatives | Smaller DB payload | Cannot analyze which alternative types get approved; learning loop has no data | Acceptable only if learning loop is explicitly deferred |
-| Using APScheduler inside the FastAPI process instead of separate worker | Fewer Railway services | Crash coupling, duplicate execution risk | Never — already identified as architecture decision |
-| Skipping Twilio WhatsApp template approval until launch | Faster development | Go-live blocked by Meta's approval queue (1-7 days) | Never — submit templates in Phase 1 infrastructure |
+| Retire sub-agents as dead code (not stripped) | Fast pivot, no regression risk on retired code | Tests for retired sub-agents keep passing; dead code accumulates; cognitive overhead | Acceptable for v2.0; strip in v2.1 after 30 days confidence |
+| No Pydantic model for JSONB raw_sources_jsonb | One less abstraction layer | Silent schema drift; breaks go undetected until production shows empty fields | Never for fields read by the frontend |
+| WhatsApp teaser-only message (no full content) | Constant message size, zero chunking logic | User cannot read summary content offline — must open web feed | Acceptable — web feed is the primary surface |
+| Single misfire_grace_time=1800 for all jobs | Simple global config, reuses m49 pattern | daily_summary and prune cron have different recovery needs; prune should NOT fire multiple times in a restart burst | Use DB-level idempotency guard (CRIT-3) as defense-in-depth |
 
 ---
 
@@ -190,82 +461,25 @@ Multi-agent systems fail most often at handoff points. Each agent (Twitter, Inst
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| X Basic API | Counting "searches" instead of "tweet reads" in quota planning | Count every tweet ID returned across all search results against the 10,000 monthly cap; budget by tweet reads not search calls |
-| X Basic API | Not reading `X-Rate-Limit-Remaining` response headers | Parse headers on every response, persist remaining count to DB, alert at threshold |
-| Apify Instagram | Treating 0-result run as valid empty signal | Baseline-compare results per hashtag/account; flag zero-result runs as scraper health events requiring investigation |
-| Apify Instagram | Using Actor version pinning on the wrong version | Pin to the latest stable version at build time; review Apify changelog before updating — Instagram layout changes break specific versions |
-| Claude API | Drafting and self-evaluating in the same prompt | Separate generation and evaluation into two distinct API calls with independent prompts; the evaluator must not see its own draft generation logic |
-| SerpAPI | Not tracking hourly quota cap separately from monthly | SerpAPI enforces a 20% hourly cap on monthly quota; monitor both dimensions; batch Content Agent news searches to avoid hourly bursts |
-| SerpAPI | Making duplicate search calls for overlapping keywords | Deduplicate keyword searches; cache results for 30 minutes before re-querying the same term |
-| Twilio WhatsApp | Building notification logic around Sandbox free-form messages | Design all notifications as templates from day one; sandbox accepts templates too — test the template format before submission |
-| Neon PostgreSQL | Assuming free-tier 512MB is ample if keeping all data forever | "Keep all data forever" with JSONB draft alternatives accumulates fast; monitor storage with a dashboard metric; budget the $19/mo Pro upgrade as an expected Phase 2 cost |
-| Railway scheduler worker | Assuming Railway zero-downtime deploys prevent overlap | Configure scheduler worker replica count to exactly 1, disable autoscaling; add DB-level job lock as defense-in-depth |
-
----
-
-## Performance Traps
-
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Full-table scan for deduplication on every Senior Agent run | Senior Agent run time growing from 2s to 30s+ as queue grows | Index on `(source_url, platform, created_at)` and `(story_fingerprint_hash)`; query only last 24-48h window | After ~5,000 queue items (a few months of operation) |
-| Fetching all pending items for the dashboard on every page load | Dashboard load time increasing as queue grows; React re-renders on every approval | Paginate approval queue; use database-side filtering for status; WebSocket or polling only for new item count badge | After ~500 pending items simultaneously |
-| Claude API calls in a synchronous request-response loop on the scheduler | Agent run blocking until all Claude calls complete; scheduler timeout risks | Make Claude calls async; process items in parallel batches (not one-by-one); set per-call timeout with fallback | Immediately on event mode runs (8-10 posts = 8-10 sequential Claude calls) |
-| Storing full post text + all alternatives as duplicated columns instead of JSONB array | Schema bloat, migration complexity if alternative count changes | Use JSONB array for alternatives (already in project design); do not add `alternative_1`, `alternative_2`, `alternative_3` columns | Schema becomes unmaintainable if alternative count varies by agent |
-| Re-scraping Apify on every scheduler tick without caching seen post IDs | Redundant Apify runs burning monthly quota on already-processed posts | Store scraped post IDs with timestamp; skip on re-scrape if seen within the 8h window | Immediately — Apify charges per result, not per run |
-
----
-
-## Security Mistakes
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Storing X API key, Apify key, Anthropic key, Twilio credentials, SerpAPI key in the repository or in plain environment variables without a secrets manager | Full API key exposure if repo is ever made public or Railway environment is misconfigured | Use Railway's environment variable secrets for all API keys; never commit `.env` files; document which vars are required without exposing values |
-| Using the same password hash algorithm as a quick implementation (e.g., MD5, SHA-1) for single-user dashboard auth | Password compromise if the database is ever exposed | Use bcrypt for the single password hash; the simplicity of single-user auth doesn't justify weak hashing |
-| Exposing raw Claude prompts (including quality rubric and scoring weights) via the Settings API | Prompt injection attacks; users could craft social media posts designed to manipulate the scoring rubric | Settings API should expose threshold numbers only, not prompt text; prompt text lives in server-side code only |
-| Not rate-limiting the dashboard API | Brute-force attacks on the single-user password endpoint | Even for a single-user system, rate-limit `/auth/login` to 5 attempts per 15 minutes; log failed attempts |
-| WhatsApp notification content including post excerpts with unescaped special characters | Message delivery failures; potential template rejection by Meta | Sanitize all dynamic content inserted into WhatsApp templates; test edge cases (quotes, unicode, long text) in sandbox before production |
-
----
-
-## UX Pitfalls
-
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Approval card inline editor opens in a modal that loses context of the original post | User has to close editor, re-read original post, reopen editor when making substantive edits | Side-by-side layout: original post stays visible while draft is editable in the same card |
-| No visual distinction between "Twitter: reply" and "Twitter: retweet-with-comment" alternatives in the same card | User accidentally copies the reply text when intending to retweet, or vice versa | Explicit tab labels ("Reply" / "Retweet+Comment") within each card; tab state persists until card is acted on |
-| Rejection reason field is optional | Over time, rejected items have no signal for what went wrong; learning loop has no data | Make rejection reason mandatory — a short dropdown (Off-brand / Low quality / Not relevant / Financial advice risk / Other) with optional free text |
-| Dashboard shows score as a raw number (e.g., 7.4) without context | User cannot tell if 7.4 is good or if the rubric has inflated | Show score with its component breakdown (relevance, originality, tone, compliance) on hover/expand; show weekly average score in the header |
-| Expiry countdown is not visible on cards approaching expiration | High-value draft expires while user is reviewing lower-priority items | Show a color-coded urgency indicator (green → yellow → red) on cards within 2h of expiry; sort expired-soon to the top of queue |
-| WhatsApp digest arrives but links to the post require the user to open the dashboard to act | User reads the digest on mobile but cannot take action without switching to desktop | Morning digest should include direct platform URLs (Twitter/Instagram link) so user can at minimum read the source post on mobile; dashboard link is secondary |
+| Twilio Sandbox | Sandbox session expires if user has not sent a message in 24h; `send_whatsapp_message` returns `None` (credentials present, but session lapsed) — success looks the same as failure | Move to production Twilio sender before v2.0 go-live; sandbox is correct for local dev only |
+| Neon PgBouncer (transaction mode) | Using `pg_try_advisory_lock` and expecting it to persist across multiple statements — PgBouncer routes each statement to potentially a different backend connection | Advisory locks work when acquired and released within a single `engine.connect()` context — which `with_advisory_lock` already does correctly; prune cron must use the same pattern |
+| APScheduler + asyncio Python 3.12+ | Calling `asyncio.get_event_loop()` inside an async job function — deprecated in Python 3.10+, raises DeprecationWarning in 3.12 | Use `asyncio.get_running_loop()` inside async job functions; `_do_fetch` in `content_agent.py` uses `get_event_loop()` — new daily_summary code should use `get_running_loop()` |
+| SerpAPI in async context | Calling `serpapi_client.search()` synchronously inside an async function without `run_in_executor` — blocks the event loop | Use `loop.run_in_executor(None, _call)` pattern from `_fetch_all_serpapi` |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Twitter quota tracking:** Agent can fetch tweets without hitting 429 — verify that monthly cap counter is being decremented correctly, not just that the API responds successfully
-- [ ] **Instagram scraper health:** Apify runs show "completed" in logs — verify that result counts are being compared against baselines, not just that the actor finished without error
-- [ ] **Claude compliance checks:** Draft quality scores above 7.0 — verify that the separate compliance checker (financial advice, Seva mention) is running as a second Claude call, not baked into the scoring prompt
-- [ ] **WhatsApp production:** Notifications are received in sandbox — verify that Meta has approved message templates and production sender is configured, not just that sandbox messages arrive
-- [ ] **Senior Agent deduplication:** Queue shows items from both Twitter and Instagram — verify that "related" linking is functioning with story fingerprints, not just that duplicates are being dropped
-- [ ] **Rejection reason tracking:** Reject button works — verify that rejection reason is required and stored before the card is dismissed, not just that the state machine transitions correctly
-- [ ] **APScheduler single-replica:** Scheduler worker starts and runs jobs — verify that Railway is configured with `replicas: 1` and autoscaling is disabled for that service
-- [ ] **SerpAPI hourly cap:** Daily news searches complete — verify that the agent is not consuming more than 20% of monthly quota in a single hour across its scheduled runs
-- [ ] **Expiry auto-archival:** Expired items are removed from the queue view — verify that the Senior Agent's expiry logic is running and marking items as `expired` status, not just hiding them client-side
-- [ ] **Settings page writes:** Scoring weights can be changed in the UI — verify that changed weights are actually used in subsequent agent runs, not cached in-memory from startup
-
----
-
-## Recovery Strategies
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| X API monthly quota exhausted mid-month | MEDIUM | Surface outage via dashboard banner and WhatsApp alert; switch to "news-only" mode (Content Agent continues, Twitter Agent pauses); resume at month reset; post-mortem to tighten query efficiency |
-| Instagram scraper blocked / degraded for extended period | MEDIUM | Alert via dashboard; switch Instagram Agent to reduced frequency (once per 12h instead of 4h); open Apify support ticket; worst-case, gold sector Instagram monitoring is paused without total system failure |
-| Claude compliance checker producing high rejection rates (prompt degradation) | LOW-MEDIUM | Roll back the evaluator prompt to last known-good version (keep prompt versions in code as named constants, not inline strings); re-run the failed batch manually |
-| Twilio WhatsApp template rejected by Meta | LOW | Resubmit with revised template copy; notifications fall back to silence (system still operates, user just doesn't receive WhatsApp alerts); estimated re-approval: 1-3 days |
-| APScheduler duplicate run causing duplicate queue items | LOW | Idempotency key on `(source_url, platform, created_at_hour)` allows cleanup with a single SQL deduplication query; implement DB job lock going forward |
-| Neon free tier storage filled (512MB) | LOW | Upgrade to Neon Pro ($19/mo); no data loss; no architecture change; cost was pre-identified as expected |
-| Quality rubric inflation (approval rate decline) | MEDIUM | Review last 30 days of rejection reasons; recalibrate rubric examples; this is a weekly calibration activity, not a crisis — only becomes HIGH cost if ignored for months |
+- [ ] **Dual registration removed:** Startup logs show `midday_digest` is absent from `_scheduler.get_jobs()` output
+- [ ] **Advisory lock uniqueness:** `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` passes at startup; daily_summary=1020, daily_summary_prune=1021
+- [ ] **WhatsApp teaser length:** `len(teaser_message)` logged and confirmed < 400 chars on first real fire
+- [ ] **Ontario law filter has negative examples:** Prompt string reviewed and confirmed to contain at least one REJECT example before merge
+- [ ] **Ontario law filter uses Haiku:** Model config key confirmed as `claude-haiku-4-5`; not `claude-sonnet-4-6`
+- [ ] **JSONB Pydantic model validates on write:** Unit test: write a malformed `RawSource` — confirm `ValidationError` raised
+- [ ] **DB-level idempotency guard:** `daily_summary` agent queries for recent rows before writing; unit test simulates two concurrent fires
+- [ ] **Prune 404 handled gracefully:** Frontend shows "no longer available" message on `GET /summaries/{id}` 404 — not an error screen
+- [ ] **Ontario stats shows last_data_date:** Empty-state component renders a specific date string, not just "No data"
+- [ ] **`/queue` redirect in place:** Browser navigation to `/queue` redirects to `/` with 301
 
 ---
 
@@ -273,32 +487,32 @@ Multi-agent systems fail most often at handoff points. Each agent (Twitter, Inst
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| X API monthly quota exhaustion | Twitter Agent phase | Monthly cap counter exists in DB; dashboard shows remaining quota; hard-stop logic tested against mock 429 response |
-| Instagram partial/silent scraper failure | Instagram Agent phase | Baseline-comparison alert fires on a simulated zero-result run; retry logic tested |
-| Claude compliance violations (financial advice, Seva mention) | Content Agent phase + Twitter/Instagram Agent phase | Compliance checker runs as separate call in all three agents; tested with deliberately violating input |
-| APScheduler duplicate execution | Infrastructure/scheduler phase | Railway config has replicas: 1 for scheduler service; DB job lock implemented and tested |
-| Content quality threshold drift | Content Agent phase | Approval-rate tracking in DB; Settings page shows weekly approval rate; calibration path documented |
-| Twilio WhatsApp template requirements | Infrastructure phase (Phase 1) | Meta template approval confirmed before notification logic build starts |
-| Senior Agent story fingerprint / cross-platform deduplication | Senior Agent / orchestration phase | Related item linking tested with synthetic matching scenarios; fingerprint schema in DB |
-| APScheduler inside API process (not separate worker) | Architecture decision (already decided correctly) | Verify Railway deploy config has two separate services: API and scheduler-worker |
-| SerpAPI hourly quota burst | Content Agent phase | Hourly consumption logged per run; alert fires if single run exceeds 20% of monthly quota |
-| Rejection reason not captured | Dashboard / approval workflow phase | Rejection action blocked at DB level if reason field is null |
-| WhatsApp Sandbox masking production template requirements | Infrastructure phase | Template submitted to Meta before notification feature is considered "done" |
+| CRIT-1: Duplicate WhatsApp dual registration | Phase that registers `daily_summary` cron | `midday_digest` absent from `get_jobs()` at startup |
+| CRIT-2: Advisory lock ID collision | Phase that registers `daily_summary` cron | Lock ID uniqueness assertion passes; 1020 and 1021 assigned |
+| CRIT-3: Multiple fires on Railway restart | Phase that writes `daily_summary` agent logic | Integration test: two scheduler starts 5 min apart → one `daily_summaries` row |
+| CRIT-4: fetch_stories() cache contamination | Phase that implements gold news ingestion for summary | Unit test: summary story list has no `predicted_format` keys |
+| HIGH-1: Ontario law false positives | Phase that implements Ontario law filter | Manual review: first week's Ontario law section has zero political-speech articles |
+| HIGH-2: Ontario law false negatives | Phase that implements Ontario law filter | Synthetic test: "Building Ontario Act amends Mining Act" → `is_law=True` |
+| HIGH-3: Prune-vs-read race | Phase that implements prune cron + detail endpoint | Frontend handles `GET /summaries/{id}` 404 with redirect |
+| HIGH-4: JSONB schema drift | Phase that creates `daily_summaries` migration | `RawSource` Pydantic model exists and used in writer |
+| HIGH-5: WhatsApp >1600 chars | Phase that implements WhatsApp delivery | `len(teaser_message)` asserted < 400 on send |
+| HIGH-6: Anthropic cost (Sonnet for filtering) | Phase that implements Ontario law filter | Filter model confirmed as `claude-haiku-4-5` |
+| MOD-2: Alembic enum collision | Phase that creates `daily_summaries` migration | Migration 0010 contains no `CREATE TYPE` / `ALTER TYPE` referencing `approvalstate` |
+| MOD-3: SerpAPI quota | Phase that implements gold news ingestion | `SUMMARY_SERPAPI_KEYWORDS` ≤ 10 keywords |
+| MOD-5: Hallucinated dates | Phase that implements Sonnet summary write prompt | Prompt contains date-grounding instruction; post-process warns on out-of-range years |
+| MOD-6: Failure alert deadlock | Phase that implements WhatsApp failure-alert hook | Alert send wrapped in its own try/except; original error preserved in log |
 
 ---
 
 ## Sources
 
-- X API Basic tier limits and rate limiting: [Twitter API Limits Complete Guide 2025](https://www.gramfunnels.com/blog/twitter-api-limits) | [X API Pricing Tiers 2025](https://twitterapi.io/blog/twitter-api-pricing-2025)
-- Instagram scraping pitfalls and Apify anti-detection: [Apify — How to scrape Instagram without getting blocked](https://blog.apify.com/scrape-instagram-python/) | [Apify Instagram Scraper official](https://apify.com/apify/instagram-scraper) | [Apify rate limiting docs](https://docs.apify.com/academy/anti-scraping/techniques/rate-limiting)
-- APScheduler + FastAPI production pitfalls: [Common APScheduler mistakes in Python applications](https://sepgh.medium.com/common-mistakes-with-using-apscheduler-in-your-python-and-django-applications-100b289b812c) | [APScheduler FAQ — interprocess synchronization](https://apscheduler.readthedocs.io/en/3.x/faq.html) | [Building Resilient Task Queues in FastAPI with ARQ](https://davidmuraya.com/blog/fastapi-arq-retries/)
-- Claude API prompt engineering pitfalls: [Anthropic Claude prompting best practices](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices) | [Claude Prompt Engineering Best Practices 2026](https://promptbuilder.cc/blog/claude-prompt-engineering-best-practices-2026)
-- AI agent hallucination and quality drift: [Ensuring Reliability in AI Agents: Preventing Drift and Hallucinations in Production](https://medium.com/@kamyashah2018/ensuring-reliability-in-ai-agents-preventing-drift-and-hallucinations-in-production-4b8f8600ec69) | [7 Common Pitfalls in AI Agent Deployment](https://www.getmaxim.ai/articles/7-common-pitfalls-in-ai-agent-deployment-and-how-to-avoid-them/)
-- Multi-agent orchestration handoff failures: [AI Agent Orchestration Patterns — Azure Architecture Center](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns) | [Multi-Agent AI Systems Key Insights 2025](https://key-g.com/blog/multi-agent-ai-systems-in-2025-key-insights-examples-and-challenges/)
-- Twilio WhatsApp sandbox vs. production: [Test WhatsApp messaging with the Sandbox — Twilio](https://www.twilio.com/docs/whatsapp/sandbox) | [Rules and Best Practices for WhatsApp Messaging on Twilio](https://support.twilio.com/hc/en-us/articles/360017773294-Rules-and-Best-Practices-for-WhatsApp-Messaging-on-Twilio) | [WhatsApp sender message limits and quality rating](https://support.twilio.com/hc/en-us/articles/360024008153-WhatsApp-Rate-Limiting)
-- SerpAPI quota and hourly caps: [Overcome SerpAPI's hourly quota caps](https://blog.apify.com/best-serpapi-alternatives/) | [Mastering SERP API Limitations and Challenges](https://www.serphouse.com/blog/serp-api-limitations/)
-- Financial content AI legal risk and compliance: [AI Governance in Financial Services — FINRA & SEC Guidance](https://www.smarsh.com/blog/thought-leadership/ai-governance-expectations-are-rising-even-without-rules) | [SEC Risk Alert: Investment Adviser Use of Social Media](https://www.sec.gov/about/offices/ocie/riskalert-socialmedia.pdf)
+- Direct code inspection: `/Users/matthewnelson/seva-mining/scheduler/worker.py` — JOB_LOCK_IDS (1005, 1010-1016), misfire_grace_time=1800, coalesce=True, max_instances=1, CronTrigger pattern, reconcile_stale_runs implementation
+- Direct code inspection: `/Users/matthewnelson/seva-mining/scheduler/agents/content_agent.py` — _CACHE_LOCK held microseconds only, coalesce pattern via _FETCH_IN_FLIGHT Future, cache bucket = `int(time.time() // 1800)`, parallel scoring via asyncio.gather, Sonnet model = `claude-sonnet-4-6`, Haiku model = `claude-haiku-4-5` for is_gold_relevant_or_systemic_shock
+- Direct code inspection: `/Users/matthewnelson/seva-mining/scheduler/services/whatsapp.py` — 1500-char safety margin in build_chunks, single-retry pattern, graceful skip on missing credentials returning None
+- `.planning/PROJECT.md` — v2.0 milestone spec, Ontario law/stats hard parts, stack contract, lock ID history
+- Neon PgBouncer transaction-mode behavior: advisory locks require session-mode connection to persist across statements (documented in Neon connection pooling docs)
+- APScheduler 3.x coalesce + misfire_grace_time behavior: fires once per missed window within a single scheduler instance lifetime — new process start = new scheduler instance
 
 ---
-*Pitfalls research for: AI social media monitoring and engagement drafting system — gold sector*
-*Researched: 2026-03-30*
+*Pitfalls research for: v2.0 Daily Summary Feed (seva-mining)*
+*Researched: 2026-05-05*
