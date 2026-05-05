@@ -1,312 +1,156 @@
-# Requirements: Seva Mining AI Social Media Agency
+# Requirements: Seva Mining v2.0 — Daily Summary Feed
 
-**Defined:** 2026-03-30
-**Core Value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
+**Defined:** 2026-04-27
+**Core Value:** Every piece of content the system produces must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made. For v2.0 this manifests as a twice-daily structured intelligence digest that respects the user's time: scannable headlines + bullets, three sections, no fluff.
 
-## v1 Requirements
+## v2.0 Requirements
 
-Requirements for initial release. Each maps to roadmap phases.
+Each requirement maps to exactly one phase. Categories follow the research SUMMARY.md phase build order.
 
-### Infrastructure
+### Summary Cron + Agent (SUM)
 
-- [x] **INFRA-01**: PostgreSQL database with full schema deployed on Neon (6 tables: draft_items, content_bundles, agent_runs, daily_digests, watchlists, keywords)
-- [x] **INFRA-02**: Indexes on status, platform, created_at, expires_at columns for query performance
-- [x] **INFRA-03**: FastAPI backend deployed on Railway with all API endpoints operational
-- [x] **INFRA-04**: Separate scheduler worker process deployed as second Railway service
-- [x] **INFRA-05**: APScheduler with AsyncIOScheduler and database-level job lock to prevent duplicate runs during zero-downtime deploys
-- [x] **INFRA-06**: Alembic migration system for schema versioning
-- [x] **INFRA-07**: Neon connection pooling configured (pool_pre_ping=True, pool_recycle=300, PgBouncer transaction-mode)
-- [x] **INFRA-08**: Environment variable configuration for all external service credentials
-- [x] **INFRA-09**: Health check endpoints for Railway monitoring
+Core scheduled-job behavior — the cron, the lock, the agent module that orchestrates the three section builders, and the row-write contract.
 
-### Authentication
+- [ ] **SUM-01**: System fires `daily_summary` cron at 08:00 PT and 12:00 PT every day via APScheduler `CronTrigger(hour="8,12", minute=0, timezone="America/Los_Angeles")`
+- [ ] **SUM-02**: System holds advisory lock 1017 during `daily_summary` execution; concurrent fires from a flappy Railway redeploy fail-fast with a structured warning log instead of producing duplicate rows
+- [ ] **SUM-03**: System idempotency-guards each fire with a DB check — if any `daily_summaries` row exists for the same fire-window with `status` IN (`'running'`, `'completed'`), the second fire skips and logs `idempotency_skip` (prevents duplicate WhatsApp messages from misfire churn)
+- [ ] **SUM-04**: System writes one `agent_runs` row per `daily_summary` fire with structured `notes` telemetry: `{candidates_gold, candidates_law, candidates_stats, sections_completed, sections_failed, whatsapp_sent}`
+- [ ] **SUM-05**: System sets `daily_summaries.status` to `completed` when all 3 sections succeed, `partial` when 1-2 sections fail (the others render their empty states), `failed` only when fetch crashes before any section can be assembled
+- [ ] **SUM-06**: System retires the legacy `midday_digest` cron — its `scheduler.add_job(...)` registration is removed from `build_scheduler()` in the same commit that registers `daily_summary` (factory + lock-id-entry remain as dead code)
 
-- [x] **AUTH-01**: Operator can log in with a password on the dashboard
-- [x] **AUTH-02**: Session persists across browser refresh (JWT token)
-- [x] **AUTH-03**: Unauthenticated requests to dashboard and API are rejected
+### Gold News Section (GOLD)
 
-### ~~Twitter Agent~~ (DEPRECATED 2026-04-20)
+The first card section. Reuses `fetch_stories()` with no refactor. The most immediately shippable section.
 
-> Shipped 2026-04-02, ran in prod until 2026-04-20, then fully purged in quick task `260420-sn9`. The X API Basic tier ($100/mo) spend was not justified relative to the Content Agent's higher-signal news pipeline output. All TWIT-* requirements are historically "complete-then-deprecated" — they reflect work that shipped but is no longer part of the product. The `video_clip` pipeline on the Content Agent still calls the X API (tweepy async) for video-clip search — that is a downstream tool, not the Twitter Agent.
+- [ ] **GOLD-01**: System ingests gold-news candidates via the existing `fetch_stories()` (post-m51 coalesce + parallel scoring) and selects the top 5 stories with composite `score >= 6.0`
+- [ ] **GOLD-02**: System produces a markdown-formatted Gold News section consisting of a 1-sentence lead ("Why it matters" framing) followed by 3-5 bullet points; each bullet ≤ 25 words, includes the source name in parentheses
+- [ ] **GOLD-03**: System renders the empty-state line "No major moves in gold today — prices ranging in [low]–[high]." when no stories clear the score floor; pulls the price range from existing market-snapshot data when available
 
-- [ ] ~~**TWIT-01**: Agent monitors X via Basic API using configurable cashtags, hashtags, and natural language keywords every 2 hours~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-02**: Agent scores posts on engagement (40%), account authority (30%), and topic relevance (30%)~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-03**: Engagement formula: likes x1 + retweets x2 + replies x1.5~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-04**: Minimum engagement gate: 500+ likes OR watchlist account with 50+ likes~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-05**: Recency decay: full score under 1h, 50% at 4h, expired at 6h~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-06**: Top 3-5 qualifying posts per run passed to drafting~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-07**: Agent drafts both a reply comment AND a retweet-with-comment for each qualifying post~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-08**: Agent produces 2-3 alternative drafts per response type~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-09**: Each draft evaluated against quality rubric (relevance, originality, tone match, no company mention, no financial advice) before queuing~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-10**: Separate Claude compliance-checker call validates no Seva Mining mention and no financial advice in every draft~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-11**: Monthly X API quota counter tracks tweet reads against 10,000/month cap~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-12**: Hard-stop logic prevents API calls when quota approaches limit (configurable safety margin)~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-13**: Dashboard displays current quota usage and alerts when quota is low~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**TWIT-14**: All drafts sent to Senior Agent with rationale explaining why this post matters and what angle the draft takes~~ **(DEPRECATED 2026-04-20)**
+### Ontario Law Section (LAW)
 
-### ~~Instagram Agent~~ (DEPRECATED 2026-04-19)
+The hardest pipeline. Three ingestion sources, a Haiku filter with explicit reject examples, weekday-continuous urgency.
 
-> **DEPRECATED 2026-04-19 via quick task `260419-lvy`.** Instagram Agent removed from scope — Apify-based scraping proved non-viable and the $50/mo spend no longer fits the budget. All INST-* requirements below are retained for historical context only; none will be implemented. The `scheduler/agents/instagram_agent.py` module, Apify deps, and frontend Instagram UI have been purged from the codebase.
+- [ ] **LAW-01**: System ingests Ontario-law candidates each fire from three sources concurrently — Ontario Newsroom RSS (primary), NRCan RSS (secondary), and a SerpAPI keyword search (`"Ontario mining law" OR "Mining Act amendment"`) (tertiary)
+- [ ] **LAW-02**: System runs each candidate through a Haiku relevance filter (`claude-haiku-4-5`) that returns structured JSON `{is_law: bool, bill_or_reg_number: str|null, reason: str, favour_or_neutral: 'favour'|'neutral'|'against'}`; the filter prompt includes explicit REJECT examples for ministerial speeches and CTA announcements without a named bill
+- [ ] **LAW-03**: System produces a markdown Ontario Law section listing only surviving hits (`is_law=True AND bill_or_reg_number is not null AND favour_or_neutral != 'against'`); each bullet cites the bill/act name and a 1-sentence summary
+- [ ] **LAW-04**: System renders the empty-state copy "No new Ontario mining-related laws today. Last update: {date} — {law_name}." when the filter rejects all candidates (expected on most days; legislature recess June-Aug + Dec-Jan); the most recent passing hit is stored in `daily_summaries.raw_sources_jsonb.ontario_law.last_known_law` for empty-state continuity
 
-- [ ] ~~**INST-01**~~: Agent monitors Instagram via Apify scraper using configurable hashtags and account watchlist every 4 hours **(DEPRECATED)**
-- [ ] ~~**INST-02**~~: Agent scores posts: likes x1 + comment count x2 + normalized follower count x1.5 **(DEPRECATED)**
-- [ ] ~~**INST-03**~~: Minimum engagement gate: 200+ likes from last 8 hours **(DEPRECATED)**
-- [ ] ~~**INST-04**~~: Top 3 posts per run passed to drafting **(DEPRECATED)**
-- [ ] ~~**INST-05**~~: Agent drafts 2-3 alternative comments per qualifying post (1-2 sentences each) **(DEPRECATED)**
-- [ ] ~~**INST-06**~~: No hashtags in any drafted comment, ever **(DEPRECATED)**
-- [ ] ~~**INST-07**~~: Each draft evaluated against quality rubric before queuing **(DEPRECATED)**
-- [ ] ~~**INST-08**~~: Separate Claude compliance-checker call on every draft **(DEPRECATED)**
-- [ ] ~~**INST-09**~~: Retry logic for Apify scraping failures with exponential backoff **(DEPRECATED)**
-- [ ] ~~**INST-10**~~: Scraper health monitoring: detect silent failures (HTTP 200 with empty results) by comparing against baseline expected volume **(DEPRECATED)**
-- [ ] ~~**INST-11**~~: Scraper failure alerts surfaced in agent run logs and WhatsApp if critical **(DEPRECATED)**
-- [ ] ~~**INST-12**~~: Items expire after 12 hours **(DEPRECATED)**
+### Ontario Stats Section (STAT)
 
-### Content Agent
+Monthly cadence (StatCan Table 16-10-0019-01, ~19th-21st of M+2). Empty state is the default.
 
-- [x] **CONT-01**: Agent runs daily at 6am, pulling new content from all sources since last run
-- [x] **CONT-02**: RSS ingestion from Kitco News, Mining.com, Junior Mining Network, World Gold Council blog
-- [x] **CONT-03**: SerpAPI news search with gold-sector keywords ("gold exploration", "gold price", "central bank gold", "gold ETF", "junior miners", "gold reserves")
-- [x] **CONT-04**: Deduplication by URL and headline similarity (fuzzy match, 85% threshold)
-- [x] **CONT-05**: Story scoring on relevance to gold/mining (40%), recency (30%), engagement signal (30%)
-- [x] **CONT-06**: Quality threshold: only the single highest-scoring story above 7.0/10 is selected
-- [x] **CONT-07**: "No story today" flag sent to Senior Agent if nothing clears the threshold
-- [x] **CONT-08**: Deep research pass on selected story: pull full article, find 2-3 corroborating sources via web search, extract key data points
-- [x] **CONT-09**: Format decision logic: long-form article (600-900 words) for complex/data stories, short post/thread for fast-moving news, infographic brief for data-heavy visual stories **(long_form format retired 2026-04-23 — see quick 260423-k8n; longer content now rides under threads)**
-- [x] **CONT-10**: Thread format drafted as both a tweet thread (3-5 tweets, each under 280 chars) AND a single long-form X post
-- [x] **CONT-11**: Infographic brief includes headline, 5-8 key stats with sources, suggested visual structure, and full caption text
-- [x] **CONT-12**: Infographic generation using HTML templates for data-heavy pieces and AI image generation for creative/editorial pieces
-- [x] **CONT-13**: All content drafted in senior analyst voice — data-driven, measured, cites specifics
-- [x] **CONT-14**: No mention of Seva Mining in any content
-- [x] **CONT-15**: No financial advice in any content
-- [x] **CONT-16**: Separate Claude compliance-checker call on all content
-- [x] **CONT-17**: Content packaged with all sources and credibility score, sent to Senior Agent
+- [ ] **STAT-01**: System checks StatCan "The Daily" RSS each fire for Table 16-10-0019-01 (Monthly Mineral Production) release announcements; if found, triggers a WDS API pull
+- [ ] **STAT-02**: System pulls the Ontario gold production figure from StatCan WDS API on confirmed release days only (not on every fire), using the resolved Ontario+Gold vector ID
+- [ ] **STAT-03**: System stores the latest production figure + `snapshot_date` (`YYYY-MM`) in `daily_summaries.raw_sources_jsonb.ontario_stats.{last_known_figure, snapshot_date}` so the empty-state copy can render without re-querying
+- [ ] **STAT-04**: System produces a markdown Ontario Stats section showing the new production figure with comparison vs prior period when fresh StatCan data is available
+- [ ] **STAT-05**: System renders the empty-state copy "No new production statistics released today. Next Monthly Mineral Production Survey release expected around {next_release_estimate}. Last data: {YYYY-MM} — Ontario gold production: {last_known_figure} oz." on the ~30/31 days/month when no fresh data exists; distinguishes `no_new_data` (expected) from `error` (broken ingestion) with distinct visual treatment
 
-### ~~Senior Agent~~ (DEPRECATED 2026-04-20)
+### Web Feed UI (FEED)
 
-> Never fully shipped. Of the 9 SENR-* requirements, only SENR-06 + SENR-07 (the morning digest) were implemented — and those live under Phase 10. With Twitter + Instagram purged, cross-agent dedup (SENR-02), multi-platform queue priority (SENR-03), queue cap (SENR-04), per-platform expiry (SENR-05), and the expiry sweep (SENR-09) are no longer in scope. The trimmed `senior_agent.py` keeps `run_morning_digest()` and nothing else. See quick task `260420-sn9` for the trim.
+Replaces `/queue`. Reads from `GET /summaries`. Markdown-safe via react-markdown + rehype-sanitize.
 
-- [ ] ~~**SENR-01**: Receives all drafts from sub-agents as they arrive~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**SENR-02**: Deduplicates across agents — same story surfaces as separate cards per platform, visually linked as "related"~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**SENR-03**: Prioritizes queue: Twitter time-sensitive first, breaking news content second, Instagram third, evergreen last~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**SENR-04**: Hard cap of 15 items in queue — lower-scoring items displaced by higher-scoring new items when full~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**SENR-05**: Auto-expires items after platform window (Twitter: 6h, Instagram: 12h)~~ **(DEPRECATED 2026-04-20)**
-- [x] **SENR-06**: Assembles morning digest daily at 8am *(shipped via Phase 10-03 as `morning_digest` at 15:00 UTC; retained post-sn9)*
-- [x] **SENR-07**: Morning digest contains: top 5 gold sector stories (one sentence each), queue snapshot by platform, yesterday's approved/rejected/expired counts, scraped surface metrics on @sevamining posts, single highest-value queue item *(shipped via Phase 10-03; retained post-sn9)*
-- [ ] ~~**SENR-08**: Logs every approval and rejection with reason tags~~ **(DEPRECATED 2026-04-20)**
-- [ ] ~~**SENR-09**: Expiry processor runs every 30 minutes to sweep stale items~~ **(DEPRECATED 2026-04-20)**
+- [ ] **FEED-01**: User can read the latest 30 days of summary cards at `/` (chronological, newest first; max 60 rows server-side)
+- [ ] **FEED-02**: System renders each summary card with title "Summary as of {time PT}" (e.g., "Summary as of 08:00 PT — April 27"), three labeled `SectionBlock` components (Gold News / Ontario Law / Ontario Stats), and a status badge (`completed` / `partial` / `failed`)
+- [ ] **FEED-03**: System renders markdown content via `react-markdown ^10.1.0` + `rehype-sanitize ^6.0.0` (no `dangerouslySetInnerHTML`; sanitizes HTML at the AST level)
+- [ ] **FEED-04**: System redirects the deprecated `/queue` route (and `/agents/:slug` routes) to `/` via a `<Navigate to="/" replace />` element for bookmark grace
+- [ ] **FEED-05**: User session is gated by existing password auth — `GET /summaries` requires `Depends(get_current_user)` (single-user constraint preserved)
+- [ ] **FEED-06**: System auto-refetches the feed every 5 minutes via TanStack Query `refetchInterval: 5 * 60 * 1000` so a freshly-fired summary appears without a manual refresh
 
-### Approval Dashboard
+### WhatsApp Delivery (WHA)
 
-- [ ] **DASH-01**: Separate tabs for Twitter, Instagram, and Content
-- [ ] **DASH-02**: Feed/timeline layout sorted by urgency within each tab
-- [ ] **DASH-03**: Each approval card shows: platform badge, original post URL and text excerpt, account name/follower count/why they matter, all draft alternatives (2-3 options for replies/comments, reply + RT for Twitter), rationale, urgency indicator, final score
-- [ ] **DASH-04**: Three action buttons per card: Approve, Edit + Approve, Reject (rejection reason required)
-- [ ] **DASH-05**: Inline editing of draft text directly on the card
-- [ ] **DASH-06**: One-click copy to clipboard of approved/edited draft text with toast confirmation
-- [ ] **DASH-07**: Direct link to original post opens in new tab
-- [x] **DASH-08**: Related cards (same story across platforms) visually linked
-- [ ] **DASH-09**: Desktop-only layout (no mobile responsiveness required)
-- [ ] **DASH-10**: Clean minimal design — Linear/Notion aesthetic, content-focused, lots of white space
+Teaser pattern (< 400 chars + link to feed). Failure alert is independent and isolated.
 
-### Daily Digest View
+- [ ] **WHA-01**: System sends a WhatsApp teaser message (< 400 chars) on each successful daily_summary fire — format: "📊 Summary {time PT}: [1-sentence lead from gold-news section]. Read full → {feed_url}"
+- [ ] **WHA-02**: System sends a separate WhatsApp failure-alert message when daily_summary errors out — format: "⚠️ Summary {time PT} FAILED: section(s) {failed_section_list}. agent_run_id: {id}"; the alert send is wrapped in its own try/except so a Twilio outage doesn't loop or cascade
+- [ ] **WHA-03**: System logs `len(teaser_message)` per send and asserts `< 400` chars at write time so accidental regressions to `build_chunks()` are caught immediately
 
-- [x] **DGST-01**: Dashboard page renders today's morning digest cleanly
-- [x] **DGST-02**: Shows top 5 gold sector stories, queue snapshot, yesterday's summary, priority alert
-- [x] **DGST-03**: Historical digests viewable
+### Operations (OPS)
 
-### Content Review
+Retention, observability, deploy hygiene.
 
-- [x] **CREV-01**: Dashboard page for today's content bundle
-- [x] **CREV-02**: Full draft displayed with format choice and rationale
-- [x] **CREV-03**: All sources listed with links
-- [x] **CREV-04**: Infographic preview when applicable
-- [x] **CREV-05**: Approve to queue for posting
-- [x] **CREV-06**: Content detail modal displays full structured brief for all content formats (infographic, thread, breaking_news, quote, video_clip) with format-aware rendering *(long_form removed 2026-04-23 per quick 260423-k8n — historical rows render via FlatTextFallback)*
-- [x] **CREV-07**: Infographic and quote ContentBundles automatically generate AI-rendered images (4 and 2 respectively) stored in Cloudflare R2
-- [x] **CREV-08**: Rendered images appear in the Content detail modal with skeleton+poll UX and graceful fallback on render failure
-- [x] **CREV-09**: Operator can trigger a fresh image render via a "Regenerate images" button in the modal
-- [x] **CREV-10**: Image rendering runs as a background job independent of the Content Agent cron; failures do not block bundle persistence or approval
+- [ ] **OPS-01**: System fires `daily_summary_prune` cron at 03:00 PT daily (lock id 1018), deletes `daily_summaries` rows where `generated_at < NOW() - INTERVAL '30 days'`
+- [ ] **OPS-02**: System asserts at startup that `JOB_LOCK_IDS` values are unique — `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` — preventing future lock-id collisions
+- [ ] **OPS-03**: System exposes daily_summary telemetry via the existing `/agent-runs` API; the structured `notes` JSONB is parseable by existing per-agent UI patterns (post-no4)
+- [ ] **OPS-04**: System retires v1.0 sub-agents via cron de-registration ONLY — no source code is deleted in v2.0; the 6 sub-agent modules + approval-flow components + Phase B post-to-X route remain as dead code (strip later in v2.1+ with confidence)
 
-### WhatsApp Notifications
+## v2.1+ Requirements
 
-- [x] **WHAT-01**: Morning digest sent to operator's WhatsApp daily at 8am via Twilio
-- [x] **WHAT-02**: Breaking gold news alert sent when a high-scoring story is detected
-- [x] **WHAT-03**: High-value draft expiry alert sent when a top-scored item is approaching expiration without review
-- [ ] **WHAT-04**: All WhatsApp messages use Meta-approved message templates (submitted early in build)
-- [x] **WHAT-05**: Notifications include link to dashboard for action
+Acknowledged but deferred. These are differentiators or follow-ups, not blockers for v2.0 go-live.
 
-### Settings
+### Cross-Summary Continuity (CSC)
 
-- [x] **SETT-01**: Watchlist management for X (add/remove accounts, set relationship value 1-5, notes)
-- [x] **SETT-02**: Watchlist management for Instagram (add/remove accounts, set follower threshold)
-- [x] **SETT-03**: Keyword management (add/remove keywords, adjust weights, toggle active, filter by platform)
-- [x] **SETT-04**: Scoring parameter configuration (all weights, thresholds, decay curves editable)
-- [x] **SETT-05**: Agent run log display (last 7 days, filterable by agent)
-- [x] **SETT-06**: Notification preferences (WhatsApp timing, alert thresholds)
-- [x] **SETT-07**: Agent schedule configuration (change run intervals for each agent)
-- [x] **SETT-08**: X API quota usage display with visual indicator
+- **CSC-01**: System (12:00 fire only) passes the 08:00 gold-news bullets into the Sonnet context for that day so the 12:00 summary references "Building on this morning..." and avoids duplicate bullets
 
-### Agent Execution
+### Click-Through Source URLs (URL)
 
-- [x] **EXEC-01**: Every agent run logged: agent name, start/end time, items found, items queued, items filtered, errors
-- [x] **EXEC-02**: Agents read scoring settings from database at start of each run (no cached config)
-- [x] **EXEC-03**: All agent functions are async (AsyncAnthropic + AsyncIOScheduler)
-- [x] **EXEC-04**: Graceful error handling — agent failures logged and alerted, do not crash the worker process
+- **URL-01**: Each bullet in the rendered summary links to its source article URL (requires storing `story.link` per bullet in the summary JSONB)
 
-## v1.x Requirements
+### Section Anchor Links (ANC)
 
-Deferred to post-launch. Tracked but not in current roadmap.
+- **ANC-01**: Each section header in the feed gets an `id` attribute (`#gold-news`, `#ontario-law`, `#ontario-stats`) so a teaser link can deep-link
 
-### Event Mode
+### Additional Sources (ADD)
 
-- **EVNT-01**: Event mode triggers on engagement spike (3x+ normal baseline) OR significant gold price movement
-- **EVNT-02**: In event mode, Twitter Agent scales output to 8-10 posts per run
-- **EVNT-03**: Queue hard cap temporarily expands during event windows
-- **EVNT-04**: Event mode configurable from dashboard
-
-### Learning Loop
-
-- **LERN-01**: Senior Agent tracks rejection patterns over time by content type and angle
-- **LERN-02**: System analyzes what content is getting the most engagement online in the gold sector
-- **LERN-03**: After consistent rejections, system updates agent scoring thresholds
-- **LERN-04**: Monthly summary: content angles approved most, platform performance comparison
-
-### Deduplication Enhancements
-
-- **DDUP-01**: Cross-platform story fingerprinting via semantic similarity for visual linking refinement
+- **ADD-01**: System integrates Ontario Mining Association (OMA) RSS as a fourth Ontario-law source if/when the feed URL is confirmed at `oma.on.ca/modules/news/en`
 
 ## Out of Scope
 
-Explicitly excluded. Documented to prevent scope creep.
-
 | Feature | Reason |
 |---------|--------|
-| Auto-posting to any platform | Brand risk in gold/finance sector; one bad auto-post damages credibility for months. The product's value is the human judgment layer. |
-| LinkedIn agent | LinkedIn API is restrictive/expensive; gold sector conversation is lower-signal than X. Add only if X + IG prove insufficient. |
-| Reddit monitoring | API restrictions post-2023. SerpAPI already captures Reddit-sourced stories once they reach mainstream coverage. |
-| Multi-tenancy | Premature optimization. Refactor when second client exists. |
-| Mobile-responsive dashboard | Single-user desktop workflow. WhatsApp covers mobile alerts. |
-| Analytics dashboard | Requires enough historical data for trends. All data retained — add in v2. |
-| Two-way WhatsApp (approve via chat) | Significant backend complexity for marginal time savings. Dashboard handles all actions. |
-| Real-time streaming monitoring | X Basic API doesn't support streaming. Polling at 2h/4h is appropriate for 1-person review workflow. |
-| Sentiment analytics | Engagement + topic relevance scoring already proxies for this. Add only if a clear decision depends on it. |
+| Multi-user | Single-user constraint locked; auth stays password-based |
+| Public/shareable feed | Privacy + scope; the feed is gated by existing password auth |
+| User comments / sharing / reactions | Read-only digest, not a community product |
+| Auto-posting summaries to X / social | Phase B's prohibition carries forward — never publish without explicit user trigger |
+| User-tunable keywords | Adds settings UI complexity; v1.0 SETT-01..08 retained but not extended |
+| Retention beyond 30 days | Locked decision — auto-prune older rows |
+| Mobile-responsive UI | v1.0 desktop-only constraint preserved |
+| Broadcast channels beyond WhatsApp + web | No SMS, email, push, RSS, etc. — single channel each |
+| Custom summary frequencies (3x/day, weekly digest, etc.) | 08:00 PT + 12:00 PT only; locked |
+| GFM markdown features (tables, footnotes) in Sonnet output | `remark-gfm` deliberately omitted; Claude prompt constrains output to headers + bullets |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Empty initially — populated by the roadmapper during phase definition.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Complete |
-| INFRA-02 | Phase 1 | Complete |
-| INFRA-03 | Phase 1 | Complete |
-| INFRA-04 | Phase 1 | Complete |
-| INFRA-05 | Phase 1 | Complete |
-| INFRA-06 | Phase 1 | Complete |
-| INFRA-07 | Phase 1 | Complete |
-| INFRA-08 | Phase 1 | Complete |
-| INFRA-09 | Phase 1 | Complete |
-| WHAT-04 | Phase 1 | Pending |
-| EXEC-03 | Phase 1 | Complete |
-| EXEC-04 | Phase 1 | Complete |
-| AUTH-01 | Phase 2 | Complete |
-| AUTH-02 | Phase 2 | Complete |
-| AUTH-03 | Phase 2 | Complete |
-| EXEC-01 | Phase 2 | Complete |
-| DASH-01 | Phase 3 | Pending |
-| DASH-02 | Phase 3 | Pending |
-| DASH-03 | Phase 3 | Pending |
-| DASH-04 | Phase 3 | Pending |
-| DASH-05 | Phase 3 | Pending |
-| DASH-06 | Phase 3 | Pending |
-| DASH-07 | Phase 3 | Pending |
-| DASH-08 | Phase 3 | Complete |
-| DASH-09 | Phase 3 | Pending |
-| DASH-10 | Phase 3 | Pending |
-| ~~TWIT-01~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-02~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-03~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-04~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-05~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-06~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-07~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-08~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-09~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-10~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-11~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-12~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-13~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~TWIT-14~~ | ~~Phase 4~~ | **Deprecated 2026-04-20** |
-| ~~SENR-01~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
-| ~~SENR-02~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
-| ~~SENR-03~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
-| ~~SENR-04~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
-| ~~SENR-05~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
-| SENR-06 | Phase 10 (partial-carryover) | Complete |
-| SENR-07 | Phase 10 (partial-carryover) | Complete |
-| ~~SENR-08~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
-| ~~SENR-09~~ | ~~Phase 5~~ | **Deprecated 2026-04-20** |
-| WHAT-01 | Phase 5 | Complete |
-| WHAT-02 | Phase 5 | Complete |
-| WHAT-03 | Phase 5 | Complete |
-| WHAT-05 | Phase 5 | Complete |
-| INST-01 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-02 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-03 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-04 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-05 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-06 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-07 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-08 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-09 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-10 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-11 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| INST-12 | ~~Phase 6~~ | **Deprecated 2026-04-19** |
-| CONT-01 | Phase 7 | Complete |
-| CONT-02 | Phase 7 | Complete |
-| CONT-03 | Phase 7 | Complete |
-| CONT-04 | Phase 7 | Complete |
-| CONT-05 | Phase 7 | Complete |
-| CONT-06 | Phase 7 | Complete |
-| CONT-07 | Phase 7 | Complete |
-| CONT-08 | Phase 7 | Complete |
-| CONT-09 | Phase 7 | Complete |
-| CONT-10 | Phase 7 | Complete |
-| CONT-11 | Phase 7 | Complete |
-| CONT-12 | Phase 7 | Complete |
-| CONT-13 | Phase 7 | Complete |
-| CONT-14 | Phase 7 | Complete |
-| CONT-15 | Phase 7 | Complete |
-| CONT-16 | Phase 7 | Complete |
-| CONT-17 | Phase 7 | Complete |
-| DGST-01 | Phase 8 | Complete |
-| DGST-02 | Phase 8 | Complete |
-| DGST-03 | Phase 8 | Complete |
-| CREV-01 | Phase 8 | Complete |
-| CREV-02 | Phase 8 | Complete |
-| CREV-03 | Phase 8 | Complete |
-| CREV-04 | Phase 8 | Complete |
-| CREV-05 | Phase 8 | Complete |
-| CREV-06 | Phase 11 | Complete |
-| CREV-07 | Phase 11 | Complete |
-| CREV-08 | Phase 11 | Complete |
-| CREV-09 | Phase 11 | Complete |
-| CREV-10 | Phase 11 | Complete |
-| SETT-01 | Phase 8 | Complete |
-| SETT-02 | Phase 8 | Complete |
-| SETT-03 | Phase 8 | Complete |
-| SETT-04 | Phase 8 | Complete |
-| SETT-05 | Phase 8 | Complete |
-| SETT-06 | Phase 8 | Complete |
-| SETT-07 | Phase 8 | Complete |
-| SETT-08 | Phase 8 | Complete |
-| EXEC-02 | Phase 9 | Complete |
+| SUM-01 | TBD | Pending |
+| SUM-02 | TBD | Pending |
+| SUM-03 | TBD | Pending |
+| SUM-04 | TBD | Pending |
+| SUM-05 | TBD | Pending |
+| SUM-06 | TBD | Pending |
+| GOLD-01 | TBD | Pending |
+| GOLD-02 | TBD | Pending |
+| GOLD-03 | TBD | Pending |
+| LAW-01 | TBD | Pending |
+| LAW-02 | TBD | Pending |
+| LAW-03 | TBD | Pending |
+| LAW-04 | TBD | Pending |
+| STAT-01 | TBD | Pending |
+| STAT-02 | TBD | Pending |
+| STAT-03 | TBD | Pending |
+| STAT-04 | TBD | Pending |
+| STAT-05 | TBD | Pending |
+| FEED-01 | TBD | Pending |
+| FEED-02 | TBD | Pending |
+| FEED-03 | TBD | Pending |
+| FEED-04 | TBD | Pending |
+| FEED-05 | TBD | Pending |
+| FEED-06 | TBD | Pending |
+| WHA-01 | TBD | Pending |
+| WHA-02 | TBD | Pending |
+| WHA-03 | TBD | Pending |
+| OPS-01 | TBD | Pending |
+| OPS-02 | TBD | Pending |
+| OPS-03 | TBD | Pending |
+| OPS-04 | TBD | Pending |
 
 **Coverage:**
-- v1 requirements: 104 total (note: REQUIREMENTS.md previously stated 78 — actual count from requirement IDs is 99; Phase 11 adds 5 new CREV requirements)
-- Mapped to phases: 104
-- Unmapped: 0
+- v2.0 requirements: 31 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 31 ⚠️ (will be 0 after roadmapper runs)
 
 ---
-*Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after roadmap creation*
+*Requirements defined: 2026-04-27 — Milestone v2.0 (Daily Summary Feed)*
+*Last updated: 2026-04-27 after initial definition*
