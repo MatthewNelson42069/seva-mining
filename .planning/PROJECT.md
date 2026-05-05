@@ -8,6 +8,31 @@ A four-agent AI system that monitors the gold sector on X (Twitter) and Instagra
 
 Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made. If a draft wouldn't make a senior gold analyst stop scrolling, it shouldn't exist.
 
+## Current Milestone: v2.0 Daily Summary Feed
+
+**Goal:** Pivot from a 6-sub-agent approval dashboard to a 2x-daily structured summary feed. Single user reads short, scannable summary cards (Instagram-style web feed + WhatsApp), no approval flow, no posting.
+
+**Target features:**
+- Twice-daily summary cron at 08:00 PT and 12:00 PT (CronTrigger, America/Los_Angeles)
+- Each summary card titled "Summary as of {time PT}" with three structured sections:
+  1. **Gold news** — headlines + bullet points (powered by existing `fetch_stories()` ingestion)
+  2. **New Canadian/Ontario mining-favourable laws** — new ingestion + Sonnet "is this actually a mining-favourable law/policy?" filter to suppress noise
+  3. **Ontario gold mining stats** — new ingestion (StatCan / Ontario Geological Survey); empty-state design for slow weeks
+- Web feed page at `/` (replaces `/queue`) — vertical scroll of latest 30 days
+- WhatsApp delivery on each successful summary fire (preserves the existing Twilio integration)
+- WhatsApp failure-alert when a summary cron fails
+- Auto-prune summaries older than 30 days
+
+**Stack contract:**
+- **Keep & reuse:** `fetch_stories()` (post-m51 coalesce + parallel scoring), APScheduler worker (post-m49 CronTrigger pattern), advisory locks, `reconcile_stale_runs`, `AsyncAnthropic(timeout=30.0)`, FastAPI backend, React 19 / Vite / Tailwind 4, Twilio WhatsApp service, Neon Postgres, password auth
+- **Retire as dead code (do not strip):** 6 sub-agents (`breaking_news`, `threads`, `quotes`, `infographics`, `gold_media`, `gold_history`), all approval-flow components, Phase B post-to-X route + service + ConfirmModal, the legacy `morning_digest` cron (the new daily_summary cron supersedes it)
+- **Build new:** `daily_summary` agent (cron 08:00 PT + 12:00 PT) · `daily_summaries` table · Ontario news + Ontario stats ingestion modules · `GET /summaries` API endpoint · feed page · 30-day prune cron · WhatsApp delivery + failure-alert hooks
+
+**Hard parts that need explicit roadmap attention:**
+1. Ontario law source — no clean machine-readable feed exists; needs research-backed source selection + Sonnet relevance filter
+2. Ontario stats source — releases are monthly/quarterly, not daily; design for "no new data since {date}" empty state
+3. Slow-news days — 12pm summary 4h after 8am may have nothing new; need "no major moves since 08:00 summary" template
+
 ## Requirements
 
 ### Validated
@@ -18,6 +43,8 @@ Every piece of content the system drafts must be genuinely valuable to the gold 
 - Validated in Phase 9: All agent engagement gate thresholds and schedule intervals DB-driven — tunable from Settings without a deploy (EXEC-02)
 
 ### Active
+
+> **Pivot 2026-04-27 — Milestone v2.0 supersedes the v1.0 Active list below.** The 6-sub-agent approval-dashboard product surface is being retired in favour of a 2x-daily summary feed. The items below are kept for historical context (and because we may revisit pieces); they are NOT actively pursued in v2.0. The v2.0 active requirements live in REQUIREMENTS.md (generated from this milestone).
 
 - [ ] Four-agent system: Senior Agent (orchestrator), Content Agent (daily story), Twitter Agent (2h monitoring), Instagram Agent (4h monitoring)
 - [ ] Approval dashboard with separate tabs for Twitter, Instagram, and Content
@@ -131,4 +158,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after Phase 9 completion*
+*Last updated: 2026-04-27 — Milestone v2.0 (Daily Summary Feed) initiated. Product pivot from approval dashboard to 2x-daily summary feed.*

@@ -1,31 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0.1
-milestone_name: — Content Preview and Rendered Images
-status: v1.0.1 complete
-stopped_at: Completed quick task 260424-l0d (Phase B — approve→post-to-X). User-initiated per-item atomic FastAPI endpoint POST /items/{id}/post-to-x posts via tweepy v2 OAuth 1.0a User Context. Narrow MVP ships text-only {breaking_news, thread} content_types. New `approval_state` column on draft_items (orthogonal to existing `status`) with enum {pending, posted, failed, discarded, posted_partial} via CHECK constraint. SELECT FOR UPDATE inside async with db.begin() holds row lock through tweepy round-trip for idempotency. Client-side reply-chain thread orchestration with posted_partial state on mid-thread failure (no auto-rollback of already-posted tweets, no auto-retry). Frontend "Post to X" button in ContentDetailModal footer + base-ui Dialog confirm modal with verbatim D10 copy ("This will immediately post to your X account. You can't undo this."). Simulate mode (X_POSTING_ENABLED=false default) writes posted_tweet_id=sim-{uuid4} without calling tweepy. CLAUDE.md narrowly rewrites "Auto-posting" row per D12: user-initiated approve→post is now in scope; unattended/scheduled/cron/batch posting remains permanently out of scope. Dual-model parity (backend + scheduler draft_item.py byte-identical). Alembic 0009 migration. tweepy[async]>=4.14 added to backend/pyproject.toml. New env vars X_ACCESS_TOKEN + X_ACCESS_TOKEN_SECRET + X_POSTING_ENABLED + X_POSTING_SIM_PREFIX. Verifier: status=human_needed (12/12 must-have truths verified; 2 external-resource items routed to user — live Postgres alembic up-down-up + real-mode posting with X Developer Portal credentials). 5 atomic commits (T1 alembic 50c43d4 / T2 service 7d6a9ff / T3 route add1f1e / T4 frontend 39dc9ee / T5 docs 7abb171) + merge 96d6177. Test totals: backend 92 passed (+23 new — 11 x_poster + 12 post_to_x), scheduler 180 passed (+5 parity guard), frontend 59 passed (+4 PostToXConfirmModal). Preservation gate empty (zero diff on scheduler/agents/, worker.py, whatsapp.py, senior_agent.py, content_agent.py). Ran via `/gsd:quick --discuss --research --full` — full pipeline (CONTEXT 15 locked decisions D1-D15 → RESEARCH HIGH confidence with route-name + text-source + thread-field-key corrections to CONTEXT → PLAN 5 tasks → plan-checker PASSED iteration 1 → executor 5 atomic commits → verifier 12/12 PASS). Deferred to Phase B.5 (trivial registry add): quotes + gold_history. Deferred to Phase B+ (needs media_upload): gold_media + infographics. **Pre-deploy runbook (CLAUDE.md anchor):** generate X Developer Portal access tokens AFTER toggling app permissions to Read+Write, then set X_ACCESS_TOKEN + X_ACCESS_TOKEN_SECRET + X_POSTING_ENABLED=true in Railway prod env.
-last_updated: "2026-04-25T04:30:00.000Z"
+milestone: v2.0
+milestone_name: Daily Summary Feed
+status: defining-requirements
+stopped_at: Milestone v1.0.1 complete (45/45 plans). Final pre-pivot ship was quick-260427-m51 (coalesce + parallel scoring fetch_stories deadlock fix, commit a23b984). Pivot initiated 2026-04-27 — replacing 6-sub-agent approval dashboard with a 2x-daily summary feed (08:00 PT + 12:00 PT). Old v1.0 phase directories archived to .planning/milestones/v1.0.1/phases/ via --reset-phase-numbers. v2.0 phase numbering restarts at Phase 1.
+last_updated: "2026-04-27T23:35:00.000Z"
 last_activity: "2026-04-22 — Completed quick-260422-no4 (surface zero-item agent runs in per-agent queue UI with "No content found"). **Origin:** user ask immediately after shipping the gmb debug fix — verbatim: *"Even if some of the agents runs dont find anything, for examples the quotes or gold media one, I still want it to say 'no content found' so I know it is working tomorrow"*. The 12:00 PT cron verification tomorrow needs every tick visible in the UI regardless of whether items were produced. **Reconnaissance:** `frontend/src/pages/PerAgentQueuePage.tsx` L137-138 rendered bare `<EmptyState />` when items=0, and `groupByRun` L19-54 silently dropped runs with 0 matched items — so a sequence like "5, 0, 2 items across 3 runs" rendered as 2 groups, and all-zero-item days showed the generic empty state indistinguishable from "agent never ran". Data contract was already sufficient (runs fetched via `getAgentRuns()` returning `items_found` / `items_queued` / `notes` fields). Ran via `/gsd:quick --discuss` — orchestrator pre-surfaced 6 gray-area questions (Q1 wording, Q2 telemetry placement, Q3 render location, Q4 truly-empty fallback, Q5 page subtitle, Q6 per-agent gating) with Recommended answers; user's "yeah push it" locked all 6 decisions (D-01 through D-06) to Recommendations. **Changes (surgical, frontend-only):** (a) `groupByRun` emits a group for every recent run including runs with 0 matched items via `groups.get(key) ?? { run, items: [] }`; (b) render branch guard now `items.length === 0 && runs.length === 0` before falling through to `<EmptyState />` so items=0+runs>0 renders timeline; (c) new `parseRunNotes` module-scope helper parses gmb's structured JSON into a muted inline subtitle with graceful degradation (null→skip, malformed→null, partial→show-present-only); (d) zero-item groups render "No content found" row in RunHeader-consistent `text-xs text-muted-foreground` style. Ink's specific-timestamp fallback preserved; mfg's zero-grep hygiene preserved (zero `video_clip` refs). **Tests (+4, 52 → 56):** zero-item-renders-no-content-found, chronological-interleaving, notes-subtitle-present-vs-null-vs-malformed-vs-partial, items=0+runs>0-falls-through, items=0+runs=0-still-empty-state. **Gates all 5 green:** lint + tsc + vitest 56/56 + build + zero-grep. Single atomic commit `8080b4c` on main. **Third deliverable of tonight's session** after gmb debug fix (85fccfc refactor + 3efe3b9 docs). All 5 zid follow-ups now shipped + gmb debug fix + no4 UX gap close — the 12:00 PT verification tomorrow is maximally instrumented and visible. **Known limitation:** other 6 sub-agents don't have gmb-style structured `notes` telemetry yet — they show "No content found" without the counter subtitle. Extending telemetry to breaking_news/threads/long_form/quotes/infographics/gold_history is a separate follow-up. **Deploy:** Vercel auto-deploys on push; user sees this in UI on next page load after push → origin."
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 45
-  completed_plans: 45
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-30)
+See: .planning/PROJECT.md (updated 2026-04-27)
 
 **Core value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
-**Current focus:** v1.0.1 shipped — awaiting next milestone definition
+**Current focus:** v2.0 — Daily Summary Feed (defining requirements)
 
 ## Current Position
 
-Phase: Not started (v1.0.2 TBD)
-Plan: Not started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-27 — Milestone v2.0 (Daily Summary Feed) started. Pivot from approval dashboard to 2x-daily summary feed.
 
 ## Performance Metrics
 
