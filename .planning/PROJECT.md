@@ -2,49 +2,52 @@
 
 ## What This Is
 
-A four-agent AI system that monitors the gold sector on X (Twitter) and Instagram 24/7, drafts engagement content, and surfaces everything to a web dashboard for manual approval. The system handles research, scoring, and drafting — you review, approve, copy, and post. Nothing is ever posted automatically. The Senior Agent sends daily digests and alerts via WhatsApp.
+A 2x-daily AI gold-intelligence digest. Twice a day (08:00 PT + 12:00 PT) a cron job ingests gold-sector news, Ontario/Canadian mining-favourable legislation, and Ontario gold-production statistics; produces a structured 3-section summary card; persists it to Postgres; surfaces it on a web feed at `/` for the operator to read; and delivers a teaser via WhatsApp with a link back to the feed. 30-day rolling retention. No drafting, no approval flow, no posting.
+
+(Originally designed as a 6-sub-agent approval-dashboard product; pivoted to the digest model in v2.0 — see Evolution.)
 
 ## Core Value
 
-Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made. If a draft wouldn't make a senior gold analyst stop scrolling, it shouldn't exist.
+Every piece of intelligence the digest surfaces must be genuinely useful to a senior gold analyst — a data point, an insight, a connection no one else made. If a bullet wouldn't make that analyst stop scrolling, it shouldn't be in the summary.
 
-## Current Milestone: v2.0 Daily Summary Feed
+## Current State
 
-**Goal:** Pivot from a 6-sub-agent approval dashboard to a 2x-daily structured summary feed. Single user reads short, scannable summary cards (Instagram-style web feed + WhatsApp), no approval flow, no posting.
+**Shipped:** v2.0 Daily Summary Feed (2026-05-06)
+**Active:** Awaiting next milestone definition (run `/gsd:new-milestone` to begin v2.1+).
 
-**Target features:**
-- Twice-daily summary cron at 08:00 PT and 12:00 PT (CronTrigger, America/Los_Angeles)
-- Each summary card titled "Summary as of {time PT}" with three structured sections:
-  1. **Gold news** — headlines + bullet points (powered by existing `fetch_stories()` ingestion)
-  2. **New Canadian/Ontario mining-favourable laws** — new ingestion + Sonnet "is this actually a mining-favourable law/policy?" filter to suppress noise
-  3. **Ontario gold mining stats** — new ingestion (StatCan / Ontario Geological Survey); empty-state design for slow weeks
-- Web feed page at `/` (replaces `/queue`) — vertical scroll of latest 30 days
-- WhatsApp delivery on each successful summary fire (preserves the existing Twilio integration)
-- WhatsApp failure-alert when a summary cron fails
-- Auto-prune summaries older than 30 days
+## Next Milestone Goals
 
-**Stack contract:**
-- **Keep & reuse:** `fetch_stories()` (post-m51 coalesce + parallel scoring), APScheduler worker (post-m49 CronTrigger pattern), advisory locks, `reconcile_stale_runs`, `AsyncAnthropic(timeout=30.0)`, FastAPI backend, React 19 / Vite / Tailwind 4, Twilio WhatsApp service, Neon Postgres, password auth
-- **Retire as dead code (do not strip):** 6 sub-agents (`breaking_news`, `threads`, `quotes`, `infographics`, `gold_media`, `gold_history`), all approval-flow components, Phase B post-to-X route + service + ConfirmModal, the legacy `morning_digest` cron (the new daily_summary cron supersedes it)
-- **Build new:** `daily_summary` agent (cron 08:00 PT + 12:00 PT) · `daily_summaries` table · Ontario news + Ontario stats ingestion modules · `GET /summaries` API endpoint · feed page · 30-day prune cron · WhatsApp delivery + failure-alert hooks
+Backlog candidates (deferred from v2.0, none yet locked into a milestone):
+- **CSC-01** — Cross-summary continuity: 12:00 fire receives 08:00 gold bullets in Sonnet context to enable narrative arc and dedup
+- **URL-01** — Click-through source URLs per bullet (requires storing `link` per bullet in JSONB)
+- **ANC-01** — Section anchor links (`#gold-news`, `#ontario-law`, `#ontario-stats`)
+- **ADD-01** — Ontario Mining Association RSS as 4th law source (if/when feed URL is published)
+- **Strip retired v1.0 source files** — currently kept as dead code (cron-deregistered, source intact). After v2.0 stability is confirmed, prune the 6 sub-agent modules, approval-flow components, and Phase B post-to-X infrastructure.
 
-**Hard parts that need explicit roadmap attention:**
-1. Ontario law source — no clean machine-readable feed exists; needs research-backed source selection + Sonnet relevance filter
-2. Ontario stats source — releases are monthly/quarterly, not daily; design for "no new data since {date}" empty state
-3. Slow-news days — 12pm summary 4h after 8am may have nothing new; need "no major moves since 08:00 summary" template
+Open `/gsd:new-milestone` to scope the next milestone.
 
 ## Requirements
 
 ### Validated
 
-- Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
-- Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
-- Validated in Phase 8: SettingsPage with 6 tabs — Watchlists, Keywords, Scoring, Notifications, Agent Runs, Schedule (SETT-01..08)
-- Validated in Phase 9: All agent engagement gate thresholds and schedule intervals DB-driven — tunable from Settings without a deploy (EXEC-02)
+**v2.0 Daily Summary Feed (shipped 2026-05-06):**
+- ✓ Daily summary cron + agent (SUM-01..06) — v2.0 Phase 1
+- ✓ Gold News section (GOLD-01..03) — v2.0 Phase 1
+- ✓ Web feed UI at `/` (FEED-01..06) — v2.0 Phase 1
+- ✓ WhatsApp teaser + failure alert (WHA-01..03) — v2.0 Phase 1
+- ✓ Ontario Law section with SerpAPI + NRCan + Haiku filter (LAW-01..04) — v2.0 Phase 2
+- ✓ Ontario Stats section with StatCan WDS direct poll (STAT-01..05) — v2.0 Phase 3
+- ✓ 30-day prune cron + lock-id uniqueness assertion + retirement audit (OPS-01..04) — v2.0 Phase 4
+
+**v1.0.1 Approval Dashboard (deprecated by v2.0 pivot, source retained as dead code):**
+- ✓ Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
+- ✓ Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
+- ✓ Validated in Phase 8: SettingsPage with 6 tabs — Watchlists, Keywords, Scoring, Notifications, Agent Runs, Schedule (SETT-01..08)
+- ✓ Validated in Phase 9: All agent engagement gate thresholds and schedule intervals DB-driven — tunable from Settings without a deploy (EXEC-02)
 
 ### Active
 
-> **Pivot 2026-04-27 — Milestone v2.0 supersedes the v1.0 Active list below.** The 6-sub-agent approval-dashboard product surface is being retired in favour of a 2x-daily summary feed. The items below are kept for historical context (and because we may revisit pieces); they are NOT actively pursued in v2.0. The v2.0 active requirements live in REQUIREMENTS.md (generated from this milestone).
+> **Pivot 2026-04-27, completed 2026-05-06 — v2.0 supersedes the v1.0 Active list below.** The 6-sub-agent approval-dashboard product surface has been retired as dead code (crons deregistered in v2.0 Phase 4 Task 4; source files retained). The items below are kept for historical context only — they are NOT actively pursued. New v2.1+ requirements will be added when the next milestone is scoped.
 
 - [ ] Four-agent system: Senior Agent (orchestrator), Content Agent (daily story), Twitter Agent (2h monitoring), Instagram Agent (4h monitoring)
 - [ ] Approval dashboard with separate tabs for Twitter, Instagram, and Content
@@ -158,4 +161,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-27 — Milestone v2.0 (Daily Summary Feed) initiated. Product pivot from approval dashboard to 2x-daily summary feed.*
+*Last updated: 2026-05-06 after v2.0 Daily Summary Feed milestone shipped. 31/31 requirements validated, 4 phases complete, audit PASSED. Tagged as v2.0 in git.*
