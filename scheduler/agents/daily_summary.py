@@ -1,4 +1,4 @@
-"""v2.0 daily_summary cron — Phase 1.
+"""v2.0 daily_summary cron — Phase 1 / Phase 2 / Phase 3.
 
 Fires at 08:00 PT and 12:00 PT (registered in worker.py via _make_daily_summary_job).
 Writes one daily_summaries row + one agent_runs row per fire.
@@ -15,6 +15,7 @@ Pitfall mitigations bundled here:
   GOLD-01 (score >= 6.0, top 5)       — applied after fetch_stories.
   GOLD-02 (markdown structure)        — Sonnet prompt template enforces.
   GOLD-03 (empty-state)               — pulls price range from market_snapshot service.
+  STAT-01..STAT-05                    — Phase 3 StatCan WDS direct vector poll.
 """
 from __future__ import annotations
 
@@ -31,6 +32,12 @@ import serpapi
 
 from agents.content_agent import fetch_stories
 from agents.ontario_law import fetch_ontario_law_hits
+from agents.ontario_stats import (
+    fetch_ontario_stats_snapshot,
+    format_error_markdown,
+    format_fresh_markdown,
+    format_no_new_data_markdown,
+)
 from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
@@ -79,9 +86,6 @@ Do NOT use tables. Do NOT use blockquotes.
 # GOLD-03 empty-state copy (locked CONTEXT decision):
 EMPTY_STATE_TEMPLATE_WITH_RANGE = "No major moves in gold today — prices ranging ${low}–${high}."
 EMPTY_STATE_FALLBACK = "No major moves in gold today."
-
-ONTARIO_STATS_STUB_MD = "(stub) Ontario stats section — populated in Phase 3."
-
 
 def _derive_period_label(now_la: datetime) -> str:
     """Return '08:00 PT' or '12:00 PT' from a datetime in America/Los_Angeles.
@@ -251,9 +255,78 @@ async def _build_ontario_law_section(
     return ("No new Ontario mining-related laws today.", [], None, counts)
 
 
-async def _build_ontario_stats_section() -> tuple[str, list[dict]]:
-    """Phase 1 stub. Phase 3 replaces this with StatCan WDS ingestion."""
-    return (ONTARIO_STATS_STUB_MD, [])
+async def _build_ontario_stats_section(
+    *,
+    previous_snapshot: "dict | None",
+    previous_release_time: "str | None",
+    agent_run_id: str,
+) -> "tuple[str | None, dict, dict]":
+    """Phase 3 — real StatCan WDS ingestion (replaces Phase 1 stub).
+
+    Returns (markdown, ontario_stats_jsonb, telemetry_dict):
+      markdown: str on fresh/no_new_data/error branches; None only on hard unexpected exception
+      ontario_stats_jsonb: {snapshot, last_state, last_error_text} for raw_sources
+      telemetry_dict: keys candidates_stats_state, candidates_stats_period,
+                      candidates_stats_release_time
+    """
+    telemetry: dict = {
+        "candidates_stats_state": "error",  # default; overwritten on success
+        "candidates_stats_period": None,
+        "candidates_stats_release_time": None,
+    }
+
+    try:
+        result = await fetch_ontario_stats_snapshot(
+            previous_release_time=previous_release_time
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ontario_stats: fetch raised unexpectedly")
+        err_str = f"{type(exc).__name__}: {str(exc)[:120]}"
+        md = format_error_markdown(err_str, agent_run_id)
+        jsonb = {
+            "snapshot": previous_snapshot,  # preserve last good
+            "last_state": "error",
+            "last_error_text": f"{type(exc).__name__}: {str(exc)[:200]}",
+        }
+        telemetry["candidates_stats_state"] = "error"
+        return (md, jsonb, telemetry)
+
+    telemetry["candidates_stats_state"] = result.state
+
+    if result.state == "fresh":
+        md = format_fresh_markdown(result)
+        new_snapshot = {
+            "period": result.period,
+            "figure_kg": result.figure_kg,
+            "release_time": result.release_time,
+            "prior_period": result.prior_period,
+            "prior_figure_kg": result.prior_figure_kg,
+        }
+        telemetry["candidates_stats_period"] = result.period
+        telemetry["candidates_stats_release_time"] = result.release_time
+        jsonb = {"snapshot": new_snapshot, "last_state": "fresh", "last_error_text": None}
+        return (md, jsonb, telemetry)
+
+    if result.state == "no_new_data":
+        md = format_no_new_data_markdown(previous_snapshot)
+        if previous_snapshot:
+            telemetry["candidates_stats_period"] = previous_snapshot.get("period")
+            telemetry["candidates_stats_release_time"] = previous_snapshot.get("release_time")
+        jsonb = {
+            "snapshot": previous_snapshot,
+            "last_state": "no_new_data",
+            "last_error_text": None,
+        }
+        return (md, jsonb, telemetry)
+
+    # state == "error" (returned, not raised)
+    md = format_error_markdown(result.error_text or "unknown", agent_run_id)
+    jsonb = {
+        "snapshot": previous_snapshot,  # do NOT overwrite — preserve last good
+        "last_state": "error",
+        "last_error_text": result.error_text,
+    }
+    return (md, jsonb, telemetry)
 
 
 def _extract_lead(gold_news_md: str | None) -> str:
@@ -328,6 +401,13 @@ async def run_daily_summary() -> None:
     law_counts: dict[str, int] = {
         "serpapi": 0, "nrcan": 0, "after_dedup": 0, "after_filter": 0
     }
+    # Phase 3: initialize stats telemetry + JSONB defensively
+    stats_telemetry: dict = {
+        "candidates_stats_state": None,
+        "candidates_stats_period": None,
+        "candidates_stats_release_time": None,
+    }
+    stats_jsonb: dict = {"snapshot": None, "last_state": None, "last_error_text": None}
     whatsapp_sent = False
     run_status = "failed"
     error_text: str | None = None
@@ -344,8 +424,11 @@ async def run_daily_summary() -> None:
         else None
     )
 
-    # Read previous summary's last_known_law for LAW-04 continuity
+    # Read previous summary's raw_sources_jsonb for LAW-04 continuity + Phase 3 stats snapshot.
+    # Single SELECT combines both reads — no second query needed.
     previous_last_known_law: dict | None = None
+    previous_stats_snapshot: dict | None = None
+    previous_stats_release_time: str | None = None
     try:
         async with AsyncSessionLocal() as session:
             stmt = (
@@ -359,9 +442,14 @@ async def run_daily_summary() -> None:
                 prev_law = (prev_jsonb.get("ontario_law") or {}).get("last_known_law")
                 if prev_law:
                     previous_last_known_law = prev_law
+                prev_stats = prev_jsonb.get("ontario_stats") or {}
+                prev_snap = prev_stats.get("snapshot")
+                if prev_snap and isinstance(prev_snap, dict):
+                    previous_stats_snapshot = prev_snap
+                    previous_stats_release_time = prev_snap.get("release_time")
     except Exception:
         logger.warning(
-            "ontario_law: previous-summary read failed — proceeding with no continuity"
+            "previous-summary read failed — proceeding with no continuity"
         )
 
     try:
@@ -387,9 +475,18 @@ async def run_daily_summary() -> None:
         else:
             sections_failed.append("ontario_law")
 
-        # --- Section 3: Ontario Stats (stub in Phase 1) ---
-        ontario_stats_md, _ = await _build_ontario_stats_section()
-        sections_completed.append("ontario_stats")
+        # --- Section 3: Ontario Stats (Phase 3 — real StatCan WDS ingestion) ---
+        ontario_stats_md, stats_jsonb, stats_telemetry = (
+            await _build_ontario_stats_section(
+                previous_snapshot=previous_stats_snapshot,
+                previous_release_time=previous_stats_release_time,
+                agent_run_id=agent_run_id_str,
+            )
+        )
+        if ontario_stats_md is not None:
+            sections_completed.append("ontario_stats")
+        else:
+            sections_failed.append("ontario_stats")
 
         # SUM-05 status mapping
         failed_count = len(sections_failed)
@@ -408,11 +505,7 @@ async def run_daily_summary() -> None:
                 "hits": ontario_law_hits,
                 "last_known_law": new_last_known_law,
             },
-            "ontario_stats": {
-                "snapshot_date": "",
-                "last_known_figure": None,
-                "fresh_data": None,
-            },
+            "ontario_stats": stats_jsonb,  # Phase 3: {snapshot, last_state, last_error_text}
         }
 
         # Persist daily_summaries row.
@@ -458,9 +551,9 @@ async def run_daily_summary() -> None:
                         "gold_news": [],
                         "ontario_law": {"hits": [], "last_known_law": None},
                         "ontario_stats": {
-                            "snapshot_date": "",
-                            "last_known_figure": None,
-                            "fresh_data": None,
+                            "snapshot": None,
+                            "last_state": "error",
+                            "last_error_text": error_text,
                         },
                     },
                     status="failed",
@@ -488,7 +581,10 @@ async def run_daily_summary() -> None:
                 "candidates_law_nrcan": law_counts.get("nrcan", 0),
                 "candidates_law_after_dedup": law_counts.get("after_dedup", 0),
                 "candidates_law_after_filter": law_counts.get("after_filter", 0),
-                "candidates_stats": 0,          # Phase 3 fills this
+                "candidates_stats": 0,  # legacy scalar — kept for backward compat
+                "candidates_stats_state": stats_telemetry.get("candidates_stats_state"),
+                "candidates_stats_period": stats_telemetry.get("candidates_stats_period"),
+                "candidates_stats_release_time": stats_telemetry.get("candidates_stats_release_time"),
                 "sections_completed": sections_completed,
                 "sections_failed": sections_failed,
                 "whatsapp_sent": whatsapp_sent,

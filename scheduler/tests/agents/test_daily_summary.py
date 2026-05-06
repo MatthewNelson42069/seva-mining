@@ -45,7 +45,6 @@ from agents.daily_summary import (  # noqa: E402
     GOLD_SCORE_FLOOR,
     GOLD_TOP_N,
     IDEMPOTENCY_WINDOW_MIN,
-    ONTARIO_STATS_STUB_MD,
     _build_gold_news_section,
     _build_ontario_law_section,
     _build_ontario_stats_section,
@@ -515,20 +514,41 @@ async def test_build_ontario_law_section_returns_real_empty_state():
 
 
 @pytest.mark.asyncio
-async def test_build_ontario_stats_section_returns_stub_tuple():
-    """_build_ontario_stats_section returns (stub_md, []) in Phase 1 (Phase 3 replaces)."""
-    md, raw = await _build_ontario_stats_section()
-    assert isinstance(md, str)
-    assert len(md) > 0
-    assert raw == []
-    assert "stub" in md.lower() or "Phase" in md, (
-        f"Expected stub marker in ontario stats md, got: {md!r}"
+async def test_build_ontario_stats_section_fresh_path():
+    """Phase 3: _build_ontario_stats_section returns fresh markdown + stats_jsonb + telemetry."""
+    from agents.ontario_stats import OntarioStatsResult
+
+    fresh_result = OntarioStatsResult(
+        state="fresh",
+        figure_kg=7359.0,
+        period="2026-02",
+        release_time="2026-04-20T08:30",
+        prior_period="2026-01",
+        prior_figure_kg=7559.0,
     )
 
+    with patch("agents.daily_summary.fetch_ontario_stats_snapshot",
+               AsyncMock(return_value=fresh_result)):
+        md, jsonb, telemetry = await _build_ontario_stats_section(
+            previous_snapshot=None,
+            previous_release_time=None,
+            agent_run_id="test-run-uuid",
+        )
 
-def test_ontario_stats_stub_constant_defined():
-    """ONTARIO_STATS_STUB_MD constant is a non-empty string."""
-    assert isinstance(ONTARIO_STATS_STUB_MD, str) and ONTARIO_STATS_STUB_MD
+    assert md is not None
+    assert "7,359 kg" in md
+    assert jsonb["last_state"] == "fresh"
+    assert jsonb["snapshot"] is not None
+    assert jsonb["snapshot"]["period"] == "2026-02"
+    assert telemetry["candidates_stats_state"] == "fresh"
+
+
+def test_ontario_stats_stub_constant_removed():
+    """ONTARIO_STATS_STUB_MD was removed in Phase 3 — no longer in module."""
+    import agents.daily_summary as ds_module
+    assert not hasattr(ds_module, "ONTARIO_STATS_STUB_MD"), (
+        "ONTARIO_STATS_STUB_MD should be removed in Phase 3 — use real ingestion"
+    )
 
 
 def test_ontario_law_stub_md_not_in_module():
@@ -902,3 +922,206 @@ async def test_ontario_law_section_failure_marks_section_failed():
 
     assert md is None, "Hard failure should return md=None (section failed)"
     assert hits_jsonb == []
+
+
+# ---------------------------------------------------------------------------
+# Phase 3, Plan 01 — Ontario Stats section wiring tests (S1-S8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_s1_fresh_path_populates_snapshot_and_markdown():
+    """S1: fresh state → markdown + raw_sources.ontario_stats.snapshot populated."""
+    from agents.ontario_stats import OntarioStatsResult
+
+    fresh_result = OntarioStatsResult(
+        state="fresh",
+        figure_kg=7359.0,
+        period="2026-02",
+        release_time="2026-04-20T08:30",
+        prior_period="2026-01",
+        prior_figure_kg=7559.0,
+    )
+
+    with patch("agents.daily_summary.fetch_ontario_stats_snapshot",
+               AsyncMock(return_value=fresh_result)):
+        md, jsonb, telemetry = await _build_ontario_stats_section(
+            previous_snapshot=None,
+            previous_release_time=None,
+            agent_run_id="test-agent-run",
+        )
+
+    assert md is not None
+    assert "7,359 kg" in md
+    assert "February 2026" in md
+    assert jsonb["last_state"] == "fresh"
+    assert jsonb["snapshot"] is not None
+    assert jsonb["snapshot"]["figure_kg"] == 7359.0
+    assert jsonb["last_error_text"] is None
+
+
+@pytest.mark.asyncio
+async def test_s2_no_new_data_with_prior_snapshot_propagates_forward():
+    """S2: no_new_data + prior snapshot → 'No new production statistics' + snapshot propagated."""
+    from agents.ontario_stats import OntarioStatsResult
+
+    prior_snapshot = {
+        "period": "2026-02",
+        "figure_kg": 7359.0,
+        "release_time": "2026-04-20T08:30",
+        "prior_period": "2026-01",
+        "prior_figure_kg": 7559.0,
+    }
+    no_new_result = OntarioStatsResult(state="no_new_data")
+
+    with patch("agents.daily_summary.fetch_ontario_stats_snapshot",
+               AsyncMock(return_value=no_new_result)):
+        md, jsonb, telemetry = await _build_ontario_stats_section(
+            previous_snapshot=prior_snapshot,
+            previous_release_time="2026-04-20T08:30",
+            agent_run_id="test-agent-run",
+        )
+
+    assert md is not None
+    assert "No new production statistics released today" in md
+    assert "around May 20, 2026" in md
+    assert jsonb["last_state"] == "no_new_data"
+    # Prior snapshot must be propagated forward
+    assert jsonb["snapshot"] == prior_snapshot
+    assert telemetry["candidates_stats_state"] == "no_new_data"
+    assert telemetry["candidates_stats_period"] == "2026-02"
+
+
+@pytest.mark.asyncio
+async def test_s3_no_new_data_first_ever_fire():
+    """S3: no_new_data + no prior snapshot → 'Awaiting first StatCan release'."""
+    from agents.ontario_stats import OntarioStatsResult
+
+    no_new_result = OntarioStatsResult(state="no_new_data")
+
+    with patch("agents.daily_summary.fetch_ontario_stats_snapshot",
+               AsyncMock(return_value=no_new_result)):
+        md, jsonb, telemetry = await _build_ontario_stats_section(
+            previous_snapshot=None,
+            previous_release_time=None,
+            agent_run_id="test-agent-run",
+        )
+
+    assert md is not None
+    assert "Awaiting first StatCan release" in md
+    assert jsonb["last_state"] == "no_new_data"
+    assert jsonb["snapshot"] is None
+
+
+@pytest.mark.asyncio
+async def test_s4_error_preserves_prior_snapshot():
+    """S4: error state → error markdown with agent_run_id + prior snapshot NOT overwritten."""
+    from agents.ontario_stats import OntarioStatsResult
+
+    prior_snapshot = {
+        "period": "2026-02",
+        "figure_kg": 7359.0,
+        "release_time": "2026-04-20T08:30",
+        "prior_period": None,
+        "prior_figure_kg": None,
+    }
+    error_result = OntarioStatsResult(
+        state="error",
+        error_text="HTTPError: connection refused",
+    )
+
+    with patch("agents.daily_summary.fetch_ontario_stats_snapshot",
+               AsyncMock(return_value=error_result)):
+        md, jsonb, telemetry = await _build_ontario_stats_section(
+            previous_snapshot=prior_snapshot,
+            previous_release_time="2026-04-20T08:30",
+            agent_run_id="abcdef12-1234-5678-abcd-ef1234567890",
+        )
+
+    assert md is not None
+    assert "⚠" in md
+    assert "Ontario production statistics ingestion failed" in md
+    assert "abcdef12" in md  # first 8 chars of agent_run_id
+    assert jsonb["last_state"] == "error"
+    assert jsonb["last_error_text"] == "HTTPError: connection refused"
+    # CRITICAL: prior snapshot must be preserved, NOT overwritten
+    assert jsonb["snapshot"] == prior_snapshot, (
+        "Error state must preserve the prior snapshot — do NOT overwrite!"
+    )
+    assert telemetry["candidates_stats_state"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_s5_telemetry_fresh_path():
+    """S5: fresh path → all 3 candidates_stats_* telemetry keys correctly set."""
+    from agents.ontario_stats import OntarioStatsResult
+
+    fresh_result = OntarioStatsResult(
+        state="fresh",
+        figure_kg=7359.0,
+        period="2026-02",
+        release_time="2026-04-20T08:30",
+        prior_period="2026-01",
+        prior_figure_kg=7559.0,
+    )
+
+    with patch("agents.daily_summary.fetch_ontario_stats_snapshot",
+               AsyncMock(return_value=fresh_result)):
+        _, _, telemetry = await _build_ontario_stats_section(
+            previous_snapshot=None,
+            previous_release_time=None,
+            agent_run_id="test-run",
+        )
+
+    assert telemetry["candidates_stats_state"] == "fresh"
+    assert telemetry["candidates_stats_period"] == "2026-02"
+    assert telemetry["candidates_stats_release_time"] == "2026-04-20T08:30"
+
+
+@pytest.mark.asyncio
+async def test_s6_telemetry_error_path():
+    """S6: error path → candidates_stats_state='error', period/release_time=None."""
+    from agents.ontario_stats import OntarioStatsResult
+
+    error_result = OntarioStatsResult(state="error", error_text="WDS down")
+
+    with patch("agents.daily_summary.fetch_ontario_stats_snapshot",
+               AsyncMock(return_value=error_result)):
+        _, _, telemetry = await _build_ontario_stats_section(
+            previous_snapshot=None,
+            previous_release_time=None,
+            agent_run_id="test-run",
+        )
+
+    assert telemetry["candidates_stats_state"] == "error"
+    assert telemetry["candidates_stats_period"] is None
+    assert telemetry["candidates_stats_release_time"] is None
+
+
+def test_s7_raw_sources_new_shape_only():
+    """S7: raw_sources['ontario_stats'] uses new shape — no old Phase 1 keys."""
+    import inspect
+    import agents.daily_summary as ds_module
+
+    source = inspect.getsource(ds_module)
+    # Old keys must NOT appear
+    assert "snapshot_date" not in source, "snapshot_date (old Phase 1 key) must be gone"
+    assert "last_known_figure" not in source, "last_known_figure (old Phase 1 key) must be gone"
+    assert "fresh_data" not in source, "fresh_data (old Phase 1 key) must be gone"
+    # New keys must appear
+    assert "last_state" in source
+    assert "last_error_text" in source
+
+
+def test_s8_stub_constant_and_text_removed():
+    """S8: ONTARIO_STATS_STUB_MD constant removed; stub text no longer in module source."""
+    import inspect
+    import agents.daily_summary as ds_module
+
+    assert not hasattr(ds_module, "ONTARIO_STATS_STUB_MD"), (
+        "ONTARIO_STATS_STUB_MD must be removed in Phase 3"
+    )
+    source = inspect.getsource(ds_module)
+    assert "(stub) Ontario stats section" not in source, (
+        "Stub text must be removed from daily_summary.py in Phase 3"
+    )
