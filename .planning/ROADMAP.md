@@ -21,7 +21,7 @@ or read on WhatsApp.
 - [x] **Phase 1: Gold News Card + Web Feed** - Full-stack shippable slice: DB migration, dual models, GET /summaries, daily_summary cron with real gold-news section + Ontario stubs, WhatsApp teaser + failure alert, web feed page, midday_digest retirement (completed 2026-05-06)
 - [x] **Phase 2: Ontario Law Ingestion** - Real ontario_law.py module (3 concurrent sources), Haiku relevance filter with explicit REJECT examples, _build_ontario_law_section() wired, synthetic test, last_known_law empty-state continuity (completed 2026-05-06)
 - [x] **Phase 3: Ontario Stats Ingestion** - Real ontario_stats.py module (StatCan The Daily RSS trigger + WDS API pull on release days), monthly cadence, snapshot persistence, two distinct empty states (no_new_data vs error) (completed 2026-05-06)
-- [ ] **Phase 4: Prune Cron + Operations Hardening** - daily_summary_prune cron at 03:00 PT (lock 1018), /agent-runs telemetry verification, retire-via-deregistration audit
+- [x] **Phase 4: Prune Cron + Operations Hardening** - daily_summary_prune cron at 03:00 PT (lock 1018), /agent-runs telemetry verification, retire-via-deregistration audit (completed 2026-05-06)
 
 ## Phase Details
 
@@ -70,7 +70,8 @@ or read on WhatsApp.
   1. The `daily_summary_prune` cron fires at 03:00 PT and deletes `daily_summaries` rows where `generated_at < NOW() - INTERVAL '30 days'`; the agent_runs log shows a `daily_summary_prune` entry with lock ID 1018 on the morning after first deploy
   2. The Settings > Agent Runs tab shows `daily_summary` run history with structured notes fields (`candidates_gold`, `sections_completed`, `whatsapp_sent`) parseable by the existing per-agent UI patterns
   3. A code audit confirms the 6 retired sub-agent modules + approval-flow components + Phase B post-to-X route exist as dead code in the repo — no source files were deleted in v2.0
-**Plans**: TBD
+**Plans:** 1/1 plans complete
+- [x] 04-01-PLAN.md — daily_summary_prune cron at 03:00 PT (lock 1018) + OPS-04 retirement audit + OPS-03 parseRunNotes graceful-fallback verification
 
 ## Phase Decomposition Rationale
 
@@ -116,4 +117,4 @@ step, not a build step, and is cheapest to do once the full v2.0 feature set is 
 | 1. Gold News Card + Web Feed | 6/6 | Complete    | 2026-05-06 |
 | 2. Ontario Law Ingestion | 1/1 | Complete    | 2026-05-06 |
 | 3. Ontario Stats Ingestion | 1/1 | Complete    | 2026-05-06 |
-| 4. Prune Cron + Operations Hardening | 0/TBD | Not started | - |
+| 4. Prune Cron + Operations Hardening | 1/1 | Complete   | 2026-05-06 |
