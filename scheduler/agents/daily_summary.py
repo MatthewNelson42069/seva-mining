@@ -6,7 +6,7 @@ Writes one daily_summaries row + one agent_runs row per fire.
 Pitfall mitigations bundled here:
   CRIT-3 (multiple fires from misfire) — DB-level idempotency check at start.
   HIGH-4 (JSONB schema drift)         — raw_sources_jsonb built from a fixed dict shape.
-  HIGH-5 (WhatsApp >1600 chars)       — uses deliver_summary_teaser (NOT build_chunks).
+  HIGH-5 (WhatsApp >1600 chars)       — uses deliver_summary_teaser (teaser-only pattern).
   MOD-5 (hallucinated dates)          — published_at injected into Sonnet user prompt.
   MOD-6 (failure alert deadlock)      — deliver_summary_failure_alert wraps its send.
   SUM-04 (telemetry)                  — notes JSON dumped on the agent_runs row.
