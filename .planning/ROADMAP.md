@@ -19,7 +19,7 @@ or read on WhatsApp.
 - Decimal phases: Urgent insertions via `/gsd:insert-phase` only
 
 - [x] **Phase 1: Gold News Card + Web Feed** - Full-stack shippable slice: DB migration, dual models, GET /summaries, daily_summary cron with real gold-news section + Ontario stubs, WhatsApp teaser + failure alert, web feed page, midday_digest retirement (completed 2026-05-06)
-- [ ] **Phase 2: Ontario Law Ingestion** - Real ontario_law.py module (3 concurrent sources), Haiku relevance filter with explicit REJECT examples, _build_ontario_law_section() wired, synthetic test, last_known_law empty-state continuity
+- [x] **Phase 2: Ontario Law Ingestion** - Real ontario_law.py module (3 concurrent sources), Haiku relevance filter with explicit REJECT examples, _build_ontario_law_section() wired, synthetic test, last_known_law empty-state continuity (completed 2026-05-06)
 - [ ] **Phase 3: Ontario Stats Ingestion** - Real ontario_stats.py module (StatCan The Daily RSS trigger + WDS API pull on release days), monthly cadence, snapshot persistence, two distinct empty states (no_new_data vs error)
 - [ ] **Phase 4: Prune Cron + Operations Hardening** - daily_summary_prune cron at 03:00 PT (lock 1018), /agent-runs telemetry verification, retire-via-deregistration audit
 
@@ -47,8 +47,8 @@ or read on WhatsApp.
   2. On a day the Ontario legislature is sitting, the Ontario Law section contains at least one bullet citing a specific bill or regulation number (not a ministerial speech)
   3. On a quiet day (legislature in recess or no relevant items), the Ontario Law section renders "No new Ontario mining-related laws today. Last update: {date} — {law_name}." using the stored `last_known_law` JSONB field — not a blank section
   4. The Haiku filter model config key is confirmed as `claude-haiku-4-5` in the DB config — not Sonnet — and the filter prompt contains explicit REJECT examples for ministerial speeches
-**Plans:** 1 plan
-- [ ] 02-01-PLAN.md — NEW `scheduler/agents/ontario_law.py` (SerpAPI + NRCan + Haiku filter), wire `_build_ontario_law_section` in daily_summary.py, `LastKnownLaw` Pydantic model + dual config env var, comprehensive tests
+**Plans:** 1/1 plans complete
+- [x] 02-01-PLAN.md — NEW `scheduler/agents/ontario_law.py` (SerpAPI + NRCan + Haiku filter), wire `_build_ontario_law_section` in daily_summary.py, `LastKnownLaw` Pydantic model + dual config env var, comprehensive tests
 
 ### Phase 3: Ontario Stats Ingestion
 **Goal**: The Ontario Stats section shows the latest StatCan production figure on release days (~19th-21st of M+2) and renders a date-anchored empty state on all other days; an error state is visually distinct from the no-data state
@@ -113,6 +113,6 @@ step, not a build step, and is cheapest to do once the full v2.0 feature set is 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Gold News Card + Web Feed | 6/6 | Complete    | 2026-05-06 |
-| 2. Ontario Law Ingestion | 0/1 | Not started | - |
+| 2. Ontario Law Ingestion | 1/1 | Complete   | 2026-05-06 |
 | 3. Ontario Stats Ingestion | 0/TBD | Not started | - |
 | 4. Prune Cron + Operations Hardening | 0/TBD | Not started | - |

@@ -30,10 +30,10 @@ The first card section. Reuses `fetch_stories()` with no refactor. The most imme
 
 The hardest pipeline. Three ingestion sources, a Haiku filter with explicit reject examples, weekday-continuous urgency.
 
-- [ ] **LAW-01**: System ingests Ontario-law candidates each fire from three sources concurrently — Ontario Newsroom RSS (primary), NRCan RSS (secondary), and a SerpAPI keyword search (`"Ontario mining law" OR "Mining Act amendment"`) (tertiary)
-- [ ] **LAW-02**: System runs each candidate through a Haiku relevance filter (`claude-haiku-4-5`) that returns structured JSON `{is_law: bool, bill_or_reg_number: str|null, reason: str, favour_or_neutral: 'favour'|'neutral'|'against'}`; the filter prompt includes explicit REJECT examples for ministerial speeches and CTA announcements without a named bill
-- [ ] **LAW-03**: System produces a markdown Ontario Law section listing only surviving hits (`is_law=True AND bill_or_reg_number is not null AND favour_or_neutral != 'against'`); each bullet cites the bill/act name and a 1-sentence summary
-- [ ] **LAW-04**: System renders the empty-state copy "No new Ontario mining-related laws today. Last update: {date} — {law_name}." when the filter rejects all candidates (expected on most days; legislature recess June-Aug + Dec-Jan); the most recent passing hit is stored in `daily_summaries.raw_sources_jsonb.ontario_law.last_known_law` for empty-state continuity
+- [x] **LAW-01**: System ingests Ontario-law candidates each fire from three sources concurrently — Ontario Newsroom RSS (primary), NRCan RSS (secondary), and a SerpAPI keyword search (`"Ontario mining law" OR "Mining Act amendment"`) (tertiary)
+- [x] **LAW-02**: System runs each candidate through a Haiku relevance filter (`claude-haiku-4-5`) that returns structured JSON `{is_law: bool, bill_or_reg_number: str|null, reason: str, favour_or_neutral: 'favour'|'neutral'|'against'}`; the filter prompt includes explicit REJECT examples for ministerial speeches and CTA announcements without a named bill
+- [x] **LAW-03**: System produces a markdown Ontario Law section listing only surviving hits (`is_law=True AND bill_or_reg_number is not null AND favour_or_neutral != 'against'`); each bullet cites the bill/act name and a 1-sentence summary
+- [x] **LAW-04**: System renders the empty-state copy "No new Ontario mining-related laws today. Last update: {date} — {law_name}." when the filter rejects all candidates (expected on most days; legislature recess June-Aug + Dec-Jan); the most recent passing hit is stored in `daily_summaries.raw_sources_jsonb.ontario_law.last_known_law` for empty-state continuity
 
 ### Ontario Stats Section (STAT)
 
@@ -121,10 +121,10 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 | GOLD-01 | Phase 1 | Complete |
 | GOLD-02 | Phase 1 | Complete |
 | GOLD-03 | Phase 1 | Complete |
-| LAW-01 | Phase 2 | Pending |
-| LAW-02 | Phase 2 | Pending |
-| LAW-03 | Phase 2 | Pending |
-| LAW-04 | Phase 2 | Pending |
+| LAW-01 | Phase 2 | Complete |
+| LAW-02 | Phase 2 | Complete |
+| LAW-03 | Phase 2 | Complete |
+| LAW-04 | Phase 2 | Complete |
 | STAT-01 | Phase 3 | Pending |
 | STAT-02 | Phase 3 | Pending |
 | STAT-03 | Phase 3 | Pending |
