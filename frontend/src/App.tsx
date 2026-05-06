@@ -2,9 +2,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/pages/LoginPage'
-import { PerAgentQueuePage } from '@/pages/PerAgentQueuePage'
 import { DigestPage } from '@/pages/DigestPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { SummaryFeedPage } from '@/pages/SummaryFeedPage'
 
 export default function App() {
   return (
@@ -13,15 +13,14 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
-            {/* Redirect root to Breaking News (priority-1 sub-agent, quick-260421-eoe) */}
-            <Route path="/" element={<Navigate to="/agents/breaking-news" replace />} />
+            {/* Phase 1, Plan 06 — v2.0 daily summary feed at root (FEED-01) */}
+            <Route path="/" element={<SummaryFeedPage />} />
 
-            {/* Per-sub-agent queues via single dynamic route (quick-260421-eoe).
-                CONTENT_AGENT_TABS drives Sidebar + PerAgentQueuePage slug lookup.
-                Unknown slug → redirect back to /agents/breaking-news. */}
-            <Route path="/agents/:slug" element={<PerAgentQueuePage />} />
+            {/* Bookmark-grace redirects for retired v1.0 routes (FEED-04) */}
+            <Route path="/queue" element={<Navigate to="/" replace />} />
+            <Route path="/agents/:slug" element={<Navigate to="/" replace />} />
 
-            {/* Other pages. */}
+            {/* Retained v1.0 surfaces (out of scope for v2.0 retirement) */}
             <Route path="/digest" element={<DigestPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
