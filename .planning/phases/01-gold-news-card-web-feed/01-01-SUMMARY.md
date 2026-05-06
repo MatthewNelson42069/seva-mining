@@ -154,3 +154,18 @@ None — migration 0010 must be run manually via `alembic upgrade head` against 
 ---
 *Phase: 01-gold-news-card-web-feed*
 *Completed: 2026-05-06*
+
+## Self-Check: PASSED
+
+- FOUND: backend/alembic/versions/0010_add_daily_summaries.py
+- FOUND: backend/app/models/daily_summary.py
+- FOUND: scheduler/models/daily_summary.py
+- FOUND: scheduler/tests/test_daily_summary_model.py
+- FOUND: backend/app/schemas/daily_summary.py
+- FOUND: backend/tests/test_daily_summary_schema.py
+- FOUND: .planning/phases/01-gold-news-card-web-feed/01-01-SUMMARY.md
+- FOUND commit: 0c0ff79 (migration 0010)
+- FOUND commit: 9d7855d (dual models + parity test)
+- FOUND commit: 86fff8a (Pydantic schemas)
+- FOUND commit: 5e4f16e (ruff fix)
+- FOUND commit: bd0957d (docs/metadata)
