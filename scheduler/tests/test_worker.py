@@ -117,6 +117,8 @@ def test_quotes_is_daily_cron():
 def test_retired_crons_absent_from_job_lock_ids():
     """content_agent (1003), gold_history_agent (1009), and sub_long_form (1012) must NOT appear.
     quick-260424-i8b: morning_digest key renamed to midday_digest (lock ID 1005 unchanged).
+    Phase 1 Plan 05: daily_summary=1017 + daily_summary_prune=1018 added; midday_digest retained
+    as dead code (registration removed from build_scheduler; factory + dict entry kept per CONTEXT).
     """
     assert "content_agent" not in JOB_LOCK_IDS
     assert "gold_history_agent" not in JOB_LOCK_IDS
@@ -124,22 +126,29 @@ def test_retired_crons_absent_from_job_lock_ids():
     assert "expiry_sweep" not in JOB_LOCK_IDS
     assert "sub_long_form" not in JOB_LOCK_IDS  # retired per quick-260423-k8n
     assert "morning_digest" not in JOB_LOCK_IDS  # renamed to midday_digest per quick-260424-i8b
-    # Exactly 7 keys total: midday_digest + 6 sub-agents.
-    assert len(JOB_LOCK_IDS) == 7
+    # 9 keys total: midday_digest (dead code) + 6 sub-agents + daily_summary + daily_summary_prune
+    assert len(JOB_LOCK_IDS) == 9
     assert set(JOB_LOCK_IDS.keys()) == {
-        "midday_digest",
+        "midday_digest",        # dead code — registration removed Phase 1 Plan 05 (CRIT-1)
         "sub_breaking_news",
         "sub_threads",
         "sub_quotes",
         "sub_infographics",
         "sub_gold_media",
         "sub_gold_history",
+        "daily_summary",        # Phase 1 Plan 05
+        "daily_summary_prune",  # Phase 1 Plan 05 (registration ships Phase 4)
     }
 
 
 @pytest.mark.asyncio
 async def test_scheduler_registers_7_jobs():
-    """build_scheduler() registers exactly 7 jobs with the expected IDs (quick-260423-k8n: sub_long_form removed; quick-260424-i8b: morning_digest→midday_digest)."""
+    """build_scheduler() registers exactly 7 jobs with the expected IDs.
+
+    Phase 1 Plan 05 (CRIT-1 / SUM-06): midday_digest registration REMOVED;
+    daily_summary registration ADDED. Still exactly 7 jobs.
+    (quick-260423-k8n: sub_long_form removed; quick-260424-i8b: morning_digest→midday_digest)
+    """
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",
@@ -152,7 +161,7 @@ async def test_scheduler_registers_7_jobs():
         ids = sorted(j.id for j in jobs)
         expected = sorted(
             [
-                "midday_digest",
+                "daily_summary",        # Phase 1 Plan 05 replacement for midday_digest
                 "sub_breaking_news",
                 "sub_threads",
                 "sub_quotes",
@@ -163,6 +172,7 @@ async def test_scheduler_registers_7_jobs():
         )
         assert ids == expected, f"expected {expected}, got {ids}"
         assert len(jobs) == 7
+        assert "midday_digest" not in ids, "midday_digest must be removed (CRIT-1)"
     finally:
         if scheduler.running:
             scheduler.shutdown(wait=False)
@@ -176,11 +186,12 @@ async def test_scheduler_registers_7_jobs():
 
 @pytest.mark.asyncio
 async def test_morning_digest_cron_fires_in_pacific_time():
-    """midday_digest CronTrigger uses timezone='America/Los_Angeles'.
+    """Phase 1 Plan 05: midday_digest registration removed; daily_summary replaces it.
 
-    Regression guard: scheduler-level default tz is UTC; the trigger MUST
-    override with America/Los_Angeles. quick-260424-i8b: job renamed to midday_digest,
-    retimed to 12:30 PT.
+    Regression guard: scheduler-level default tz is UTC; the daily_summary
+    trigger MUST override with America/Los_Angeles.
+    quick-260424-i8b: job renamed to midday_digest, retimed to 12:30 PT.
+    Phase 1 Plan 05 (CRIT-1): midday_digest deregistered; daily_summary registered.
     """
     mock_engine = MagicMock()
     with patch(
@@ -190,14 +201,17 @@ async def test_morning_digest_cron_fires_in_pacific_time():
         scheduler = await build_scheduler(mock_engine)
 
     try:
-        job = scheduler.get_job("midday_digest")
-        assert job is not None, "midday_digest job must exist (renamed from morning_digest)"
+        # midday_digest must be gone (CRIT-1)
+        assert scheduler.get_job("midday_digest") is None, (
+            "midday_digest must be deregistered (Phase 1 Plan 05 CRIT-1)"
+        )
+        # daily_summary must use America/Los_Angeles timezone (SUM-01)
+        job = scheduler.get_job("daily_summary")
+        assert job is not None, "daily_summary job must exist (Phase 1 Plan 05)"
         trigger = job.trigger
-        # APScheduler CronTrigger stores timezone on the trigger instance.
-        # Check by comparing the zone string.
         tz_name = str(getattr(trigger, "timezone", ""))
         assert "Los_Angeles" in tz_name, (
-            f"midday_digest trigger must be in America/Los_Angeles, got {tz_name!r}"
+            f"daily_summary trigger must be in America/Los_Angeles, got {tz_name!r}"
         )
     finally:
         if scheduler.running:
@@ -419,7 +433,13 @@ async def test_reconcile_stale_runs_custom_threshold():
 
 @pytest.mark.asyncio
 async def test_digest_is_registered_as_midday_at_1230_pt():
-    """Digest job id is 'midday_digest', fires at 12:30 America/Los_Angeles. 'morning_digest' must NOT exist."""
+    """Phase 1 Plan 05: midday_digest deregistered (CRIT-1); daily_summary registered at 08:00+12:00 PT.
+
+    Previous assertion: midday_digest fires at 12:30 America/Los_Angeles.
+    Current assertion: midday_digest is ABSENT; daily_summary fires at 8,12 America/Los_Angeles.
+    (quick-260424-i8b originally registered midday_digest at 12:30 PT;
+     Phase 1 Plan 05 removes the registration in the same commit as daily_summary.)
+    """
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",
@@ -428,15 +448,18 @@ async def test_digest_is_registered_as_midday_at_1230_pt():
         scheduler = await build_scheduler(mock_engine)
 
     try:
-        # Old id must be gone
+        # Both old job ids must be gone (CRIT-1 + legacy cleanup)
         assert scheduler.get_job("morning_digest") is None, (
             "morning_digest job id must not exist after i8b rename"
         )
-        # New id must exist
-        job = scheduler.get_job("midday_digest")
-        assert job is not None, "midday_digest job must be registered"
+        assert scheduler.get_job("midday_digest") is None, (
+            "midday_digest registration must be removed (Phase 1 Plan 05 CRIT-1)"
+        )
+        # daily_summary must be registered
+        job = scheduler.get_job("daily_summary")
+        assert job is not None, "daily_summary job must be registered (Phase 1 Plan 05)"
         trigger = job.trigger
-        # Verify hour=12, minute=30
+        # Verify hour="8,12", minute=0
         hour_field = next(
             (f for f in trigger.fields if f.name == "hour"), None
         )
@@ -445,12 +468,14 @@ async def test_digest_is_registered_as_midday_at_1230_pt():
         )
         assert hour_field is not None, "CronTrigger must have an hour field"
         assert minute_field is not None, "CronTrigger must have a minute field"
-        assert str(hour_field) == "12", f"Expected hour=12, got {hour_field}"
-        assert str(minute_field) == "30", f"Expected minute=30, got {minute_field}"
+        assert "8" in str(hour_field) and "12" in str(hour_field), (
+            f"Expected hour containing '8' and '12', got {hour_field}"
+        )
+        assert str(minute_field) == "0", f"Expected minute=0, got {minute_field}"
         # Verify timezone
         tz_name = str(getattr(trigger, "timezone", ""))
         assert "Los_Angeles" in tz_name, (
-            f"midday_digest trigger must be in America/Los_Angeles, got {tz_name!r}"
+            f"daily_summary trigger must be in America/Los_Angeles, got {tz_name!r}"
         )
     finally:
         if scheduler.running:

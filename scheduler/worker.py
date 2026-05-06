@@ -102,14 +102,26 @@ def get_scheduler() -> AsyncIOScheduler:
 # quick-260421-eoe: retired content_agent(1003) + gold_history_agent(1009);
 # added sub_*(1010-1016) for the 7 content sub-agents.
 JOB_LOCK_IDS: dict[str, int] = {
-    "midday_digest": 1005,  # renamed from morning_digest in quick-260424-i8b; lock ID 1005 unchanged
+    "midday_digest": 1005,  # retained as dead code per Phase 1 plan (registration removed below; factory + dict entry left as dead code per CONTEXT — strip in v2.1+)
     "sub_breaking_news": 1010,
     "sub_threads": 1011,
     "sub_quotes": 1013,
     "sub_infographics": 1014,
     "sub_gold_media": 1015,
     "sub_gold_history": 1016,
+    # v2.0 daily_summary feed (Phase 1, Plan 05). Lock IDs 1017/1018 confirmed
+    # next-free by architecture-researcher direct grep (research/ARCHITECTURE.md
+    # rejects PITFALLS.md proposal of 1020/1021).
+    "daily_summary": 1017,
+    "daily_summary_prune": 1018,
 }
+
+# OPS-02 — startup uniqueness assertion. Costs nothing and catches future
+# collisions immediately (CRIT-2 mitigation). Runs at module import time so
+# the worker process refuses to start if someone duplicates an ID.
+assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS), (
+    f"JOB_LOCK_IDS has duplicate values: {JOB_LOCK_IDS}"
+)
 
 
 # Cron-scheduled sub-agents (post-m49 unified registration table).
@@ -272,6 +284,30 @@ def _make_midday_digest_job(engine):
     return job
 
 
+def _make_daily_summary_job(engine):
+    """Create the daily_summary job callback (advisory-lock wrapped).
+
+    v2.0 — Phase 1, Plan 05. Mirrors the _make_midday_digest_job factory
+    shape (NOT in CONTENT_CRON_AGENTS — daily_summary is a complex job, not
+    a simple sub-agent tuple).
+
+    run_daily_summary is imported lazily at call time so worker.py module
+    import does not pay the full daily_summary import cost on Railway boot.
+    """
+
+    async def job():
+        async with engine.connect() as conn:
+            from agents.daily_summary import run_daily_summary  # lazy
+            await with_advisory_lock(
+                conn,
+                JOB_LOCK_IDS["daily_summary"],
+                "daily_summary",
+                run_daily_summary,
+            )
+
+    return job
+
+
 def _make_sub_agent_job(job_id: str, lock_id: int, run_fn, engine):
     """Create a content sub-agent job callback (advisory-lock wrapped).
 
@@ -368,21 +404,26 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         timezone="UTC",
     )
 
-    # CronTrigger takes an explicit timezone arg — do NOT rely on the scheduler
-    # default (UTC). quick-260424-i8b: retimed from 07:00 PT → 12:30 PT so the
-    # digest fires after the 12:00 noon sub-agent batch (quotes, infographics,
-    # gold_media, gold_history) has had ~30 min to complete. Breaking_news and
-    # threads are excluded from this digest (per DIGEST_EXCLUDED_CONTENT_TYPES)
-    # because they already send per-run firehose notifications.
+    # midday_digest registration removed in Phase 1, Plan 05 (CRIT-1 / SUM-06).
+    # The _make_midday_digest_job factory and JOB_LOCK_IDS["midday_digest"]=1005
+    # entry are intentionally left in place as dead code per the CONTEXT
+    # decision "dead-code-only retirement: do NOT delete v1.0 sub-agent source
+    # files". Strip in v2.1+ once 30-day stability is confirmed.
+
+    # daily_summary — fires at 08:00 PT and 12:00 PT (SUM-01).
+    # CronTrigger(hour="8,12") fires the same advisory-lock ID twice daily; the
+    # 4-hour gap makes lock collision impossible. 08:00 and 12:00 are both
+    # outside the DST-ambiguous 01:00-02:00 window (MOD-1 — safe).
+    # If you change these hours, verify the new times are not 01:00-02:00 PT.
     scheduler.add_job(
-        _make_midday_digest_job(engine),
+        _make_daily_summary_job(engine),
         trigger=CronTrigger(
-            hour=12,
-            minute=30,
+            hour="8,12",
+            minute=0,
             timezone="America/Los_Angeles",
         ),
-        id="midday_digest",
-        name="Midday Digest — daily at 12:30 America/Los_Angeles",
+        id="daily_summary",
+        name="Daily Summary — 08:00 + 12:00 America/Los_Angeles",
     )
 
     for job_id, run_fn, name, lock_id, cron_kwargs in CONTENT_CRON_AGENTS:
