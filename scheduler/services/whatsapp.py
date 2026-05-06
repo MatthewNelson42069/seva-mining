@@ -196,3 +196,158 @@ async def send_agent_run_notification(
             return sids
         sids.append(sid)
     return sids
+
+
+# ---------------------------------------------------------------------------
+# v2.0 daily_summary delivery (Phase 1, Plan 03)
+#
+# Teaser pattern (HIGH-5 mitigation): a single short message with link to feed,
+# NEVER build_chunks(). The web feed is the primary surface; WhatsApp is the
+# notification.
+# ---------------------------------------------------------------------------
+
+SUMMARY_TEASER_MAX_CHARS = 400  # WHA-03 — assert at write time so accidental
+                                 # regression to build_chunks() is caught immediately.
+
+
+def build_summary_teaser(period_label: str, lead: str, feed_url: str) -> str:
+    """Build the WhatsApp teaser body.
+
+    Format (locked CONTEXT decision):
+        📊 Summary {period_label}: {lead}. Read full → {feed_url}
+
+    The lead is truncated as needed so the total length stays under
+    SUMMARY_TEASER_MAX_CHARS. Lead is the 1-sentence "why it matters" lead
+    from the gold-news Sonnet output.
+
+    Args:
+        period_label: '08:00 PT' or '12:00 PT'.
+        lead: 1-sentence lead from the gold news section.
+        feed_url: Absolute URL to the feed (from settings.feed_base_url).
+
+    Returns:
+        Teaser string, guaranteed < SUMMARY_TEASER_MAX_CHARS chars.
+    """
+    # Compute the static framing first so we can size the lead budget.
+    prefix = f"📊 Summary {period_label}: "
+    suffix = f". Read full → {feed_url}"
+    # Reserve room for an ellipsis if we need to truncate.
+    budget = SUMMARY_TEASER_MAX_CHARS - len(prefix) - len(suffix) - 1  # 1 for safety
+    if budget < 20:
+        # Pathological case (very long URL or period_label) — emit a minimal teaser.
+        teaser = f"📊 Summary {period_label}. {feed_url}"
+    else:
+        trimmed_lead = lead.strip()
+        if len(trimmed_lead) > budget:
+            trimmed_lead = trimmed_lead[: budget - 1].rstrip() + "…"
+        teaser = f"{prefix}{trimmed_lead}{suffix}"
+    # WHA-03 — defensive assert. If this fires, someone reintroduced
+    # build_chunks() or extended the format without bumping the budget.
+    assert len(teaser) < SUMMARY_TEASER_MAX_CHARS, (
+        f"summary teaser exceeded {SUMMARY_TEASER_MAX_CHARS} chars "
+        f"(got {len(teaser)}) — DO NOT use build_chunks for daily_summary"
+    )
+    return teaser
+
+
+def build_summary_failure_alert(
+    period_label: str,
+    failed_sections: list[str],
+    agent_run_id: str,
+) -> str:
+    """Build the WhatsApp failure-alert body.
+
+    Format (locked CONTEXT decision):
+        ⚠️ Summary {period_label} FAILED: section(s) {sections}. agent_run_id: {short_id}
+
+    agent_run_id is truncated to first 8 chars so the alert stays compact.
+
+    Args:
+        period_label: '08:00 PT' or '12:00 PT'.
+        failed_sections: list of section names that failed
+            (e.g. ['gold_news', 'ontario_law']).
+        agent_run_id: Full UUID string of the agent_run row; will be truncated.
+
+    Returns:
+        Alert string, guaranteed < SUMMARY_TEASER_MAX_CHARS chars.
+    """
+    sections_str = ", ".join(failed_sections) if failed_sections else "all"
+    short_id = (agent_run_id or "unknown")[:8]
+    alert = (
+        f"⚠️ Summary {period_label} FAILED: section(s) {sections_str}. "
+        f"agent_run_id: {short_id}"
+    )
+    # Defensive truncation if a section list is unusually long.
+    if len(alert) >= SUMMARY_TEASER_MAX_CHARS:
+        alert = alert[: SUMMARY_TEASER_MAX_CHARS - 1].rstrip() + "…"
+    assert len(alert) < SUMMARY_TEASER_MAX_CHARS
+    return alert
+
+
+async def deliver_summary_teaser(period_label: str, lead: str) -> str | None:
+    """Build and send the WhatsApp teaser, gated by WHATSAPP_DELIVERY_ENABLED.
+
+    When the gate is False (default): log the message body + length and
+    return None — does NOT call Twilio (simulate mode, mirrors
+    X_POSTING_ENABLED pattern).
+
+    When the gate is True: call send_whatsapp_message and return the SID.
+
+    Args:
+        period_label: '08:00 PT' or '12:00 PT'.
+        lead: 1-sentence lead from the gold news section.
+
+    Returns:
+        Twilio SID on real send, or None when simulated / creds missing.
+    """
+    settings = get_settings()
+    teaser = build_summary_teaser(period_label, lead, settings.feed_base_url)
+    logger.info(
+        "daily_summary teaser built — period=%s len=%d delivery_enabled=%s",
+        period_label,
+        len(teaser),
+        settings.whatsapp_delivery_enabled,
+    )
+    if not settings.whatsapp_delivery_enabled:
+        logger.info(
+            "WHATSAPP_DELIVERY_ENABLED=false — SIMULATE: teaser would be: %s",
+            teaser,
+        )
+        return None
+    return await send_whatsapp_message(teaser)
+
+
+async def deliver_summary_failure_alert(
+    period_label: str,
+    failed_sections: list[str],
+    agent_run_id: str,
+) -> None:
+    """Build and send the WhatsApp failure alert. ALWAYS attempts the send.
+
+    Failure alerts ignore WHATSAPP_DELIVERY_ENABLED — they are critical
+    signal and the operator MUST be notified that the cron failed.
+
+    The send is wrapped in its own try/except that NEVER re-raises (MOD-6
+    mitigation): if Twilio is also down during a daily_summary failure,
+    we log the alert-send failure but do not propagate. The original
+    run-failure exception that triggered this call is preserved by the
+    caller's logger.exception block.
+
+    Args:
+        period_label: '08:00 PT' or '12:00 PT'.
+        failed_sections: list of section names that failed.
+        agent_run_id: Full UUID string of the agent_run row; will be truncated.
+    """
+    try:
+        alert = build_summary_failure_alert(period_label, failed_sections, agent_run_id)
+        logger.warning("daily_summary FAILURE ALERT: %s", alert)
+        await send_whatsapp_message(alert)
+    except Exception as alert_exc:  # noqa: BLE001 — MOD-6: NEVER re-raise
+        logger.error(
+            "daily_summary failure-alert send ALSO failed (%s: %s) — "
+            "the original run-failure has been logged separately. "
+            "Check Railway scheduler logs for the agent_run_id %s.",
+            type(alert_exc).__name__,
+            alert_exc,
+            agent_run_id,
+        )

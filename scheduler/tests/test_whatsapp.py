@@ -18,8 +18,16 @@ os.environ.setdefault("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
 os.environ.setdefault("DIGEST_WHATSAPP_TO", "whatsapp:+15550001234")
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from twilio.base.exceptions import TwilioRestException
+
+from services.whatsapp import (
+    SUMMARY_TEASER_MAX_CHARS,
+    build_summary_teaser,
+    build_summary_failure_alert,
+    deliver_summary_teaser,
+    deliver_summary_failure_alert,
+)
 
 
 @pytest.mark.asyncio
@@ -244,3 +252,90 @@ async def test_send_agent_run_notification_stops_on_missing_creds():
     # Should have stopped after first None — not sent all chunks
     assert result == []
     assert call_count == 1, f"Expected exactly 1 call (stopped after None), got {call_count}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1, Plan 03 — daily_summary teaser + failure alert tests
+# ---------------------------------------------------------------------------
+
+
+def test_build_summary_teaser_basic_format():
+    teaser = build_summary_teaser(
+        "08:00 PT",
+        "Gold inched up 0.4% on Fed dovish hints.",
+        "https://example.com",
+    )
+    assert teaser.startswith("📊")
+    assert "08:00 PT" in teaser
+    assert "Fed dovish hints" in teaser
+    assert "https://example.com" in teaser
+    assert len(teaser) < SUMMARY_TEASER_MAX_CHARS
+
+
+def test_build_summary_teaser_truncates_long_lead():
+    teaser = build_summary_teaser("08:00 PT", "X" * 500, "https://example.com")
+    assert len(teaser) < SUMMARY_TEASER_MAX_CHARS  # WHA-03 enforcement
+
+
+def test_build_summary_failure_alert_basic_format():
+    alert = build_summary_failure_alert(
+        "08:00 PT",
+        ["gold_news", "ontario_law"],
+        "abc12345-6789-0000-aaaa-bbbbccccdddd",
+    )
+    assert alert.startswith("⚠️")
+    assert "FAILED" in alert
+    assert "08:00 PT" in alert
+    assert "gold_news" in alert
+    assert "abc12345" in alert  # truncated id
+    assert len(alert) < SUMMARY_TEASER_MAX_CHARS
+
+
+def test_build_summary_failure_alert_empty_sections_says_all():
+    alert = build_summary_failure_alert("08:00 PT", [], "abc")
+    assert "all" in alert  # fallback when failed_sections is empty
+
+
+@pytest.mark.asyncio
+async def test_deliver_summary_teaser_simulate_off_does_not_call_twilio():
+    with patch("services.whatsapp.send_whatsapp_message",
+               new=AsyncMock()) as send:
+        with patch("services.whatsapp.get_settings") as gs:
+            gs.return_value.whatsapp_delivery_enabled = False
+            gs.return_value.feed_base_url = "https://example.com"
+            result = await deliver_summary_teaser("08:00 PT", "lead text")
+            assert result is None
+            send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_deliver_summary_teaser_enabled_calls_twilio():
+    with patch("services.whatsapp.send_whatsapp_message",
+               new=AsyncMock(return_value="SM_SID_123")) as send:
+        with patch("services.whatsapp.get_settings") as gs:
+            gs.return_value.whatsapp_delivery_enabled = True
+            gs.return_value.feed_base_url = "https://example.com"
+            result = await deliver_summary_teaser("08:00 PT", "lead text")
+            assert result == "SM_SID_123"
+            send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deliver_summary_failure_alert_always_calls_send():
+    """Failure alerts ignore the delivery gate — always attempt to send."""
+    with patch("services.whatsapp.send_whatsapp_message",
+               new=AsyncMock(return_value="SM_OK")) as send:
+        with patch("services.whatsapp.get_settings") as gs:
+            gs.return_value.whatsapp_delivery_enabled = False  # off, but alert still sends
+            await deliver_summary_failure_alert("08:00 PT", ["gold_news"], "abc")
+            send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_deliver_summary_failure_alert_swallows_twilio_exception():
+    """MOD-6: a Twilio outage during failure handling MUST NOT re-raise."""
+    from twilio.base.exceptions import TwilioRestException
+    with patch("services.whatsapp.send_whatsapp_message",
+               new=AsyncMock(side_effect=TwilioRestException(500, "uri", "msg"))):
+        # Should NOT raise — the failure alert path is isolated.
+        await deliver_summary_failure_alert("08:00 PT", ["gold_news"], "abc")
