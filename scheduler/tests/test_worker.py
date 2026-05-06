@@ -36,6 +36,7 @@ from worker import (  # noqa: E402
     build_scheduler,
     reconcile_stale_runs,
     with_advisory_lock,
+    _make_daily_summary_job,
 )
 
 
@@ -560,3 +561,78 @@ async def test_senior_agent_receives_excluded_content_types_from_worker():
 # (post-m49: cadence preserved, but trigger flipped from IntervalTrigger to
 # CronTrigger — see test_threads_is_every_three_hours_cron above.)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Phase 1, Plan 05 — daily_summary registration + OPS-02 + CRIT-1 + CRIT-2 tests
+# ---------------------------------------------------------------------------
+
+
+def test_lock_ids_unique_after_v2_additions():
+    """OPS-02 / CRIT-2 — the assertion at module import would already have
+    fired if violated; this test makes the contract visible and grep-able."""
+    assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)
+
+
+def test_daily_summary_lock_id_is_1017():
+    assert JOB_LOCK_IDS["daily_summary"] == 1017
+
+
+def test_daily_summary_prune_lock_id_is_1018():
+    assert JOB_LOCK_IDS["daily_summary_prune"] == 1018
+
+
+def test_midday_digest_lock_id_still_present_as_dead_code():
+    """Per CONTEXT decision, midday_digest's dict entry is left as dead code."""
+    assert JOB_LOCK_IDS.get("midday_digest") == 1005
+
+
+@pytest.mark.asyncio
+async def test_build_scheduler_registers_daily_summary_and_omits_midday_digest():
+    """CRIT-1 verification — same commit ships daily_summary + removes midday_digest."""
+    engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(engine)
+    try:
+        job_ids = {j.id for j in scheduler.get_jobs()}
+        assert "daily_summary" in job_ids, (
+            "daily_summary cron must be registered (Plan 05)"
+        )
+        assert "midday_digest" not in job_ids, (
+            "midday_digest registration must be removed (CRIT-1 / SUM-06)"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_daily_summary_trigger_fires_at_0800_and_1200_la():
+    """SUM-01 cron expression — hour='8,12', minute=0, timezone=America/Los_Angeles."""
+    engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(engine)
+    try:
+        job = scheduler.get_job("daily_summary")
+        assert job is not None
+        trigger = job.trigger
+        trigger_str = str(trigger)
+        assert "8,12" in trigger_str, f"trigger must fire at 8 and 12: {trigger_str}"
+        # Check timezone on the trigger object directly (APScheduler stores it as .timezone)
+        tz_name = str(getattr(trigger, "timezone", ""))
+        assert "Los_Angeles" in tz_name, f"trigger tz must be Los_Angeles: {tz_name!r}"
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+def test_make_daily_summary_job_is_callable():
+    engine = MagicMock()
+    job = _make_daily_summary_job(engine)
+    assert callable(job)
