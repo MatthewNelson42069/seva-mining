@@ -68,10 +68,10 @@ Teaser pattern (< 400 chars + link to feed). Failure alert is independent and is
 
 Retention, observability, deploy hygiene.
 
-- [ ] **OPS-01**: System fires `daily_summary_prune` cron at 03:00 PT daily (lock id 1018), deletes `daily_summaries` rows where `generated_at < NOW() - INTERVAL '30 days'`
+- [x] **OPS-01**: System fires `daily_summary_prune` cron at 03:00 PT daily (lock id 1018), deletes `daily_summaries` rows where `generated_at < NOW() - INTERVAL '30 days'`
 - [x] **OPS-02**: System asserts at startup that `JOB_LOCK_IDS` values are unique — `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` — preventing future lock-id collisions
-- [ ] **OPS-03**: System exposes daily_summary telemetry via the existing `/agent-runs` API; the structured `notes` JSONB is parseable by existing per-agent UI patterns (post-no4)
-- [ ] **OPS-04**: System retires v1.0 sub-agents via cron de-registration ONLY — no source code is deleted in v2.0; the 6 sub-agent modules + approval-flow components + Phase B post-to-X route remain as dead code (strip later in v2.1+ with confidence)
+- [x] **OPS-03**: System exposes daily_summary telemetry via the existing `/agent-runs` API; the structured `notes` JSONB is parseable by existing per-agent UI patterns (post-no4)
+- [x] **OPS-04**: System retires v1.0 sub-agents via cron de-registration ONLY — no source code is deleted in v2.0; the 6 sub-agent modules + approval-flow components + Phase B post-to-X route remain as dead code (strip later in v2.1+ with confidence)
 
 ## v2.1+ Requirements
 
@@ -139,10 +139,10 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 | WHA-01 | Phase 1 | Complete |
 | WHA-02 | Phase 1 | Complete |
 | WHA-03 | Phase 1 | Complete |
-| OPS-01 | Phase 4 | Pending |
+| OPS-01 | Phase 4 | Complete |
 | OPS-02 | Phase 1 | Complete |
-| OPS-03 | Phase 4 | Pending |
-| OPS-04 | Phase 4 | Pending |
+| OPS-03 | Phase 4 | Complete |
+| OPS-04 | Phase 4 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 31 total
