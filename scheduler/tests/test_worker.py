@@ -81,39 +81,54 @@ async def test_job_exception_does_not_propagate():
 
 
 def test_sub_agents_total_six():
-    """All 6 sub-agents now register through CONTENT_CRON_AGENTS
-    (post-m49: CONTENT_INTERVAL_AGENTS retired; sub_breaking_news + sub_threads
-    moved off IntervalTrigger onto CronTrigger so Railway redeploys cannot
-    trigger spurious runs).
+    """Phase 4 Task 4 (user-approved): CONTENT_CRON_AGENTS emptied; v1.0 sub-agent
+    crons deregistered. This test is updated to reflect the new empty state.
+
+    Historical: post-m49, all 6 sub-agents registered through CONTENT_CRON_AGENTS
+    (sub_breaking_news + sub_threads moved from IntervalTrigger to CronTrigger).
+    Phase 4 Task 4 deregisters them all; source files remain on disk (dead-code-only).
     """
-    assert len(CONTENT_CRON_AGENTS) == 6
+    assert len(CONTENT_CRON_AGENTS) == 0, (
+        f"CONTENT_CRON_AGENTS must be empty after Phase 4 Task 4 deregistration, "
+        f"got {len(CONTENT_CRON_AGENTS)}"
+    )
 
 
 def test_sub_agent_lock_ids():
-    """Lock IDs cover active sub_* job IDs (sub_long_form/1012 retired per quick-260423-k8n;
-    post-m49 all 6 sub-agents register through CONTENT_CRON_AGENTS).
+    """Phase 4 Task 4: CONTENT_CRON_AGENTS is empty; JOB_LOCK_IDS still contains
+    sub_* entries as dead code (mirrors midday_digest=1005 pattern from Phase 1).
+
+    Lock IDs 1010-1016 remain in JOB_LOCK_IDS as dead code — never reuse them.
     """
-    sub_entries = {job_id: lock_id for job_id, _, _, lock_id, *_ in CONTENT_CRON_AGENTS}
-    assert sub_entries == {
-        "sub_breaking_news": 1010,
-        "sub_threads": 1011,
-        "sub_quotes": 1013,
-        "sub_infographics": 1014,
-        "sub_gold_media": 1015,
-        "sub_gold_history": 1016,
-    }
-    # Also assert JOB_LOCK_IDS matches.
-    for job_id, lock_id in sub_entries.items():
-        assert JOB_LOCK_IDS[job_id] == lock_id
+    # CONTENT_CRON_AGENTS is empty — no active sub-agent entries to iterate
+    assert len(CONTENT_CRON_AGENTS) == 0
+
+    # JOB_LOCK_IDS dead-code entries must still be present (preserved per CONTEXT)
+    for sub_id in ("sub_breaking_news", "sub_threads", "sub_quotes",
+                   "sub_infographics", "sub_gold_media", "sub_gold_history"):
+        assert sub_id in JOB_LOCK_IDS, (
+            f"JOB_LOCK_IDS['{sub_id}'] must be preserved as dead code"
+        )
+
+    assert JOB_LOCK_IDS["sub_breaking_news"] == 1010
+    assert JOB_LOCK_IDS["sub_threads"] == 1011
+    assert JOB_LOCK_IDS["sub_quotes"] == 1013
+    assert JOB_LOCK_IDS["sub_infographics"] == 1014
+    assert JOB_LOCK_IDS["sub_gold_media"] == 1015
+    assert JOB_LOCK_IDS["sub_gold_history"] == 1016
 
 
 def test_quotes_is_daily_cron():
-    """sub_quotes is registered as a cron sub-agent at 12:00 America/Los_Angeles (dict-shape post-vxg)."""
-    quotes_entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_quotes")
-    assert quotes_entry[0] == "sub_quotes"
-    assert quotes_entry[2] == "Quotes"
-    assert quotes_entry[3] == 1013
-    assert quotes_entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
+    """Phase 4 Task 4: sub_quotes removed from CONTENT_CRON_AGENTS (deregistered).
+    Its JOB_LOCK_IDS entry (1013) is preserved as dead code.
+    Historical: sub_quotes was registered at 12:00 America/Los_Angeles (dict-shape post-vxg).
+    """
+    # sub_quotes no longer in CONTENT_CRON_AGENTS — confirm absence
+    assert all(t[0] != "sub_quotes" for t in CONTENT_CRON_AGENTS), (
+        "sub_quotes must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
+    )
+    # JOB_LOCK_IDS entry preserved as dead code
+    assert JOB_LOCK_IDS.get("sub_quotes") == 1013
 
 
 def test_retired_crons_absent_from_job_lock_ids():
@@ -144,13 +159,14 @@ def test_retired_crons_absent_from_job_lock_ids():
 
 
 @pytest.mark.asyncio
-async def test_scheduler_registers_8_jobs():
-    """build_scheduler() registers exactly 8 jobs with the expected IDs.
+async def test_scheduler_registers_2_jobs_after_v1_deregistration():
+    """build_scheduler() registers exactly 2 jobs after Phase 4 v1.0 deregistration.
 
     Phase 1 Plan 05 (CRIT-1 / SUM-06): midday_digest registration REMOVED;
     daily_summary registration ADDED.
-    Phase 4 Plan 01: daily_summary_prune ADDED. Now 8 jobs total.
-    (quick-260423-k8n: sub_long_form removed; quick-260424-i8b: morning_digest→midday_digest)
+    Phase 4 Plan 01 Task 1: daily_summary_prune ADDED.
+    Phase 4 Plan 01 Task 4: 6 v1.0 sub-agent crons DEREGISTERED (user-approved).
+    Final state: 2 jobs — daily_summary + daily_summary_prune.
     """
     mock_engine = MagicMock()
     with patch(
@@ -166,16 +182,10 @@ async def test_scheduler_registers_8_jobs():
             [
                 "daily_summary",        # Phase 1 Plan 05 replacement for midday_digest
                 "daily_summary_prune",  # Phase 4 Plan 01 (OPS-01)
-                "sub_breaking_news",
-                "sub_threads",
-                "sub_quotes",
-                "sub_infographics",
-                "sub_gold_media",
-                "sub_gold_history",
             ]
         )
         assert ids == expected, f"expected {expected}, got {ids}"
-        assert len(jobs) == 8
+        assert len(jobs) == 2
         assert "midday_digest" not in ids, "midday_digest must be removed (CRIT-1)"
     finally:
         if scheduler.running:
@@ -253,80 +263,76 @@ def test_read_schedule_config_has_no_retired_keys():
 
 
 def test_breaking_news_is_hourly_cron():
-    """Post-m49: sub_breaking_news fires at HH:00 UTC every hour via CronTrigger.
-    Replaces the pre-m49 IntervalTrigger(hours=1, start_date=now+10s) shape
-    that caused Railway-restart-induced extra runs.
+    """Phase 4 Task 4: sub_breaking_news removed from CONTENT_CRON_AGENTS (deregistered).
+    JOB_LOCK_IDS entry (1010) preserved as dead code.
+    Historical: post-m49, sub_breaking_news fired at HH:00 UTC via CronTrigger.
     """
-    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_breaking_news")
-    assert entry[3] == 1010
-    assert entry[4] == {"minute": 0}, (
-        f"Expected sub_breaking_news cron_kwargs={{'minute': 0}}, got {entry[4]}"
+    assert all(t[0] != "sub_breaking_news" for t in CONTENT_CRON_AGENTS), (
+        "sub_breaking_news must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
     )
+    assert JOB_LOCK_IDS.get("sub_breaking_news") == 1010
 
 
 def test_threads_is_every_three_hours_cron():
-    """Post-m49: sub_threads fires every 3h at HH:17 UTC via CronTrigger
-    (00:17, 03:17, 06:17, 09:17, 12:17, 15:17, 18:17, 21:17). The :17 minute
-    offset preserves the staggering vs sub_breaking_news's :00 fire-time
-    that the pre-m49 IntervalTrigger offset=17 expressed.
+    """Phase 4 Task 4: sub_threads removed from CONTENT_CRON_AGENTS (deregistered).
+    JOB_LOCK_IDS entry (1011) preserved as dead code.
+    Historical: post-m49/j5i, sub_threads fired every 3h at HH:17 UTC via CronTrigger.
     """
-    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_threads")
-    assert entry[3] == 1011
-    assert entry[4] == {"hour": "*/3", "minute": 17}, (
-        f"Expected sub_threads cron_kwargs={{'hour': '*/3', 'minute': 17}}, got {entry[4]}"
+    assert all(t[0] != "sub_threads" for t in CONTENT_CRON_AGENTS), (
+        "sub_threads must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
     )
+    assert JOB_LOCK_IDS.get("sub_threads") == 1011
 
 
-def test_cron_agents_count_six():
-    """Post-m49: all 6 sub-agents register through CONTENT_CRON_AGENTS."""
-    assert len(CONTENT_CRON_AGENTS) == 6
-    ids = [t[0] for t in CONTENT_CRON_AGENTS]
-    assert set(ids) == {
-        "sub_breaking_news",
-        "sub_threads",
-        "sub_quotes",
-        "sub_infographics",
-        "sub_gold_media",
-        "sub_gold_history",
-    }
+def test_cron_agents_count_zero_after_v1_deregistration():
+    """Phase 4 Task 4: CONTENT_CRON_AGENTS emptied — all 6 v1.0 sub-agent crons deregistered.
+
+    Historical (pre-Task-4): 6 sub-agents registered through CONTENT_CRON_AGENTS post-m49.
+    Post-Task-4: the list is empty; the registration loop in build_scheduler is a no-op.
+    Source files (agents/content/*.py) remain on disk as dead code.
+    """
+    assert len(CONTENT_CRON_AGENTS) == 0
+    assert CONTENT_CRON_AGENTS == []
 
 
 def test_cron_agents_use_dict_shape():
-    """5th tuple element is a CronTrigger kwargs dict for every agent."""
+    """CONTENT_CRON_AGENTS is empty after Phase 4 Task 4; the dict-shape invariant
+    is vacuously true (no entries to iterate). Retained for grep-ability.
+
+    Historical: each entry had (job_id, run_fn, name, lock_id, cron_kwargs: dict).
+    All 6 v1.0 entries removed in Phase 4 Task 4 deregistration.
+    """
+    # Loop is a no-op — preserved so the invariant is visible if re-populated
     for entry in CONTENT_CRON_AGENTS:
         assert len(entry) == 5
         assert isinstance(entry[4], dict)
-        # The 4 noon-PT cron agents all fire at hour=12, minute=0, PT timezone.
-        # The 2 hourly/3-hourly agents (m49) use a different shape — only
-        # assert the noon-PT shape on the agents that actually use it.
-        if entry[0] in {"sub_quotes", "sub_infographics", "sub_gold_media", "sub_gold_history"}:
-            assert entry[4]["hour"] == 12
-            assert entry[4]["minute"] == 0
-            assert entry[4]["timezone"] == "America/Los_Angeles"
 
 
 def test_gold_history_is_every_other_day():
-    """sub_gold_history uses day='*/2' so it fires every other day at noon PT."""
-    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_gold_history")
-    assert entry[3] == 1016
-    assert entry[4] == {
-        "day": "*/2",
-        "hour": 12,
-        "minute": 0,
-        "timezone": "America/Los_Angeles",
-    }
+    """Phase 4 Task 4: sub_gold_history removed from CONTENT_CRON_AGENTS (deregistered).
+    JOB_LOCK_IDS entry (1016) preserved as dead code.
+    Historical: sub_gold_history used day='*/2' at noon PT.
+    """
+    assert all(t[0] != "sub_gold_history" for t in CONTENT_CRON_AGENTS), (
+        "sub_gold_history must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
+    )
+    assert JOB_LOCK_IDS.get("sub_gold_history") == 1016
 
 
 def test_infographics_is_daily_cron():
-    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_infographics")
-    assert entry[3] == 1014
-    assert entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
+    """Phase 4 Task 4: sub_infographics removed from CONTENT_CRON_AGENTS (deregistered)."""
+    assert all(t[0] != "sub_infographics" for t in CONTENT_CRON_AGENTS), (
+        "sub_infographics must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
+    )
+    assert JOB_LOCK_IDS.get("sub_infographics") == 1014
 
 
 def test_gold_media_is_daily_cron():
-    entry = next(t for t in CONTENT_CRON_AGENTS if t[0] == "sub_gold_media")
-    assert entry[3] == 1015
-    assert entry[4] == {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}
+    """Phase 4 Task 4: sub_gold_media removed from CONTENT_CRON_AGENTS (deregistered)."""
+    assert all(t[0] != "sub_gold_media" for t in CONTENT_CRON_AGENTS), (
+        "sub_gold_media must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
+    )
+    assert JOB_LOCK_IDS.get("sub_gold_media") == 1015
 
 
 # ---------------------------------------------------------------------------
@@ -684,6 +690,64 @@ def test_make_daily_summary_prune_job_is_callable():
     engine = MagicMock()
     job = _make_daily_summary_prune_job(engine)
     assert callable(job)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4, Plan 01 — Task 4: deregister 6 v1.0 sub-agent crons
+# ---------------------------------------------------------------------------
+
+
+def test_content_cron_agents_is_empty_after_v1_deregistration():
+    """CONTENT_CRON_AGENTS must be empty after v1.0 sub-agent cron deregistration.
+
+    User-approved expansion of Phase 4 scope (2026-04-27). The 6 v1.0 sub-agent
+    SOURCE FILES remain on disk (dead-code-only retirement). The registration loop
+    in build_scheduler is a no-op when CONTENT_CRON_AGENTS == [].
+    """
+    assert CONTENT_CRON_AGENTS == [], (
+        f"CONTENT_CRON_AGENTS must be empty after v1.0 deregistration, "
+        f"got {len(CONTENT_CRON_AGENTS)} entries: {[t[0] for t in CONTENT_CRON_AGENTS]}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_scheduler_omits_v1_sub_agent_crons():
+    """build_scheduler must NOT register any sub_* jobs after v1.0 deregistration.
+
+    The scheduler after Phase 4 Task 4 contains exactly:
+      daily_summary, daily_summary_prune
+    — no sub_breaking_news, sub_threads, sub_quotes, sub_infographics,
+    sub_gold_media, or sub_gold_history.
+    """
+    V1_SUB_AGENT_IDS = {
+        "sub_breaking_news",
+        "sub_threads",
+        "sub_quotes",
+        "sub_infographics",
+        "sub_gold_media",
+        "sub_gold_history",
+    }
+    engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(engine)
+    try:
+        job_ids = {j.id for j in scheduler.get_jobs()}
+        for sub_id in V1_SUB_AGENT_IDS:
+            assert sub_id not in job_ids, (
+                f"v1.0 sub-agent job '{sub_id}' must NOT be registered after deregistration"
+            )
+        # Verify the v2.0 jobs are still present
+        assert "daily_summary" in job_ids, "daily_summary must remain registered"
+        assert "daily_summary_prune" in job_ids, "daily_summary_prune must remain registered"
+        assert len(job_ids) == 2, (
+            f"Scheduler should have exactly 2 jobs after v1.0 deregistration, got {len(job_ids)}: {job_ids}"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
 
 
 @pytest.mark.asyncio

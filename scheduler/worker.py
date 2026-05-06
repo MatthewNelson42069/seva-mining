@@ -60,14 +60,9 @@ from database import (
 )  # single shared engine — avoids duplicate connection pools
 from models.agent_run import AgentRun
 from models.config import Config
-from agents.content import (
-    breaking_news,
-    threads,
-    quotes,
-    infographics,
-    gold_media,
-    gold_history,
-)
+# agents.content.* imports removed in Phase 4 Task 4 — CONTENT_CRON_AGENTS emptied.
+# Source files (agents/content/breaking_news.py etc.) remain on disk as dead code.
+# Strip v2.1+ once 30-day post-deploy stability is confirmed.
 from agents.senior_agent import SeniorAgent, seed_senior_config
 
 logging.basicConfig(
@@ -130,71 +125,20 @@ assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS), (
 # is unpacked directly into `CronTrigger(**cron_kwargs)` at registration time
 # so heterogeneous patterns coexist without extra tuple columns.
 #
-# Why ALL agents are on CronTrigger (post-m49):
-# IntervalTrigger fires at start_date and every interval_hours thereafter. We
-# previously set ``start_date = scheduler_start_time + offset + 10s``, so on
-# every Railway redeploy sub_breaking_news fired ~10s after process start —
-# producing an "every few minutes" cadence visible to the user during
-# deploy churn. CronTrigger's fire times are clock-aligned (e.g. HH:00 UTC),
-# independent of when the process boots, so restarts can never trigger an
-# extra run.
-#
-# Cadences:
-# - sub_breaking_news: every hour at :00 UTC (kqa: 2h→1h; m49: interval→cron)
-# - sub_threads: every 3h at :17 UTC (j5i: 4h→3h; m49: interval→cron;
-#   ":17 minute offset" preserves the staggering vs sub_breaking_news that
-#   the pre-m49 IntervalTrigger offset=17 expressed)
-# - sub_quotes / sub_infographics / sub_gold_media: daily 12:00 PT
-# - sub_gold_history: every other day (day='*/2') at 12:00 PT
-#
-# The cron sub-agents fire at 12:00 America/Los_Angeles — post US morning news,
-# pre market close. Gold History fires every other day because the used-topics
-# guard means most daily ticks no-op; halving cadence halves the Claude
-# picker spend.
-CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, dict]] = [
-    (
-        "sub_breaking_news",
-        breaking_news.run_draft_cycle,
-        "Breaking News",
-        1010,
-        {"minute": 0},  # every hour at HH:00 UTC
-    ),
-    (
-        "sub_threads",
-        threads.run_draft_cycle,
-        "Threads",
-        1011,
-        {"hour": "*/3", "minute": 17},  # every 3h at HH:17 UTC starting hour 0
-    ),
-    (
-        "sub_quotes",
-        quotes.run_draft_cycle,
-        "Quotes",
-        1013,
-        {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
-    ),
-    (
-        "sub_infographics",
-        infographics.run_draft_cycle,
-        "Infographics",
-        1014,
-        {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
-    ),
-    (
-        "sub_gold_media",
-        gold_media.run_draft_cycle,
-        "Gold Media",
-        1015,
-        {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
-    ),
-    (
-        "sub_gold_history",
-        gold_history.run_draft_cycle,
-        "Gold History",
-        1016,
-        {"day": "*/2", "hour": 12, "minute": 0, "timezone": "America/Los_Angeles"},
-    ),
-]
+# Phase 4, Plan 01, Task 4 — user-approved deregistration (2026-04-27):
+# All 6 v1.0 sub-agent crons are DEREGISTERED by setting this list to [].
+# The registration loop in build_scheduler() is a no-op when the list is empty.
+# SOURCE FILES are preserved on disk (dead-code-only retirement — strip in v2.1+):
+#   - scheduler/agents/content/breaking_news.py   (sub_breaking_news, lock 1010)
+#   - scheduler/agents/content/threads.py         (sub_threads, lock 1011)
+#   - scheduler/agents/content/quotes.py          (sub_quotes, lock 1013)
+#   - scheduler/agents/content/infographics.py    (sub_infographics, lock 1014)
+#   - scheduler/agents/content/gold_media.py      (sub_gold_media, lock 1015)
+#   - scheduler/agents/content/gold_history.py    (sub_gold_history, lock 1016)
+# JOB_LOCK_IDS entries (1010-1016) preserved as dead code — mirrors how
+# midday_digest=1005 was preserved in Phase 1. NEVER reuse these IDs.
+# _make_sub_agent_job factory preserved as dead code (no callers when list empty).
+CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, dict]] = []
 
 
 async def with_advisory_lock(
