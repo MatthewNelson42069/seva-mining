@@ -5,6 +5,7 @@ Includes:
 - SummaryCardResponse: API response shape (raw_sources_jsonb omitted)
 - SummaryFeedResponse: list wrapper for GET /summaries
 """
+import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -71,7 +72,7 @@ class SummaryCardResponse(BaseModel):
     """
     model_config = ConfigDict(from_attributes=True)
 
-    id: str
+    id: uuid.UUID
     generated_at: datetime
     period_label: str
     gold_news_md: str | None
