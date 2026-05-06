@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     fred_api_key: Optional[str] = None
     metalpriceapi_api_key: Optional[str] = None
 
+    # v2.0 daily summary delivery (Phase 1, Plan 03)
+    # Simulate-mode gate: when false, log the teaser but do NOT call Twilio.
+    # Mirrors the X_POSTING_ENABLED simulate-mode pattern (quick-260424-l0d).
+    # Default false so first deploys are safe — flip to true after WhatsApp
+    # sandbox session is verified active.
+    whatsapp_delivery_enabled: bool = False
+
+    # Feed base URL embedded in WhatsApp teasers. Defaults to the production
+    # Vercel URL so dev environments without FEED_BASE_URL set still produce
+    # working clickable links to the user's feed.
+    feed_base_url: str = "https://seva-mining-smm.vercel.app"
+
 
 
 @lru_cache
