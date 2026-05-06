@@ -11,20 +11,20 @@ Each requirement maps to exactly one phase. Categories follow the research SUMMA
 
 Core scheduled-job behavior — the cron, the lock, the agent module that orchestrates the three section builders, and the row-write contract.
 
-- [ ] **SUM-01**: System fires `daily_summary` cron at 08:00 PT and 12:00 PT every day via APScheduler `CronTrigger(hour="8,12", minute=0, timezone="America/Los_Angeles")`
-- [ ] **SUM-02**: System holds advisory lock 1017 during `daily_summary` execution; concurrent fires from a flappy Railway redeploy fail-fast with a structured warning log instead of producing duplicate rows
-- [ ] **SUM-03**: System idempotency-guards each fire with a DB check — if any `daily_summaries` row exists for the same fire-window with `status` IN (`'running'`, `'completed'`), the second fire skips and logs `idempotency_skip` (prevents duplicate WhatsApp messages from misfire churn)
-- [ ] **SUM-04**: System writes one `agent_runs` row per `daily_summary` fire with structured `notes` telemetry: `{candidates_gold, candidates_law, candidates_stats, sections_completed, sections_failed, whatsapp_sent}`
+- [x] **SUM-01**: System fires `daily_summary` cron at 08:00 PT and 12:00 PT every day via APScheduler `CronTrigger(hour="8,12", minute=0, timezone="America/Los_Angeles")`
+- [x] **SUM-02**: System holds advisory lock 1017 during `daily_summary` execution; concurrent fires from a flappy Railway redeploy fail-fast with a structured warning log instead of producing duplicate rows
+- [x] **SUM-03**: System idempotency-guards each fire with a DB check — if any `daily_summaries` row exists for the same fire-window with `status` IN (`'running'`, `'completed'`), the second fire skips and logs `idempotency_skip` (prevents duplicate WhatsApp messages from misfire churn)
+- [x] **SUM-04**: System writes one `agent_runs` row per `daily_summary` fire with structured `notes` telemetry: `{candidates_gold, candidates_law, candidates_stats, sections_completed, sections_failed, whatsapp_sent}`
 - [x] **SUM-05**: System sets `daily_summaries.status` to `completed` when all 3 sections succeed, `partial` when 1-2 sections fail (the others render their empty states), `failed` only when fetch crashes before any section can be assembled
-- [ ] **SUM-06**: System retires the legacy `midday_digest` cron — its `scheduler.add_job(...)` registration is removed from `build_scheduler()` in the same commit that registers `daily_summary` (factory + lock-id-entry remain as dead code)
+- [x] **SUM-06**: System retires the legacy `midday_digest` cron — its `scheduler.add_job(...)` registration is removed from `build_scheduler()` in the same commit that registers `daily_summary` (factory + lock-id-entry remain as dead code)
 
 ### Gold News Section (GOLD)
 
 The first card section. Reuses `fetch_stories()` with no refactor. The most immediately shippable section.
 
-- [ ] **GOLD-01**: System ingests gold-news candidates via the existing `fetch_stories()` (post-m51 coalesce + parallel scoring) and selects the top 5 stories with composite `score >= 6.0`
-- [ ] **GOLD-02**: System produces a markdown-formatted Gold News section consisting of a 1-sentence lead ("Why it matters" framing) followed by 3-5 bullet points; each bullet ≤ 25 words, includes the source name in parentheses
-- [ ] **GOLD-03**: System renders the empty-state line "No major moves in gold today — prices ranging in [low]–[high]." when no stories clear the score floor; pulls the price range from existing market-snapshot data when available
+- [x] **GOLD-01**: System ingests gold-news candidates via the existing `fetch_stories()` (post-m51 coalesce + parallel scoring) and selects the top 5 stories with composite `score >= 6.0`
+- [x] **GOLD-02**: System produces a markdown-formatted Gold News section consisting of a 1-sentence lead ("Why it matters" framing) followed by 3-5 bullet points; each bullet ≤ 25 words, includes the source name in parentheses
+- [x] **GOLD-03**: System renders the empty-state line "No major moves in gold today — prices ranging in [low]–[high]." when no stories clear the score floor; pulls the price range from existing market-snapshot data when available
 
 ### Ontario Law Section (LAW)
 
@@ -69,7 +69,7 @@ Teaser pattern (< 400 chars + link to feed). Failure alert is independent and is
 Retention, observability, deploy hygiene.
 
 - [ ] **OPS-01**: System fires `daily_summary_prune` cron at 03:00 PT daily (lock id 1018), deletes `daily_summaries` rows where `generated_at < NOW() - INTERVAL '30 days'`
-- [ ] **OPS-02**: System asserts at startup that `JOB_LOCK_IDS` values are unique — `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` — preventing future lock-id collisions
+- [x] **OPS-02**: System asserts at startup that `JOB_LOCK_IDS` values are unique — `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` — preventing future lock-id collisions
 - [ ] **OPS-03**: System exposes daily_summary telemetry via the existing `/agent-runs` API; the structured `notes` JSONB is parseable by existing per-agent UI patterns (post-no4)
 - [ ] **OPS-04**: System retires v1.0 sub-agents via cron de-registration ONLY — no source code is deleted in v2.0; the 6 sub-agent modules + approval-flow components + Phase B post-to-X route remain as dead code (strip later in v2.1+ with confidence)
 
@@ -112,15 +112,15 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SUM-01 | Phase 1 | Pending |
-| SUM-02 | Phase 1 | Pending |
-| SUM-03 | Phase 1 | Pending |
-| SUM-04 | Phase 1 | Pending |
+| SUM-01 | Phase 1 | Complete |
+| SUM-02 | Phase 1 | Complete |
+| SUM-03 | Phase 1 | Complete |
+| SUM-04 | Phase 1 | Complete |
 | SUM-05 | Phase 1 | Complete |
-| SUM-06 | Phase 1 | Pending |
-| GOLD-01 | Phase 1 | Pending |
-| GOLD-02 | Phase 1 | Pending |
-| GOLD-03 | Phase 1 | Pending |
+| SUM-06 | Phase 1 | Complete |
+| GOLD-01 | Phase 1 | Complete |
+| GOLD-02 | Phase 1 | Complete |
+| GOLD-03 | Phase 1 | Complete |
 | LAW-01 | Phase 2 | Pending |
 | LAW-02 | Phase 2 | Pending |
 | LAW-03 | Phase 2 | Pending |
@@ -140,7 +140,7 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 | WHA-02 | Phase 1 | Complete |
 | WHA-03 | Phase 1 | Complete |
 | OPS-01 | Phase 4 | Pending |
-| OPS-02 | Phase 1 | Pending |
+| OPS-02 | Phase 1 | Complete |
 | OPS-03 | Phase 4 | Pending |
 | OPS-04 | Phase 4 | Pending |
 
