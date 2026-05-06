@@ -39,11 +39,11 @@ The hardest pipeline. Three ingestion sources, a Haiku filter with explicit reje
 
 Monthly cadence (StatCan Table 16-10-0019-01, ~19th-21st of M+2). Empty state is the default.
 
-- [ ] **STAT-01**: System checks StatCan "The Daily" RSS each fire for Table 16-10-0019-01 (Monthly Mineral Production) release announcements; if found, triggers a WDS API pull
-- [ ] **STAT-02**: System pulls the Ontario gold production figure from StatCan WDS API on confirmed release days only (not on every fire), using the resolved Ontario+Gold vector ID
-- [ ] **STAT-03**: System stores the latest production figure + `snapshot_date` (`YYYY-MM`) in `daily_summaries.raw_sources_jsonb.ontario_stats.{last_known_figure, snapshot_date}` so the empty-state copy can render without re-querying
-- [ ] **STAT-04**: System produces a markdown Ontario Stats section showing the new production figure with comparison vs prior period when fresh StatCan data is available
-- [ ] **STAT-05**: System renders the empty-state copy "No new production statistics released today. Next Monthly Mineral Production Survey release expected around {next_release_estimate}. Last data: {YYYY-MM} — Ontario gold production: {last_known_figure} oz." on the ~30/31 days/month when no fresh data exists; distinguishes `no_new_data` (expected) from `error` (broken ingestion) with distinct visual treatment
+- [x] **STAT-01**: System checks StatCan "The Daily" RSS each fire for Table 16-10-0019-01 (Monthly Mineral Production) release announcements; if found, triggers a WDS API pull
+- [x] **STAT-02**: System pulls the Ontario gold production figure from StatCan WDS API on confirmed release days only (not on every fire), using the resolved Ontario+Gold vector ID
+- [x] **STAT-03**: System stores the latest production figure + `snapshot_date` (`YYYY-MM`) in `daily_summaries.raw_sources_jsonb.ontario_stats.{last_known_figure, snapshot_date}` so the empty-state copy can render without re-querying
+- [x] **STAT-04**: System produces a markdown Ontario Stats section showing the new production figure with comparison vs prior period when fresh StatCan data is available
+- [x] **STAT-05**: System renders the empty-state copy "No new production statistics released today. Next Monthly Mineral Production Survey release expected around {next_release_estimate}. Last data: {YYYY-MM} — Ontario gold production: {last_known_figure} oz." on the ~30/31 days/month when no fresh data exists; distinguishes `no_new_data` (expected) from `error` (broken ingestion) with distinct visual treatment
 
 ### Web Feed UI (FEED)
 
@@ -125,11 +125,11 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 | LAW-02 | Phase 2 | Complete |
 | LAW-03 | Phase 2 | Complete |
 | LAW-04 | Phase 2 | Complete |
-| STAT-01 | Phase 3 | Pending |
-| STAT-02 | Phase 3 | Pending |
-| STAT-03 | Phase 3 | Pending |
-| STAT-04 | Phase 3 | Pending |
-| STAT-05 | Phase 3 | Pending |
+| STAT-01 | Phase 3 | Complete |
+| STAT-02 | Phase 3 | Complete |
+| STAT-03 | Phase 3 | Complete |
+| STAT-04 | Phase 3 | Complete |
+| STAT-05 | Phase 3 | Complete |
 | FEED-01 | Phase 1 | Complete |
 | FEED-02 | Phase 1 | Complete |
 | FEED-03 | Phase 1 | Complete |
