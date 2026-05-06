@@ -49,10 +49,10 @@ Monthly cadence (StatCan Table 16-10-0019-01, ~19th-21st of M+2). Empty state is
 
 Replaces `/queue`. Reads from `GET /summaries`. Markdown-safe via react-markdown + rehype-sanitize.
 
-- [ ] **FEED-01**: User can read the latest 30 days of summary cards at `/` (chronological, newest first; max 60 rows server-side)
-- [ ] **FEED-02**: System renders each summary card with title "Summary as of {time PT}" (e.g., "Summary as of 08:00 PT — April 27"), three labeled `SectionBlock` components (Gold News / Ontario Law / Ontario Stats), and a status badge (`completed` / `partial` / `failed`)
-- [ ] **FEED-03**: System renders markdown content via `react-markdown ^10.1.0` + `rehype-sanitize ^6.0.0` (no `dangerouslySetInnerHTML`; sanitizes HTML at the AST level)
-- [ ] **FEED-04**: System redirects the deprecated `/queue` route (and `/agents/:slug` routes) to `/` via a `<Navigate to="/" replace />` element for bookmark grace
+- [x] **FEED-01**: User can read the latest 30 days of summary cards at `/` (chronological, newest first; max 60 rows server-side)
+- [x] **FEED-02**: System renders each summary card with title "Summary as of {time PT}" (e.g., "Summary as of 08:00 PT — April 27"), three labeled `SectionBlock` components (Gold News / Ontario Law / Ontario Stats), and a status badge (`completed` / `partial` / `failed`)
+- [x] **FEED-03**: System renders markdown content via `react-markdown ^10.1.0` + `rehype-sanitize ^6.0.0` (no `dangerouslySetInnerHTML`; sanitizes HTML at the AST level)
+- [x] **FEED-04**: System redirects the deprecated `/queue` route (and `/agents/:slug` routes) to `/` via a `<Navigate to="/" replace />` element for bookmark grace
 - [x] **FEED-05**: User session is gated by existing password auth — `GET /summaries` requires `Depends(get_current_user)` (single-user constraint preserved)
 - [x] **FEED-06**: System auto-refetches the feed every 5 minutes via TanStack Query `refetchInterval: 5 * 60 * 1000` so a freshly-fired summary appears without a manual refresh
 
@@ -130,10 +130,10 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 | STAT-03 | Phase 3 | Pending |
 | STAT-04 | Phase 3 | Pending |
 | STAT-05 | Phase 3 | Pending |
-| FEED-01 | Phase 1 | Pending |
-| FEED-02 | Phase 1 | Pending |
-| FEED-03 | Phase 1 | Pending |
-| FEED-04 | Phase 1 | Pending |
+| FEED-01 | Phase 1 | Complete |
+| FEED-02 | Phase 1 | Complete |
+| FEED-03 | Phase 1 | Complete |
+| FEED-04 | Phase 1 | Complete |
 | FEED-05 | Phase 1 | Complete |
 | FEED-06 | Phase 1 | Complete |
 | WHA-01 | Phase 1 | Complete |

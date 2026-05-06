@@ -18,7 +18,7 @@ or read on WhatsApp.
 - Integer phases (1, 2, 3, 4): Planned milestone work (reset for v2.0)
 - Decimal phases: Urgent insertions via `/gsd:insert-phase` only
 
-- [ ] **Phase 1: Gold News Card + Web Feed** - Full-stack shippable slice: DB migration, dual models, GET /summaries, daily_summary cron with real gold-news section + Ontario stubs, WhatsApp teaser + failure alert, web feed page, midday_digest retirement
+- [x] **Phase 1: Gold News Card + Web Feed** - Full-stack shippable slice: DB migration, dual models, GET /summaries, daily_summary cron with real gold-news section + Ontario stubs, WhatsApp teaser + failure alert, web feed page, midday_digest retirement (completed 2026-05-06)
 - [ ] **Phase 2: Ontario Law Ingestion** - Real ontario_law.py module (3 concurrent sources), Haiku relevance filter with explicit REJECT examples, _build_ontario_law_section() wired, synthetic test, last_known_law empty-state continuity
 - [ ] **Phase 3: Ontario Stats Ingestion** - Real ontario_stats.py module (StatCan The Daily RSS trigger + WDS API pull on release days), monthly cadence, snapshot persistence, two distinct empty states (no_new_data vs error)
 - [ ] **Phase 4: Prune Cron + Operations Hardening** - daily_summary_prune cron at 03:00 PT (lock 1018), /agent-runs telemetry verification, retire-via-deregistration audit
@@ -111,7 +111,7 @@ step, not a build step, and is cheapest to do once the full v2.0 feature set is 
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Gold News Card + Web Feed | 5/6 | In Progress|  |
+| 1. Gold News Card + Web Feed | 6/6 | Complete   | 2026-05-06 |
 | 2. Ontario Law Ingestion | 0/TBD | Not started | - |
 | 3. Ontario Stats Ingestion | 0/TBD | Not started | - |
 | 4. Prune Cron + Operations Hardening | 0/TBD | Not started | - |
