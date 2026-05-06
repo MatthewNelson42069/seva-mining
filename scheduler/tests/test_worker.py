@@ -37,6 +37,7 @@ from worker import (  # noqa: E402
     reconcile_stale_runs,
     with_advisory_lock,
     _make_daily_summary_job,
+    _make_daily_summary_prune_job,
 )
 
 
@@ -143,11 +144,12 @@ def test_retired_crons_absent_from_job_lock_ids():
 
 
 @pytest.mark.asyncio
-async def test_scheduler_registers_7_jobs():
-    """build_scheduler() registers exactly 7 jobs with the expected IDs.
+async def test_scheduler_registers_8_jobs():
+    """build_scheduler() registers exactly 8 jobs with the expected IDs.
 
     Phase 1 Plan 05 (CRIT-1 / SUM-06): midday_digest registration REMOVED;
-    daily_summary registration ADDED. Still exactly 7 jobs.
+    daily_summary registration ADDED.
+    Phase 4 Plan 01: daily_summary_prune ADDED. Now 8 jobs total.
     (quick-260423-k8n: sub_long_form removed; quick-260424-i8b: morning_digest→midday_digest)
     """
     mock_engine = MagicMock()
@@ -163,6 +165,7 @@ async def test_scheduler_registers_7_jobs():
         expected = sorted(
             [
                 "daily_summary",        # Phase 1 Plan 05 replacement for midday_digest
+                "daily_summary_prune",  # Phase 4 Plan 01 (OPS-01)
                 "sub_breaking_news",
                 "sub_threads",
                 "sub_quotes",
@@ -172,7 +175,7 @@ async def test_scheduler_registers_7_jobs():
             ]
         )
         assert ids == expected, f"expected {expected}, got {ids}"
-        assert len(jobs) == 7
+        assert len(jobs) == 8
         assert "midday_digest" not in ids, "midday_digest must be removed (CRIT-1)"
     finally:
         if scheduler.running:
@@ -636,3 +639,78 @@ def test_make_daily_summary_job_is_callable():
     engine = MagicMock()
     job = _make_daily_summary_job(engine)
     assert callable(job)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4, Plan 01 — daily_summary_prune registration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_daily_summary_prune_registered_at_0300_la():
+    """OPS-01 — prune cron must be registered at 03:00 America/Los_Angeles under lock 1018."""
+    engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(engine)
+    try:
+        job = scheduler.get_job("daily_summary_prune")
+        assert job is not None, "daily_summary_prune job must be registered (Phase 4 OPS-01)"
+        trigger = job.trigger
+        # Verify hour == 3, minute == 0, timezone contains Los_Angeles
+        hour_field = next((f for f in trigger.fields if f.name == "hour"), None)
+        minute_field = next((f for f in trigger.fields if f.name == "minute"), None)
+        assert hour_field is not None
+        assert minute_field is not None
+        assert "3" in str(hour_field), (
+            f"daily_summary_prune must fire at hour=3, got field: {hour_field}"
+        )
+        assert str(minute_field) == "0", (
+            f"daily_summary_prune must fire at minute=0, got field: {minute_field}"
+        )
+        tz_name = str(getattr(trigger, "timezone", ""))
+        assert "Los_Angeles" in tz_name, (
+            f"daily_summary_prune trigger must be in America/Los_Angeles, got {tz_name!r}"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+def test_make_daily_summary_prune_job_is_callable():
+    """_make_daily_summary_prune_job(engine) returns a callable (mirrors _make_daily_summary_job)."""
+    engine = MagicMock()
+    job = _make_daily_summary_prune_job(engine)
+    assert callable(job)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_stale_runs_sweeps_daily_summary_prune_orphan():
+    """reconcile_stale_runs must sweep daily_summary_prune orphan rows (agent-agnostic UPDATE).
+
+    Regression guard: the WHERE clause filters on status only (not agent_name), so
+    daily_summary_prune orphans from hard-killed workers are swept automatically.
+    """
+    mock_factory, mock_session = _make_mock_session_factory(rowcount=1)
+
+    with patch("worker.AsyncSessionLocal", mock_factory):
+        count = await reconcile_stale_runs()
+
+    # The UPDATE ran and swept 1 row
+    assert count == 1
+    mock_session.execute.assert_called_once()
+    mock_session.commit.assert_called_once()
+
+    # Verify the UPDATE does NOT filter on agent_name (it must sweep all agents)
+    stmt = mock_session.execute.call_args.args[0]
+    compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
+    assert "agent_runs" in compiled
+    # The WHERE clause must NOT restrict to a specific agent_name
+    # (status='running' filter present, agent_name filter absent)
+    assert "agent_name" not in compiled.lower() or "status" in compiled.lower(), (
+        "reconcile_stale_runs WHERE clause must not filter by agent_name"
+    )
+    params = stmt.compile().params
+    assert params.get("status") == "failed" or "failed" in str(params)

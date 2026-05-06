@@ -2,10 +2,11 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-Post quick-260427-m49, it starts AsyncIOScheduler with 7 jobs:
+Phase 4 Plan 01: starts AsyncIOScheduler with 8 jobs:
 
-- midday_digest (daily cron, 12:30 America/Los_Angeles — retimed in quick-260424-i8b
-  from 07:00 PT; scope filtered to non-firehose content types via DIGEST_EXCLUDED_CONTENT_TYPES)
+- daily_summary (Phase 1 Plan 05): cron at 08:00 + 12:00 America/Los_Angeles
+- daily_summary_prune (Phase 4 OPS-01): cron at 03:00 America/Los_Angeles — deletes
+  daily_summaries rows older than 30 days under advisory lock 1018
 - 6 cron sub-agents (post-m49 — ALL on CronTrigger; no more IntervalTrigger):
   - sub_breaking_news every hour at HH:00 UTC
   - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, 09:17, 12:17, 15:17, 18:17, 21:17)
@@ -308,6 +309,30 @@ def _make_daily_summary_job(engine):
     return job
 
 
+def _make_daily_summary_prune_job(engine):
+    """Create the daily_summary_prune job callback (advisory-lock wrapped).
+
+    v2.0 — Phase 4, Plan 01 (OPS-01). Mirrors _make_daily_summary_job exactly.
+    Lock ID 1018 was already reserved in Phase 1's JOB_LOCK_IDS dict (the OPS-02
+    uniqueness assertion at module scope guarantees no collision).
+
+    The prune function is imported lazily so worker.py module import does not
+    pay the prune module's import cost on Railway boot.
+    """
+
+    async def job():
+        async with engine.connect() as conn:
+            from agents.daily_summary_prune import run_daily_summary_prune  # lazy
+            await with_advisory_lock(
+                conn,
+                JOB_LOCK_IDS["daily_summary_prune"],
+                "daily_summary_prune",
+                run_daily_summary_prune,
+            )
+
+    return job
+
+
 def _make_sub_agent_job(job_id: str, lock_id: int, run_fn, engine):
     """Create a content sub-agent job callback (advisory-lock wrapped).
 
@@ -368,10 +393,10 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 
 
 async def build_scheduler(engine) -> AsyncIOScheduler:
-    """Build the APScheduler instance with 7 jobs registered.
+    """Build the APScheduler instance with 8 jobs registered.
 
-    - midday_digest: cron at 12:30 America/Los_Angeles (retimed in quick-260424-i8b;
-      scope filtered to non-firehose content via DIGEST_EXCLUDED_CONTENT_TYPES).
+    - daily_summary: cron at 08:00 + 12:00 America/Los_Angeles (Phase 1 Plan 05).
+    - daily_summary_prune: cron at 03:00 America/Los_Angeles (Phase 4 OPS-01).
     - 6 cron sub-agents (post-m49 — all CronTrigger):
       - sub_breaking_news every hour at HH:00 UTC
       - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, ..., 21:17)
@@ -424,6 +449,17 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         ),
         id="daily_summary",
         name="Daily Summary — 08:00 + 12:00 America/Los_Angeles",
+    )
+
+    # daily_summary_prune — fires at 03:00 PT daily (OPS-01).
+    # 03:00 PT is outside both summary fire times (08:00 + 12:00 PT) so the
+    # prune lock (1018) cannot contend with the summary lock (1017). Also
+    # outside the DST-ambiguous 01:00-02:00 window (MOD-1 — safe).
+    scheduler.add_job(
+        _make_daily_summary_prune_job(engine),
+        trigger=CronTrigger(hour=3, minute=0, timezone="America/Los_Angeles"),
+        id="daily_summary_prune",
+        name="Daily Summary Prune — 03:00 America/Los_Angeles",
     )
 
     for job_id, run_fn, name, lock_id, cron_kwargs in CONTENT_CRON_AGENTS:
