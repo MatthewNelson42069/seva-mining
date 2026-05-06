@@ -15,7 +15,7 @@ Core scheduled-job behavior — the cron, the lock, the agent module that orches
 - [ ] **SUM-02**: System holds advisory lock 1017 during `daily_summary` execution; concurrent fires from a flappy Railway redeploy fail-fast with a structured warning log instead of producing duplicate rows
 - [ ] **SUM-03**: System idempotency-guards each fire with a DB check — if any `daily_summaries` row exists for the same fire-window with `status` IN (`'running'`, `'completed'`), the second fire skips and logs `idempotency_skip` (prevents duplicate WhatsApp messages from misfire churn)
 - [ ] **SUM-04**: System writes one `agent_runs` row per `daily_summary` fire with structured `notes` telemetry: `{candidates_gold, candidates_law, candidates_stats, sections_completed, sections_failed, whatsapp_sent}`
-- [ ] **SUM-05**: System sets `daily_summaries.status` to `completed` when all 3 sections succeed, `partial` when 1-2 sections fail (the others render their empty states), `failed` only when fetch crashes before any section can be assembled
+- [x] **SUM-05**: System sets `daily_summaries.status` to `completed` when all 3 sections succeed, `partial` when 1-2 sections fail (the others render their empty states), `failed` only when fetch crashes before any section can be assembled
 - [ ] **SUM-06**: System retires the legacy `midday_digest` cron — its `scheduler.add_job(...)` registration is removed from `build_scheduler()` in the same commit that registers `daily_summary` (factory + lock-id-entry remain as dead code)
 
 ### Gold News Section (GOLD)
@@ -116,7 +116,7 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 | SUM-02 | Phase 1 | Pending |
 | SUM-03 | Phase 1 | Pending |
 | SUM-04 | Phase 1 | Pending |
-| SUM-05 | Phase 1 | Pending |
+| SUM-05 | Phase 1 | Complete |
 | SUM-06 | Phase 1 | Pending |
 | GOLD-01 | Phase 1 | Pending |
 | GOLD-02 | Phase 1 | Pending |
