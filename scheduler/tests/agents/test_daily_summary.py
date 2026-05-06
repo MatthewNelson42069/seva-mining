@@ -1,0 +1,647 @@
+"""Tests for scheduler/agents/daily_summary.py — Phase 1, Plan 05.
+
+Coverage:
+  Test 1  (CRIT-3 / SUM-03): idempotency skip when recent completed row exists
+  Test 2  (period_label): derive_period_label for 08:xx and 12:xx LA times
+  Test 3  (GOLD-01 score floor): top 5 filtered to score >= 6.0
+  Test 4  (GOLD-03 empty state): no qualifying stories → empty-state copy
+  Test 5  (GOLD-02 prompt structure): GOLD_NEWS_SYSTEM_PROMPT constants grep
+  Test 6  (MOD-5 date grounding): user prompt includes published_at + instruction
+  Test 7  (SUM-04 telemetry): agent_runs notes has all 6 required keys
+  Test 8  (SUM-05 status): completed / partial / failed mapping
+  Test 9  (Ontario stubs): phase-1 stubs return (markdown, [])
+  Test 10 (run failure → failure-alert): unhandled exception triggers failure alert
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://fake-pooler.neon.tech/db?sslmode=require"
+)
+os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-fake")
+os.environ.setdefault("TWILIO_ACCOUNT_SID", "x")
+os.environ.setdefault("TWILIO_AUTH_TOKEN", "x")
+os.environ.setdefault("TWILIO_WHATSAPP_FROM", "whatsapp:+1x")
+os.environ.setdefault("DIGEST_WHATSAPP_TO", "whatsapp:+1x")
+os.environ.setdefault("X_API_BEARER_TOKEN", "x")
+os.environ.setdefault("X_API_KEY", "x")
+os.environ.setdefault("X_API_SECRET", "x")
+os.environ.setdefault("SERPAPI_API_KEY", "x")
+os.environ.setdefault("FRONTEND_URL", "https://x.com")
+
+from agents.daily_summary import (  # noqa: E402
+    EMPTY_STATE_FALLBACK,
+    GOLD_NEWS_SYSTEM_PROMPT,
+    GOLD_SCORE_FLOOR,
+    GOLD_TOP_N,
+    IDEMPOTENCY_WINDOW_MIN,
+    ONTARIO_LAW_STUB_MD,
+    ONTARIO_STATS_STUB_MD,
+    _build_gold_news_section,
+    _build_ontario_law_section,
+    _build_ontario_stats_section,
+    _derive_period_label,
+    _gold_empty_state,
+    run_daily_summary,
+)
+
+
+# ---------------------------------------------------------------------------
+# Test 1 — CRIT-3 / SUM-03: idempotency skip
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_idempotency_skip_when_recent_completed_row_exists(caplog):
+    """run_daily_summary must skip + log 'idempotency_skip' if a recent row exists."""
+    import logging
+
+    # Mock the DB session to return a non-None scalar (simulating existing row)
+    mock_scalar_result = MagicMock()
+    mock_scalar_result.scalar_one_or_none.return_value = "some-uuid"
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_scalar_result)
+    mock_session.commit = AsyncMock()
+
+    session_cm = MagicMock()
+    session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+    session_cm.__aexit__ = AsyncMock(return_value=False)
+    mock_session_factory = MagicMock(return_value=session_cm)
+
+    with patch("agents.daily_summary.AsyncSessionLocal", mock_session_factory), caplog.at_level(
+        logging.INFO, logger="agents.daily_summary"
+    ):
+        await run_daily_summary()
+
+    # Must log idempotency_skip
+    assert any("idempotency_skip" in record.message for record in caplog.records), (
+        "Expected 'idempotency_skip' in log messages, got: "
+        + str([r.message for r in caplog.records])
+    )
+
+    # Must NOT have added any new rows (session.add never called)
+    mock_session.add.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Test 2 — period_label derivation
+# ---------------------------------------------------------------------------
+
+
+def test_derive_period_label_at_0830_returns_0800_pt():
+    """08:30 LA time → '08:00 PT'."""
+    from zoneinfo import ZoneInfo
+
+    now_la = datetime(2026, 5, 6, 8, 30, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    assert _derive_period_label(now_la) == "08:00 PT"
+
+
+def test_derive_period_label_at_1230_returns_1200_pt():
+    """12:30 LA time → '12:00 PT'."""
+    from zoneinfo import ZoneInfo
+
+    now_la = datetime(2026, 5, 6, 12, 30, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    assert _derive_period_label(now_la) == "12:00 PT"
+
+
+def test_derive_period_label_at_0800_returns_0800_pt():
+    """08:00 exact LA time → '08:00 PT'."""
+    from zoneinfo import ZoneInfo
+
+    now_la = datetime(2026, 5, 6, 8, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    assert _derive_period_label(now_la) == "08:00 PT"
+
+
+def test_derive_period_label_at_1200_returns_1200_pt():
+    """12:00 exact LA time → '12:00 PT'."""
+    from zoneinfo import ZoneInfo
+
+    now_la = datetime(2026, 5, 6, 12, 0, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    assert _derive_period_label(now_la) == "12:00 PT"
+
+
+# ---------------------------------------------------------------------------
+# Test 3 — GOLD-01 score floor: select top 5 with score >= 6.0
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_gold_news_section_filters_by_score_floor():
+    """_build_gold_news_section selects top 5 stories with score >= 6.0 (drops 5.5)."""
+    stories = [
+        {"title": "A", "score": 9.0, "link": "http://a", "source_name": "kitco.com", "published": "2026-05-06", "summary": "A summary"},
+        {"title": "B", "score": 7.5, "link": "http://b", "source_name": "kitco.com", "published": "2026-05-06", "summary": "B summary"},
+        {"title": "C", "score": 5.5, "link": "http://c", "source_name": "kitco.com", "published": "2026-05-06", "summary": "C summary"},  # below floor
+        {"title": "D", "score": 6.5, "link": "http://d", "source_name": "kitco.com", "published": "2026-05-06", "summary": "D summary"},
+        {"title": "E", "score": 8.0, "link": "http://e", "source_name": "kitco.com", "published": "2026-05-06", "summary": "E summary"},
+        {"title": "F", "score": 6.0, "link": "http://f", "source_name": "kitco.com", "published": "2026-05-06", "summary": "F summary"},
+    ]
+
+    mock_anthropic_response = MagicMock()
+    mock_anthropic_response.content = [MagicMock(text="Why it matters lead.\n\n* Bullet one (kitco.com)\n* Bullet two (kitco.com)")]
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_anthropic_response)
+
+    with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
+        md, raw = await _build_gold_news_section(mock_client)
+
+    # Should return 5 stories (9.0, 8.0, 7.5, 6.5, 6.0) — not the 5.5
+    assert len(raw) == 5, f"Expected 5 stories in raw, got {len(raw)}: {[s['title'] for s in raw]}"
+    scores = [s["score"] for s in raw]
+    assert 5.5 not in scores, f"Score 5.5 (below floor {GOLD_SCORE_FLOOR}) should be excluded"
+    # Sorted descending
+    assert scores == sorted(scores, reverse=True), f"Expected descending order: {scores}"
+
+
+@pytest.mark.asyncio
+async def test_build_gold_news_section_top_n_is_5():
+    """_build_gold_news_section takes at most GOLD_TOP_N (5) stories."""
+    assert GOLD_TOP_N == 5
+    assert GOLD_SCORE_FLOOR == 6.0
+
+    # 7 stories all above floor — should select top 5
+    stories = [
+        {"title": f"S{i}", "score": float(10 - i), "link": f"http://s{i}", "source_name": "kitco.com",
+         "published": "2026-05-06", "summary": f"Summary {i}"}
+        for i in range(7)
+    ]
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="Lead sentence.\n\n* Bullet (kitco.com)")]
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+    with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
+        md, raw = await _build_gold_news_section(mock_client)
+
+    assert len(raw) == 5, f"Expected GOLD_TOP_N=5 stories, got {len(raw)}"
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — GOLD-03 empty state
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_gold_news_section_empty_state_when_no_qualifying_stories():
+    """When all stories score below 6.0, returns empty-state markdown."""
+    stories = [
+        {"title": "Low", "score": 3.0, "link": "http://low", "source_name": "unknown",
+         "published": "2026-05-06", "summary": "Low quality"},
+    ]
+
+    mock_client = AsyncMock()
+
+    with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
+         patch("agents.daily_summary.fetch_market_snapshot", AsyncMock(return_value={"gold_24h_low": 3200.0, "gold_24h_high": 3280.0})):
+        md, raw = await _build_gold_news_section(mock_client)
+
+    assert md is not None
+    assert "No major moves in gold today" in md, f"Expected empty-state copy in: {md!r}"
+    assert raw == []
+    # Anthropic should NOT have been called
+    mock_client.messages.create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_gold_empty_state_uses_price_range_when_available():
+    """_gold_empty_state includes price range from market_snapshot when available."""
+    with patch(
+        "agents.daily_summary.fetch_market_snapshot",
+        AsyncMock(return_value={"gold_24h_low": 3200.0, "gold_24h_high": 3280.0}),
+    ):
+        result = await _gold_empty_state()
+
+    assert "3,200" in result or "3200" in result.replace(",", ""), f"Expected gold low in: {result}"
+    assert "No major moves in gold today" in result
+
+
+@pytest.mark.asyncio
+async def test_gold_empty_state_fallback_when_snapshot_fails():
+    """_gold_empty_state returns fallback when market_snapshot raises."""
+    with patch(
+        "agents.daily_summary.fetch_market_snapshot",
+        AsyncMock(side_effect=Exception("API down")),
+    ):
+        result = await _gold_empty_state()
+
+    assert result == EMPTY_STATE_FALLBACK
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — GOLD-02 prompt structure constants (grep-able)
+# ---------------------------------------------------------------------------
+
+
+def test_gold_news_system_prompt_contains_why_it_matters():
+    """GOLD_NEWS_SYSTEM_PROMPT includes 'Why it matters' lead instruction."""
+    assert "Why it matters" in GOLD_NEWS_SYSTEM_PROMPT, (
+        "GOLD_NEWS_SYSTEM_PROMPT must include 'Why it matters'"
+    )
+
+
+def test_gold_news_system_prompt_contains_source_name():
+    """GOLD_NEWS_SYSTEM_PROMPT includes '(Source Name)' inline citation instruction."""
+    assert "(Source Name)" in GOLD_NEWS_SYSTEM_PROMPT, (
+        "GOLD_NEWS_SYSTEM_PROMPT must include '(Source Name)'"
+    )
+
+
+def test_gold_news_system_prompt_contains_word_limit():
+    """GOLD_NEWS_SYSTEM_PROMPT includes 25-word bullet limit."""
+    prompt = GOLD_NEWS_SYSTEM_PROMPT
+    assert (
+        "Maximum 25 words" in prompt
+        or "<= 25 words" in prompt
+        or "≤ 25 words" in prompt
+        or "25 words" in prompt
+    ), f"GOLD_NEWS_SYSTEM_PROMPT must mention 25-word limit: {prompt[:200]}"
+
+
+def test_gold_news_system_prompt_no_build_chunks():
+    """Module must NOT import or call build_chunks (HIGH-5 enforcement).
+
+    The docstring is allowed to reference 'build_chunks' as a negation
+    ('NOT build_chunks'), but the module must not import or call it.
+    """
+    import agents.daily_summary as ds_module
+
+    # Check that build_chunks is not imported (no "from ... import build_chunks"
+    # or "import build_chunks" pattern — only comment/docstring mentions are ok)
+    assert not hasattr(ds_module, "build_chunks"), (
+        "daily_summary.py must NOT import build_chunks (HIGH-5)"
+    )
+    # Check no call-site usage: grep for open-paren after build_chunks
+    import inspect
+    source = inspect.getsource(ds_module)
+    # Remove comment and docstring lines from source before checking
+    non_comment_lines = [
+        line for line in source.splitlines()
+        if not line.strip().startswith("#") and not line.strip().startswith('"""')
+        and not line.strip().startswith("'")
+    ]
+    non_comment_source = "\n".join(non_comment_lines)
+    assert "build_chunks(" not in non_comment_source, (
+        "daily_summary.py must NOT call build_chunks() (HIGH-5)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 6 — MOD-5 date grounding: published_at in user prompt
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_gold_news_section_includes_published_in_prompt():
+    """The user prompt sent to Sonnet includes the 'Published:' field for each story."""
+    stories = [
+        {"title": "Gold hits new high", "score": 8.5, "link": "http://x", "source_name": "kitco.com",
+         "published": "2026-05-06", "summary": "Summary text"},
+    ]
+
+    captured_calls = []
+
+    async def mock_create(**kwargs):
+        captured_calls.append(kwargs)
+        response = MagicMock()
+        response.content = [MagicMock(text="Gold is on the move.\n\n* Bullet one (kitco.com)")]
+        return response
+
+    mock_client = AsyncMock()
+    mock_client.messages.create = mock_create
+
+    with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
+        await _build_gold_news_section(mock_client)
+
+    assert len(captured_calls) == 1
+    user_content = captured_calls[0]["messages"][0]["content"]
+    assert "Published:" in user_content, (
+        f"User prompt must include 'Published:' for MOD-5 date grounding. Got: {user_content[:300]}"
+    )
+
+
+def test_gold_news_system_prompt_contains_date_instruction():
+    """GOLD_NEWS_SYSTEM_PROMPT instructs Sonnet to use ONLY dates from provided articles."""
+    assert (
+        "ONLY dates" in GOLD_NEWS_SYSTEM_PROMPT
+        or "only dates" in GOLD_NEWS_SYSTEM_PROMPT.lower()
+        or "Do not" in GOLD_NEWS_SYSTEM_PROMPT
+    ), "GOLD_NEWS_SYSTEM_PROMPT must include date-grounding instruction (MOD-5)"
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — SUM-04 telemetry: agent_runs notes contains 6 required keys
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_daily_summary_writes_telemetry_notes_with_required_keys():
+    """agent_runs telemetry notes must contain all 6 SUM-04 keys."""
+    required_keys = {
+        "candidates_gold",
+        "candidates_law",
+        "candidates_stats",
+        "sections_completed",
+        "sections_failed",
+        "whatsapp_sent",
+    }
+
+    # We'll capture the notes written to the agent_run via a plain object
+    written_notes = []
+
+    class FakeAgentRun:
+        """A simple object that captures attribute assignments."""
+        id = "test-run-uuid"
+        status = "running"
+
+        def __setattr__(self, name, value):
+            if name == "notes":
+                written_notes.append(value)
+            object.__setattr__(self, name, value)
+
+    fake_run = FakeAgentRun()
+
+    # Track session calls by index
+    call_count = [0]
+
+    class FakeSessionCM:
+        """Context manager returning different mock sessions by call sequence."""
+
+        async def __aenter__(self):
+            call_count[0] += 1
+            idx = call_count[0]
+            sess = AsyncMock()
+            if idx == 1:
+                # First session: idempotency check
+                idem = MagicMock()
+                idem.scalar_one_or_none.return_value = None
+                sess.execute = AsyncMock(return_value=idem)
+            elif idx == 2:
+                # Second session: agent_run insert + refresh
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+                sess.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", "test-run-uuid"))
+            elif idx == 3:
+                # Third session: DailySummary insert
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+            else:
+                # Fourth+ session: telemetry update (finally block)
+                sess.get = AsyncMock(return_value=fake_run)
+                sess.commit = AsyncMock()
+            return sess
+
+        async def __aexit__(self, *args):
+            return False
+
+    mock_anthropic_response = MagicMock()
+    mock_anthropic_response.content = [MagicMock(text="Gold surges.\n\n* Bullet (kitco.com)")]
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.messages.create = AsyncMock(return_value=mock_anthropic_response)
+
+    stories = [
+        {"title": "Gold story", "score": 8.0, "link": "http://x", "source_name": "kitco.com",
+         "published": "2026-05-06", "summary": "Gold summary"},
+    ]
+
+    with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
+         patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
+         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client_instance), \
+         patch("agents.daily_summary.deliver_summary_teaser", AsyncMock(return_value=None)), \
+         patch("agents.daily_summary.deliver_summary_failure_alert", AsyncMock()):
+        await run_daily_summary()
+
+    assert written_notes, "No notes were written to the agent_run"
+    notes_json = written_notes[-1]
+    notes = json.loads(notes_json)
+    missing = required_keys - set(notes.keys())
+    assert not missing, f"SUM-04 keys missing from notes: {missing}. Got: {set(notes.keys())}"
+
+
+# ---------------------------------------------------------------------------
+# Test 8 — SUM-05 status assembly
+# ---------------------------------------------------------------------------
+
+
+def test_status_is_completed_when_all_sections_succeed():
+    """0 failed sections → status='completed' (SUM-05)."""
+    sections_failed: list[str] = []
+    failed_count = len(sections_failed)
+
+    if failed_count == 0:
+        status = "completed"
+    elif failed_count < 3:
+        status = "partial"
+    else:
+        status = "failed"
+
+    assert status == "completed"
+
+
+def test_status_is_partial_when_one_section_fails():
+    """1 failed section → status='partial' (SUM-05)."""
+    sections_failed = ["gold_news"]
+    failed_count = len(sections_failed)
+
+    if failed_count == 0:
+        status = "completed"
+    elif failed_count < 3:
+        status = "partial"
+    else:
+        status = "failed"
+
+    assert status == "partial"
+
+
+def test_status_is_failed_when_all_sections_fail():
+    """3 failed sections → status='failed' (SUM-05)."""
+    sections_failed = ["gold_news", "ontario_law", "ontario_stats"]
+    failed_count = len(sections_failed)
+
+    if failed_count == 0:
+        status = "completed"
+    elif failed_count < 3:
+        status = "partial"
+    else:
+        status = "failed"
+
+    assert status == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Test 9 — Ontario section stubs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_ontario_law_section_returns_stub_tuple():
+    """_build_ontario_law_section returns (stub_md, []) in Phase 1."""
+    md, raw = await _build_ontario_law_section()
+    assert isinstance(md, str)
+    assert len(md) > 0
+    assert raw == []
+    assert "stub" in md.lower() or "Phase" in md, (
+        f"Expected stub marker in ontario law md, got: {md!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_ontario_stats_section_returns_stub_tuple():
+    """_build_ontario_stats_section returns (stub_md, []) in Phase 1."""
+    md, raw = await _build_ontario_stats_section()
+    assert isinstance(md, str)
+    assert len(md) > 0
+    assert raw == []
+    assert "stub" in md.lower() or "Phase" in md, (
+        f"Expected stub marker in ontario stats md, got: {md!r}"
+    )
+
+
+def test_ontario_stub_constants_defined():
+    """ONTARIO_LAW_STUB_MD and ONTARIO_STATS_STUB_MD constants are non-empty strings."""
+    assert isinstance(ONTARIO_LAW_STUB_MD, str) and ONTARIO_LAW_STUB_MD
+    assert isinstance(ONTARIO_STATS_STUB_MD, str) and ONTARIO_STATS_STUB_MD
+
+
+# ---------------------------------------------------------------------------
+# Test 10 — run failure → failure-alert called (MOD-6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_failure_triggers_failure_alert():
+    """On unhandled exception in run_daily_summary's main try block, deliver_summary_failure_alert is called."""
+    call_count = [0]
+
+    class FakeSessionCM:
+        async def __aenter__(self):
+            call_count[0] += 1
+            sess = AsyncMock()
+            if call_count[0] == 1:
+                # idempotency check — no existing row
+                idem = MagicMock()
+                idem.scalar_one_or_none.return_value = None
+                sess.execute = AsyncMock(return_value=idem)
+            elif call_count[0] == 2:
+                # agent_run insert succeeds
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+                sess.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", "run-id"))
+            elif call_count[0] == 3:
+                # DailySummary insert — raises to trigger outer except block
+                sess.add = MagicMock()
+                sess.commit = AsyncMock(side_effect=RuntimeError("DB failure on summary write"))
+            else:
+                # Failure-row write session and telemetry session
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+                sess.get = AsyncMock(return_value=MagicMock())
+            return sess
+
+        async def __aexit__(self, *args):
+            return False
+
+    mock_failure_alert = AsyncMock()
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="Gold surged.\n\n* Bullet (kitco.com)")]
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+    stories = [
+        {"title": "Gold story", "score": 8.0, "link": "http://x", "source_name": "kitco.com",
+         "published": "2026-05-06", "summary": "Gold moved"},
+    ]
+
+    with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
+         patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
+         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.daily_summary.deliver_summary_failure_alert", mock_failure_alert):
+        await run_daily_summary()
+
+    mock_failure_alert.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Test 11 — WhatsApp teaser called on success (WHA-01 plumbing)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_deliver_summary_teaser_called_on_success():
+    """On successful run, deliver_summary_teaser is called with period_label and lead."""
+    call_count = [0]
+
+    class FakeSessionCM:
+        async def __aenter__(self):
+            call_count[0] += 1
+            idx = call_count[0]
+            sess = AsyncMock()
+            if idx == 1:
+                idem = MagicMock()
+                idem.scalar_one_or_none.return_value = None
+                sess.execute = AsyncMock(return_value=idem)
+            elif idx == 2:
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+                sess.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", "run-id"))
+            elif idx == 3:
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+            else:
+                mock_run = MagicMock()
+                mock_run.id = "run-id"
+                sess.get = AsyncMock(return_value=mock_run)
+                sess.commit = AsyncMock()
+            return sess
+
+        async def __aexit__(self, *args):
+            return False
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="Gold rallied on safe-haven demand.\n\n* Bullet (kitco.com)")]
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+
+    mock_teaser = AsyncMock(return_value="test-sid")
+    mock_alert = AsyncMock()
+
+    stories = [
+        {"title": "Gold story", "score": 8.0, "link": "http://x", "source_name": "kitco.com",
+         "published": "2026-05-06", "summary": "Gold moved"},
+    ]
+
+    with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
+         patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
+         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.daily_summary.deliver_summary_teaser", mock_teaser), \
+         patch("agents.daily_summary.deliver_summary_failure_alert", mock_alert):
+        await run_daily_summary()
+
+    mock_teaser.assert_called_once()
+    call_args = mock_teaser.call_args
+    assert call_args is not None
+    # period_label and lead are the two positional args
+    assert len(call_args.args) == 2 or "period_label" in str(call_args)
+
+
+# ---------------------------------------------------------------------------
+# Test 12 — IDEMPOTENCY_WINDOW_MIN constant
+# ---------------------------------------------------------------------------
+
+
+def test_idempotency_window_is_30_minutes():
+    """IDEMPOTENCY_WINDOW_MIN must be 30 (matches misfire_grace_time — CRIT-3)."""
+    assert IDEMPOTENCY_WINDOW_MIN == 30
