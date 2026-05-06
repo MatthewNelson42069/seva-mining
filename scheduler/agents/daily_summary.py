@@ -27,7 +27,10 @@ from anthropic import AsyncAnthropic
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import serpapi
+
 from agents.content_agent import fetch_stories
+from agents.ontario_law import fetch_ontario_law_hits
 from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
@@ -77,7 +80,6 @@ Do NOT use tables. Do NOT use blockquotes.
 EMPTY_STATE_TEMPLATE_WITH_RANGE = "No major moves in gold today — prices ranging ${low}–${high}."
 EMPTY_STATE_FALLBACK = "No major moves in gold today."
 
-ONTARIO_LAW_STUB_MD = "(stub) Ontario law section — populated in Phase 2."
 ONTARIO_STATS_STUB_MD = "(stub) Ontario stats section — populated in Phase 3."
 
 
@@ -187,9 +189,66 @@ async def _gold_empty_state() -> str:
     return EMPTY_STATE_FALLBACK
 
 
-async def _build_ontario_law_section() -> tuple[str, list[dict]]:
-    """Phase 1 stub. Phase 2 replaces this with real ingestion + Haiku filter."""
-    return (ONTARIO_LAW_STUB_MD, [])
+async def _build_ontario_law_section(
+    *,
+    anthropic_client: AsyncAnthropic,
+    serpapi_client: "serpapi.Client | None",
+    model: str,
+    previous_last_known_law: dict | None,
+) -> tuple[str | None, list[dict], dict | None, dict[str, int]]:
+    """Phase 2 — real ingestion + Haiku filter + last_known_law continuity.
+
+    Returns (markdown, hits_for_jsonb, new_last_known_law, counts):
+      markdown: str on success (may be empty-state copy), None on hard failure
+      hits_for_jsonb: list[dict] for raw_sources_jsonb.ontario_law.hits
+      new_last_known_law: dict for raw_sources_jsonb.ontario_law.last_known_law
+                          (propagated from previous if no fresh hits)
+      counts: telemetry — keys serpapi/nrcan/after_dedup/after_filter
+
+    Signature note: this function now requires kwargs. The caller (run_daily_summary)
+    constructs the serpapi_client + reads previous_last_known_law from the most
+    recent daily_summaries row before invoking.
+    """
+    counts: dict[str, int] = {
+        "serpapi": 0, "nrcan": 0, "after_dedup": 0, "after_filter": 0
+    }
+    try:
+        survivors, counts = await fetch_ontario_law_hits(
+            serpapi_client=serpapi_client,
+            anthropic_client=anthropic_client,
+            model=model,
+        )
+    except Exception:
+        logger.exception("ontario_law: fetch_ontario_law_hits raised — section failed")
+        return (None, [], previous_last_known_law, counts)
+
+    if survivors:
+        # Render bullets per CONTEXT.md D-Bullet: * **{bill_or_reg_number}** — {reason}
+        bullets = "\n".join(
+            f"* **{h.bill_or_reg_number}** — {h.reason or 'no summary available'}"
+            for h in survivors
+        )
+        # Update last_known_law from the highest-priority (first) survivor
+        first = survivors[0]
+        new_lkl: dict | None = {
+            "date": datetime.now(timezone.utc).date().isoformat(),
+            "law_name": first.bill_or_reg_number or (first.title[:80] if first.title else "Unknown"),
+            "url": first.link,
+        }
+        hits_jsonb = [h.model_dump(mode="json") for h in survivors]
+        return (bullets, hits_jsonb, new_lkl, counts)
+
+    # Empty state — propagate previous last_known_law if any (LAW-04 continuity)
+    if previous_last_known_law:
+        lkl_date = previous_last_known_law.get("date", "")
+        lkl_name = previous_last_known_law.get("law_name", "")
+        md = (
+            f"No new Ontario mining-related laws today. "
+            f"Last update: {lkl_date} — {lkl_name}."
+        )
+        return (md, [], previous_last_known_law, counts)
+
+    return ("No new Ontario mining-related laws today.", [], None, counts)
 
 
 async def _build_ontario_stats_section() -> tuple[str, list[dict]]:
@@ -262,7 +321,13 @@ async def run_daily_summary() -> None:
     ontario_law_md: str | None = None
     ontario_stats_md: str | None = None
     gold_raw: list[dict] = []
+    ontario_law_hits: list[dict] = []
+    new_last_known_law: dict | None = None
     candidates_gold = 0
+    # Phase 2: initialize law_counts defensively so the finally block always has it
+    law_counts: dict[str, int] = {
+        "serpapi": 0, "nrcan": 0, "after_dedup": 0, "after_filter": 0
+    }
     whatsapp_sent = False
     run_status = "failed"
     error_text: str | None = None
@@ -271,6 +336,33 @@ async def run_daily_summary() -> None:
     anthropic_client = AsyncAnthropic(
         api_key=settings.anthropic_api_key, timeout=30.0,
     )
+
+    # Construct SerpAPI client if credentials are available (mirrors content_agent pattern)
+    serpapi_client: "serpapi.Client | None" = (
+        serpapi.Client(api_key=settings.serpapi_api_key)
+        if settings.serpapi_api_key
+        else None
+    )
+
+    # Read previous summary's last_known_law for LAW-04 continuity
+    previous_last_known_law: dict | None = None
+    try:
+        async with AsyncSessionLocal() as session:
+            stmt = (
+                select(DailySummary.raw_sources_jsonb)
+                .order_by(DailySummary.generated_at.desc())
+                .limit(1)
+            )
+            result = await session.execute(stmt)
+            prev_jsonb = result.scalar_one_or_none()
+            if prev_jsonb and isinstance(prev_jsonb, dict):
+                prev_law = (prev_jsonb.get("ontario_law") or {}).get("last_known_law")
+                if prev_law:
+                    previous_last_known_law = prev_law
+    except Exception:
+        logger.warning(
+            "ontario_law: previous-summary read failed — proceeding with no continuity"
+        )
 
     try:
         # --- Section 1: Gold News (real) ---
@@ -281,9 +373,19 @@ async def run_daily_summary() -> None:
         else:
             sections_failed.append("gold_news")
 
-        # --- Section 2: Ontario Law (stub in Phase 1) ---
-        ontario_law_md, _ = await _build_ontario_law_section()
-        sections_completed.append("ontario_law")
+        # --- Section 2: Ontario Law (Phase 2 — real ingestion + Haiku filter) ---
+        ontario_law_md, ontario_law_hits, new_last_known_law, law_counts = (
+            await _build_ontario_law_section(
+                anthropic_client=anthropic_client,
+                serpapi_client=serpapi_client,
+                model=settings.ontario_law_filter_model,
+                previous_last_known_law=previous_last_known_law,
+            )
+        )
+        if ontario_law_md is not None:
+            sections_completed.append("ontario_law")
+        else:
+            sections_failed.append("ontario_law")
 
         # --- Section 3: Ontario Stats (stub in Phase 1) ---
         ontario_stats_md, _ = await _build_ontario_stats_section()
@@ -302,7 +404,10 @@ async def run_daily_summary() -> None:
         # bumping the RawSources Pydantic model in backend/app/schemas/daily_summary.py.
         raw_sources = {
             "gold_news": gold_raw,
-            "ontario_law": {"hits": [], "last_known_law": None},
+            "ontario_law": {
+                "hits": ontario_law_hits,
+                "last_known_law": new_last_known_law,
+            },
             "ontario_stats": {
                 "snapshot_date": "",
                 "last_known_figure": None,
@@ -378,7 +483,11 @@ async def run_daily_summary() -> None:
         try:
             notes_payload = {
                 "candidates_gold": candidates_gold,
-                "candidates_law": 0,            # Phase 2 fills this
+                "candidates_law": law_counts.get("after_filter", 0),  # Phase 2: real count
+                "candidates_law_serpapi": law_counts.get("serpapi", 0),
+                "candidates_law_nrcan": law_counts.get("nrcan", 0),
+                "candidates_law_after_dedup": law_counts.get("after_dedup", 0),
+                "candidates_law_after_filter": law_counts.get("after_filter", 0),
                 "candidates_stats": 0,          # Phase 3 fills this
                 "sections_completed": sections_completed,
                 "sections_failed": sections_failed,

@@ -45,7 +45,6 @@ from agents.daily_summary import (  # noqa: E402
     GOLD_SCORE_FLOOR,
     GOLD_TOP_N,
     IDEMPOTENCY_WINDOW_MIN,
-    ONTARIO_LAW_STUB_MD,
     ONTARIO_STATS_STUB_MD,
     _build_gold_news_section,
     _build_ontario_law_section,
@@ -393,11 +392,16 @@ async def test_run_daily_summary_writes_telemetry_notes_with_required_keys():
                 sess.commit = AsyncMock()
                 sess.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", "test-run-uuid"))
             elif idx == 3:
-                # Third session: DailySummary insert
+                # Third session: previous-summary read (Phase 2 — last_known_law continuity)
+                prev = MagicMock()
+                prev.scalar_one_or_none.return_value = None  # no previous summary
+                sess.execute = AsyncMock(return_value=prev)
+            elif idx == 4:
+                # Fourth session: DailySummary insert
                 sess.add = MagicMock()
                 sess.commit = AsyncMock()
             else:
-                # Fourth+ session: telemetry update (finally block)
+                # Fifth+ session: telemetry update (finally block)
                 sess.get = AsyncMock(return_value=fake_run)
                 sess.commit = AsyncMock()
             return sess
@@ -419,6 +423,8 @@ async def test_run_daily_summary_writes_telemetry_notes_with_required_keys():
     with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
          patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
          patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client_instance), \
+         patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
+         patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
          patch("agents.daily_summary.deliver_summary_teaser", AsyncMock(return_value=None)), \
          patch("agents.daily_summary.deliver_summary_failure_alert", AsyncMock()):
         await run_daily_summary()
@@ -481,25 +487,36 @@ def test_status_is_failed_when_all_sections_fail():
 
 
 # ---------------------------------------------------------------------------
-# Test 9 — Ontario section stubs
+# Test 9 — Ontario section builders (Phase 2 updates)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_build_ontario_law_section_returns_stub_tuple():
-    """_build_ontario_law_section returns (stub_md, []) in Phase 1."""
-    md, raw = await _build_ontario_law_section()
-    assert isinstance(md, str)
-    assert len(md) > 0
-    assert raw == []
-    assert "stub" in md.lower() or "Phase" in md, (
-        f"Expected stub marker in ontario law md, got: {md!r}"
-    )
+async def test_build_ontario_law_section_returns_real_empty_state():
+    """Phase 2: _build_ontario_law_section returns empty-state when no candidates (mocked sources)."""
+    from unittest.mock import patch
+
+    mock_anthropic = AsyncMock()
+
+    with patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
+         patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]):
+        md, hits, lkl, counts = await _build_ontario_law_section(
+            anthropic_client=mock_anthropic,
+            serpapi_client=None,
+            model="claude-haiku-4-5",
+            previous_last_known_law=None,
+        )
+
+    # Phase 2 real path: empty state without prior last_known_law
+    assert md == "No new Ontario mining-related laws today."
+    assert hits == []
+    assert lkl is None
+    assert isinstance(counts, dict)
 
 
 @pytest.mark.asyncio
 async def test_build_ontario_stats_section_returns_stub_tuple():
-    """_build_ontario_stats_section returns (stub_md, []) in Phase 1."""
+    """_build_ontario_stats_section returns (stub_md, []) in Phase 1 (Phase 3 replaces)."""
     md, raw = await _build_ontario_stats_section()
     assert isinstance(md, str)
     assert len(md) > 0
@@ -509,10 +526,17 @@ async def test_build_ontario_stats_section_returns_stub_tuple():
     )
 
 
-def test_ontario_stub_constants_defined():
-    """ONTARIO_LAW_STUB_MD and ONTARIO_STATS_STUB_MD constants are non-empty strings."""
-    assert isinstance(ONTARIO_LAW_STUB_MD, str) and ONTARIO_LAW_STUB_MD
+def test_ontario_stats_stub_constant_defined():
+    """ONTARIO_STATS_STUB_MD constant is a non-empty string."""
     assert isinstance(ONTARIO_STATS_STUB_MD, str) and ONTARIO_STATS_STUB_MD
+
+
+def test_ontario_law_stub_md_not_in_module():
+    """ONTARIO_LAW_STUB_MD was removed in Phase 2 — no longer referenced in module."""
+    import agents.daily_summary as ds_module
+    assert not hasattr(ds_module, "ONTARIO_LAW_STUB_MD"), (
+        "ONTARIO_LAW_STUB_MD should be removed in Phase 2 — use real ingestion"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -540,6 +564,11 @@ async def test_run_failure_triggers_failure_alert():
                 sess.commit = AsyncMock()
                 sess.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", "run-id"))
             elif call_count[0] == 3:
+                # Phase 2: previous-summary read for last_known_law continuity
+                prev = MagicMock()
+                prev.scalar_one_or_none.return_value = None
+                sess.execute = AsyncMock(return_value=prev)
+            elif call_count[0] == 4:
                 # DailySummary insert — raises to trigger outer except block
                 sess.add = MagicMock()
                 sess.commit = AsyncMock(side_effect=RuntimeError("DB failure on summary write"))
@@ -568,6 +597,8 @@ async def test_run_failure_triggers_failure_alert():
     with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
          patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
          patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
+         patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
          patch("agents.daily_summary.deliver_summary_failure_alert", mock_failure_alert):
         await run_daily_summary()
 
@@ -598,6 +629,11 @@ async def test_deliver_summary_teaser_called_on_success():
                 sess.commit = AsyncMock()
                 sess.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", "run-id"))
             elif idx == 3:
+                # Phase 2: previous-summary read for last_known_law continuity
+                prev = MagicMock()
+                prev.scalar_one_or_none.return_value = None
+                sess.execute = AsyncMock(return_value=prev)
+            elif idx == 4:
                 sess.add = MagicMock()
                 sess.commit = AsyncMock()
             else:
@@ -626,6 +662,8 @@ async def test_deliver_summary_teaser_called_on_success():
     with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
          patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
          patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
+         patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
          patch("agents.daily_summary.deliver_summary_teaser", mock_teaser), \
          patch("agents.daily_summary.deliver_summary_failure_alert", mock_alert):
         await run_daily_summary()
@@ -645,3 +683,222 @@ async def test_deliver_summary_teaser_called_on_success():
 def test_idempotency_window_is_30_minutes():
     """IDEMPOTENCY_WINDOW_MIN must be 30 (matches misfire_grace_time — CRIT-3)."""
     assert IDEMPOTENCY_WINDOW_MIN == 30
+
+
+# ---------------------------------------------------------------------------
+# Phase 2, Plan 01 — Ontario Law section tests (U1-U8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_ontario_law_section_bullets_when_survivors():
+    """U1: When fetch_ontario_law_hits returns survivors, markdown contains bullet lines."""
+    from agents.ontario_law import OntarioLawHit
+
+    hit1 = OntarioLawHit(
+        title="Bill 71 receives Royal Assent",
+        link="https://ontario.ca/bill71",
+        source_name="ontario.ca",
+        bill_or_reg_number="Bill 71",
+        favour_or_neutral="favour",
+        reason="named bill amending Mining Act",
+    )
+    hit2 = OntarioLawHit(
+        title="Reg 23/26 amends staking rules",
+        link="https://ontario.ca/reg23",
+        source_name="ontario.ca",
+        bill_or_reg_number="Reg 23/26",
+        favour_or_neutral="neutral",
+        reason="staking procedure update",
+    )
+    counts = {"serpapi": 5, "nrcan": 3, "after_dedup": 7, "after_filter": 2}
+
+    mock_anthropic = AsyncMock()
+
+    with patch("agents.daily_summary.fetch_ontario_law_hits",
+               AsyncMock(return_value=([hit1, hit2], counts))):
+        md, hits_jsonb, new_lkl, ret_counts = await _build_ontario_law_section(
+            anthropic_client=mock_anthropic,
+            serpapi_client=None,
+            model="claude-haiku-4-5",
+            previous_last_known_law=None,
+        )
+
+    assert md is not None
+    assert "* **Bill 71** — named bill amending Mining Act" in md
+    assert "* **Reg 23/26** — staking procedure update" in md
+    assert new_lkl is not None
+    assert new_lkl["law_name"] == "Bill 71"
+    assert "url" in new_lkl
+    assert len(hits_jsonb) == 2
+
+
+@pytest.mark.asyncio
+async def test_build_ontario_law_section_empty_with_prior_last_known_law():
+    """U2: Empty + previous last_known_law → continuity copy + law propagated forward."""
+    mock_anthropic = AsyncMock()
+    prior_lkl = {
+        "date": "2026-04-15",
+        "law_name": "Bill 71 (Building Ontario Act)",
+        "url": "https://ontario.ca/bill71",
+    }
+
+    with patch("agents.daily_summary.fetch_ontario_law_hits",
+               AsyncMock(return_value=([], {"serpapi": 0, "nrcan": 0, "after_dedup": 0, "after_filter": 0}))):
+        md, hits_jsonb, new_lkl, counts = await _build_ontario_law_section(
+            anthropic_client=mock_anthropic,
+            serpapi_client=None,
+            model="claude-haiku-4-5",
+            previous_last_known_law=prior_lkl,
+        )
+
+    expected_md = (
+        "No new Ontario mining-related laws today. "
+        "Last update: 2026-04-15 — Bill 71 (Building Ontario Act)."
+    )
+    assert md == expected_md, f"Expected:\n{expected_md}\nGot:\n{md}"
+    assert hits_jsonb == []
+    assert new_lkl == prior_lkl  # propagated forward
+
+
+@pytest.mark.asyncio
+async def test_build_ontario_law_section_empty_no_prior_last_known_law():
+    """U3: Empty + no previous summary → fallback without date."""
+    mock_anthropic = AsyncMock()
+
+    with patch("agents.daily_summary.fetch_ontario_law_hits",
+               AsyncMock(return_value=([], {"serpapi": 0, "nrcan": 0, "after_dedup": 0, "after_filter": 0}))):
+        md, hits_jsonb, new_lkl, counts = await _build_ontario_law_section(
+            anthropic_client=mock_anthropic,
+            serpapi_client=None,
+            model="claude-haiku-4-5",
+            previous_last_known_law=None,
+        )
+
+    assert md == "No new Ontario mining-related laws today."
+    assert hits_jsonb == []
+    assert new_lkl is None
+
+
+@pytest.mark.asyncio
+async def test_telemetry_has_all_4_new_law_keys():
+    """U4: agent_runs.notes contains all 4 Phase 2 candidates_law_* telemetry keys."""
+    written_notes: list[str] = []
+
+    class FakeAgentRun:
+        id = "test-run-uuid"
+        status = "running"
+
+        def __setattr__(self, name, value):
+            if name == "notes":
+                written_notes.append(value)
+            object.__setattr__(self, name, value)
+
+    fake_run = FakeAgentRun()
+    call_count = [0]
+
+    class FakeSessionCM:
+        async def __aenter__(self):
+            call_count[0] += 1
+            idx = call_count[0]
+            sess = AsyncMock()
+            if idx == 1:
+                idem = MagicMock()
+                idem.scalar_one_or_none.return_value = None
+                sess.execute = AsyncMock(return_value=idem)
+            elif idx == 2:
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+                sess.refresh = AsyncMock(side_effect=lambda obj: setattr(obj, "id", "test-run-uuid"))
+            elif idx == 3:
+                prev = MagicMock()
+                prev.scalar_one_or_none.return_value = None
+                sess.execute = AsyncMock(return_value=prev)
+            elif idx == 4:
+                sess.add = MagicMock()
+                sess.commit = AsyncMock()
+            else:
+                sess.get = AsyncMock(return_value=fake_run)
+                sess.commit = AsyncMock()
+            return sess
+
+        async def __aexit__(self, *args):
+            return False
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="Gold is up.\n\n* Bullet (kitco.com)")]
+    mock_client = AsyncMock()
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    stories = [{"title": "Gold up", "score": 8.0, "link": "http://x", "source_name": "kitco.com",
+                "published": "2026-05-06", "summary": "Gold moved"}]
+
+    with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
+         patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
+         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
+         patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
+         patch("agents.daily_summary.deliver_summary_teaser", AsyncMock(return_value=None)), \
+         patch("agents.daily_summary.deliver_summary_failure_alert", AsyncMock()):
+        await run_daily_summary()
+
+    assert written_notes, "No notes written to agent_run"
+    notes = json.loads(written_notes[-1])
+
+    new_keys = {
+        "candidates_law_serpapi",
+        "candidates_law_nrcan",
+        "candidates_law_after_dedup",
+        "candidates_law_after_filter",
+    }
+    missing = new_keys - set(notes.keys())
+    assert not missing, f"Phase 2 telemetry keys missing: {missing}"
+    # All 4 new keys should be integers
+    for key in new_keys:
+        assert isinstance(notes[key], int), f"{key} must be int, got {type(notes[key])}"
+
+
+def test_build_ontario_law_section_signature_has_required_kwargs():
+    """U5: _build_ontario_law_section is a coroutine function with expected kwargs."""
+    import inspect
+    sig = inspect.signature(_build_ontario_law_section)
+    params = set(sig.parameters.keys())
+    assert "anthropic_client" in params
+    assert "serpapi_client" in params
+    assert "model" in params
+    assert "previous_last_known_law" in params
+
+
+def test_fetch_ontario_law_hits_wired_to_daily_summary():
+    """U6: fetch_ontario_law_hits is imported into agents.daily_summary namespace."""
+    import agents.daily_summary as ds_module
+    assert hasattr(ds_module, "fetch_ontario_law_hits"), (
+        "fetch_ontario_law_hits must be imported in daily_summary.py"
+    )
+
+
+def test_ontario_law_filter_model_resolved_from_settings():
+    """U7: settings.ontario_law_filter_model drives the model passed to _build_ontario_law_section."""
+    import inspect
+    import agents.daily_summary as ds_module
+    source = inspect.getsource(ds_module)
+    assert "settings.ontario_law_filter_model" in source, (
+        "daily_summary must resolve model from settings.ontario_law_filter_model"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ontario_law_section_failure_marks_section_failed():
+    """U8: When fetch_ontario_law_hits raises, _build_ontario_law_section returns (None, [], ...) — section marked failed."""
+    mock_anthropic = AsyncMock()
+
+    with patch("agents.daily_summary.fetch_ontario_law_hits",
+               AsyncMock(side_effect=RuntimeError("filter crashed"))):
+        md, hits_jsonb, new_lkl, counts = await _build_ontario_law_section(
+            anthropic_client=mock_anthropic,
+            serpapi_client=None,
+            model="claude-haiku-4-5",
+            previous_last_known_law=None,
+        )
+
+    assert md is None, "Hard failure should return md=None (section failed)"
+    assert hits_jsonb == []
