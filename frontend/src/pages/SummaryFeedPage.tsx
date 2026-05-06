@@ -39,7 +39,7 @@ export function SummaryFeedPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto py-8 px-4">
+      <div className="max-w-[720px] mx-auto py-8 px-4">
         <p className="text-sm text-muted-foreground">Loading…</p>
       </div>
     )
@@ -47,7 +47,7 @@ export function SummaryFeedPage() {
 
   if (error) {
     return (
-      <div className="max-w-2xl mx-auto py-8 px-4">
+      <div className="max-w-[720px] mx-auto py-8 px-4">
         <p className="text-sm text-destructive">Failed to load summaries.</p>
       </div>
     )
@@ -58,7 +58,7 @@ export function SummaryFeedPage() {
   if (summaries.length === 0) {
     const nextFire = nextCronFireLabelPT()
     return (
-      <div className="max-w-2xl mx-auto py-8 px-4">
+      <div className="max-w-[720px] mx-auto py-8 px-4">
         <p className="text-sm text-muted-foreground">
           Waiting for first summary. Next fire at {nextFire}.
         </p>
@@ -67,7 +67,7 @@ export function SummaryFeedPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
+    <div className="max-w-[720px] mx-auto py-8 px-4 space-y-6">
       {summaries.map((s) => (
         <SummaryCard key={s.id} summary={s} />
       ))}
