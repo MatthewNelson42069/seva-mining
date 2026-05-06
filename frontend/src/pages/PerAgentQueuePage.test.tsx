@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { PerAgentQueuePage } from './PerAgentQueuePage'
+import { PerAgentQueuePage, parseRunNotes } from './PerAgentQueuePage'
 import type { QueueListResponse, AgentRunResponse, DraftItemResponse } from '@/api/types'
 
 vi.mock('@/api/queue', () => ({
@@ -217,5 +217,69 @@ describe('PerAgentQueuePage', () => {
       expect(screen.getByText('No content found')).toBeInTheDocument()
     })
     expect(screen.queryByText('Queue is clear')).not.toBeInTheDocument()
+  })
+})
+
+// OPS-03 contract verification (Phase 4, Plan 01, Task 3):
+//
+// The daily_summary cron writes 13 notes keys including candidates_gold,
+// candidates_law_serpapi, candidates_stats_state, sections_completed (list),
+// sections_failed (list), whatsapp_sent (bool), etc. None of these are
+// recognized by parseRunNotes (which only knows the post-no4 sub-agent
+// shape: x_candidates / llm_accepted / compliance_blocked / queued).
+//
+// The OPS-03 contract is "parseable" in the gracefully-handled sense:
+// - JSON.parse succeeds (the payload is valid JSON)
+// - No matched keys → parts array empty → function returns null
+// - Caller (PerAgentQueueBody, line 169) renders telemetry only when truthy
+//   → null branch silently omits the subtitle line
+//
+// This is the v2.0 acceptance: telemetry is exposed via the API and does
+// not crash the UI. Pretty-rendering daily_summary-specific labels
+// (candidates_gold → "5 gold candidates", sections_completed → "3/3 sections")
+// is deferred to v2.1+ as a UX enhancement, NOT an OPS-03 blocker.
+describe('parseRunNotes — OPS-03 graceful fallback', () => {
+  // Exact notes payload shape from scheduler/agents/daily_summary.py lines 577-591
+  const dailySummaryNotesPayload = JSON.stringify({
+    candidates_gold: 5,
+    candidates_law: 2,
+    candidates_law_serpapi: 8,
+    candidates_law_nrcan: 4,
+    candidates_law_after_dedup: 10,
+    candidates_law_after_filter: 2,
+    candidates_stats: 0,
+    candidates_stats_state: 'fresh',
+    candidates_stats_period: '2026-02',
+    candidates_stats_release_time: '2026-04-21T08:30:00Z',
+    sections_completed: ['gold_news', 'ontario_law', 'ontario_stats'],
+    sections_failed: [],
+    whatsapp_sent: true,
+  })
+
+  // Exact notes payload from scheduler/agents/daily_summary_prune.py (Phase 4 Task 1)
+  const pruneNotesPayload = JSON.stringify({
+    deleted_count: 3,
+    cutoff_at: '2026-04-26T10:30:00Z',
+  })
+
+  it('returns null for daily_summary notes payload (no recognized keys — graceful no-op)', () => {
+    expect(parseRunNotes(dailySummaryNotesPayload)).toBeNull()
+  })
+
+  it('returns null for daily_summary_prune notes payload (no recognized keys — graceful no-op)', () => {
+    expect(parseRunNotes(pruneNotesPayload)).toBeNull()
+  })
+
+  it('does not throw on daily_summary notes payload', () => {
+    expect(() => parseRunNotes(dailySummaryNotesPayload)).not.toThrow()
+  })
+
+  it('preserves existing sub-agent telemetry rendering (regression guard — Phase 4 must not break post-no4 UI)', () => {
+    const subAgentNotes = JSON.stringify({
+      x_candidates: 10,
+      llm_accepted: 7,
+      queued: 5,
+    })
+    expect(parseRunNotes(subAgentNotes)).toBe('10 candidates · 7 accepted · 5 queued')
   })
 })

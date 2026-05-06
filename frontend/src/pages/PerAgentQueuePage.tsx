@@ -56,7 +56,7 @@ function groupByRun(
  *  Returns formatted subtitle string, or null if notes is absent/malformed/has no known fields.
  *  Format: "N candidates · N accepted · N queued" (blocked suppressed when 0 per D-02).
  */
-function parseRunNotes(notes: string | null | undefined): string | null {
+export function parseRunNotes(notes: string | null | undefined): string | null {
   if (!notes) return null
   let parsed: unknown
   try {
