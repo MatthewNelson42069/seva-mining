@@ -52,16 +52,20 @@ def test_rss_feeds_constant_preserved():
     """RSS_FEEDS constant is preserved and reachable (CONT-02).
 
     quick-260506-i65: shrunk 7 → 4 after live HTTP probe revealed 6 of the
-    original 7 URLs returned 404/403. The 4 entries are mining.com (kept),
-    northernminer.com, goldswitzerland.com, fxstreet.com (all verified live
-    and gold-relevant).
+    original 7 URLs returned 404/403.
+    quick-260506-inz: grew 4 → 5 after re-probe found feeds.bloomberg.com/
+    markets/news.rss alive (the broader markets feed; the commodity-specific
+    URL is still dead). Bloomberg added back as the tier-1 institutional wire.
+    Final 5 entries: mining.com, northernminer.com, goldswitzerland.com,
+    fxstreet.com, bloomberg.com — all verified live.
     """
-    assert len(content_agent.RSS_FEEDS) == 4
+    assert len(content_agent.RSS_FEEDS) == 5
     urls = [u for u, _ in content_agent.RSS_FEEDS]
     assert any("mining.com" in u for u in urls)
     assert any("northernminer.com" in u for u in urls)
     assert any("goldswitzerland.com" in u for u in urls)
     assert any("fxstreet.com" in u for u in urls)
+    assert any("feeds.bloomberg.com/markets/news.rss" in u for u in urls)
     # Each entry must be a (url, source_name) tuple of length 2
     for entry in content_agent.RSS_FEEDS:
         assert isinstance(entry, tuple) and len(entry) == 2
@@ -70,16 +74,37 @@ def test_rss_feeds_constant_preserved():
         assert "." in source_name and " " not in source_name
 
 
+def test_rss_feeds_bloomberg_uses_markets_feed():
+    """quick-260506-inz: Bloomberg URL must be the broader markets/news.rss
+    feed (the commodity-specific feed is still dead). The (url, source_name)
+    pair maps the broader feed to the canonical 'bloomberg.com' domain so
+    CREDIBILITY_TIERS lookup hits the tier-1 entry (1.0).
+    """
+    bloomberg_entries = [
+        (u, s) for u, s in content_agent.RSS_FEEDS if s == "bloomberg.com"
+    ]
+    assert len(bloomberg_entries) == 1, "expected exactly one bloomberg.com feed"
+    url, _ = bloomberg_entries[0]
+    assert url == "https://feeds.bloomberg.com/markets/news.rss"
+    assert "commodities" not in url, (
+        "must NOT use feeds.bloomberg.com/commodities/news.rss — that URL is dead"
+    )
+
+
 def test_rss_feeds_dead_urls_removed():
-    """quick-260506-i65: confirm the 6 dead URLs are gone from RSS_FEEDS.
+    """quick-260506-i65: confirm the dead URLs are gone from RSS_FEEDS.
 
     Live probe results that drove this removal:
     - kitco.com/rss/news.xml → 404 (no working alternative)
     - juniorminingnetwork.com/feed → 403 (anti-scraping)
     - gold.org/goldhub/news/feed → 404 (WGC removed RSS)
     - bnnbloomberg.ca/feed/ → 404
-    - feeds.bloomberg.com/commodities/news.rss → 404
+    - feeds.bloomberg.com/commodities/news.rss → 404 (commodity-specific dead)
     - goldseek.com/feed/ → 404
+
+    quick-260506-inz: feeds.bloomberg.com/markets/news.rss WAS added back
+    (broader markets feed is alive). The commodity-specific URL must remain
+    absent.
     """
     urls = [u for u, _ in content_agent.RSS_FEEDS]
     assert not any("kitco.com/rss" in u for u in urls), "dead kitco RSS still present"
@@ -88,7 +113,9 @@ def test_rss_feeds_dead_urls_removed():
     )
     assert not any("gold.org/goldhub" in u for u in urls), "dead gold.org RSS still present"
     assert not any("bnnbloomberg.ca/feed" in u for u in urls), "dead BNN RSS still present"
-    assert not any("feeds.bloomberg.com" in u for u in urls), "dead Bloomberg RSS still present"
+    assert not any("feeds.bloomberg.com/commodities" in u for u in urls), (
+        "dead Bloomberg commodities RSS still present (use markets/news.rss instead)"
+    )
     assert not any("goldseek.com/feed" in u for u in urls), "dead goldseek RSS still present"
 
 

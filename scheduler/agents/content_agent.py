@@ -56,12 +56,22 @@ logger = logging.getLogger(__name__)
 #   - juniorminingnetwork.com/feed   → 403 (anti-scraping, blocks browser UA)
 #   - gold.org/goldhub/news/feed     → 404 (WGC removed RSS; no replacement)
 #   - bnnbloomberg.ca/feed/          → 404
-#   - feeds.bloomberg.com/...rss     → 404 (Bloomberg killed public commodity RSS)
+#   - feeds.bloomberg.com/commodities/news.rss → 404 (commodity-specific dead)
 #   - goldseek.com/feed/             → 404
 # Replaced the dead URLs with 3 verified-live, gold-relevant feeds:
 #   - northernminer.com/feed         → 30 KB valid RSS, Canadian mining authority
 #   - goldswitzerland.com/feed       → 14 KB pure gold commentary
 #   - fxstreet.com/rss/news          → 17 KB gold + macro commodity market data
+#
+# quick-260506-inz (2026-05-06): Added back Bloomberg via the broader
+# markets/news.rss feed (the original commodity-specific URL is still 404 but
+# this broader markets feed is alive at ~33 KB / ~20 articles). Bloomberg's
+# tier-1 credibility (1.0) means even though only ~5-15% of items are gold-
+# relevant on a typical day, the few stories that are (central bank gold
+# purchases, hedge fund gold positions, macro gold drivers) carry strong
+# signal. The Sonnet relevance filter drops the ~85% non-gold content; net
+# Anthropic cost increase is well within the $30-50/mo budget.
+#
 # Credibility tiers below updated to match. SerpAPI (broader keyword sweep)
 # remains the heavy lifter; RSS is the long-tail catch.
 RSS_FEEDS = [
@@ -69,6 +79,7 @@ RSS_FEEDS = [
     ("https://www.northernminer.com/feed/", "northernminer.com"),
     ("https://goldswitzerland.com/feed/", "goldswitzerland.com"),
     ("https://www.fxstreet.com/rss/news", "fxstreet.com"),
+    ("https://feeds.bloomberg.com/markets/news.rss", "bloomberg.com"),
 ]
 
 # ---------------------------------------------------------------------------
