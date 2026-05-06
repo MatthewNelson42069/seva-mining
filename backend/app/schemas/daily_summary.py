@@ -1,4 +1,4 @@
-"""Pydantic schemas for daily_summaries — Phase 1, Plan 01.
+"""Pydantic schemas for daily_summaries — Phase 1, Plan 01 / Phase 3.
 
 Includes:
 - RawSources: typed model gating raw_sources_jsonb writes (Pitfall HIGH-4 mitigation)
@@ -7,6 +7,7 @@ Includes:
 """
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,11 +52,33 @@ class OntarioLawState(BaseModel):
     last_known_law: LastKnownLaw | None = None  # Phase 2 narrows from OntarioLawHit to LastKnownLaw
 
 
+class OntarioStatsSnapshot(BaseModel):
+    """One StatCan polled state — Phase 3.
+
+    Stored at daily_summaries.raw_sources_jsonb.ontario_stats.snapshot
+    and propagated forward across non-release-day fires. period is
+    the StatCan reference period (refPer, YYYY-MM). figure_kg is the
+    Ontario gold recoverable production figure (vectorId 1146004456).
+    release_time is StatCan's release timestamp (lexicographically
+    comparable as ISO YYYY-MM-DDThh:mm).
+    """
+    period: str  # "YYYY-MM"
+    figure_kg: float
+    release_time: str  # "YYYY-MM-DDThh:mm"
+    prior_period: str | None = None
+    prior_figure_kg: float | None = None
+
+
 class OntarioStatsState(BaseModel):
-    """Ontario stats section state — snapshot + last known figure."""
-    snapshot_date: str = ""  # YYYY-MM
-    last_known_figure: float | None = None
-    fresh_data: dict | None = None
+    """Ontario stats section state — Phase 3 (replaces Phase 1 placeholder).
+
+    snapshot: latest StatCan polled figure (None on first-ever fire or after error)
+    last_state: which branch the last fire took
+    last_error_text: short error string for visibility on last_state='error'
+    """
+    snapshot: OntarioStatsSnapshot | None = None
+    last_state: Literal["fresh", "no_new_data", "error"] | None = None
+    last_error_text: str | None = None
 
 
 class RawSources(BaseModel):
