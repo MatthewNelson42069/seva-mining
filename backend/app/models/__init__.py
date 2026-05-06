@@ -6,6 +6,7 @@ from app.models.base import Base
 from app.models.config import Config
 from app.models.content_bundle import ContentBundle
 from app.models.daily_digest import DailyDigest
+from app.models.daily_summary import DailySummary
 from app.models.draft_item import DraftItem, DraftStatus
 from app.models.keyword import Keyword
 from app.models.market_snapshot import MarketSnapshot
@@ -17,6 +18,7 @@ __all__ = [
     "ContentBundle",
     "AgentRun",
     "DailyDigest",
+    "DailySummary",
     "Watchlist",
     "Keyword",
     "Config",
