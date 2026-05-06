@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import { getSummaries, useSummaries } from '../summaries'
 import * as client from '../client'
