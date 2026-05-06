@@ -30,13 +30,25 @@ class OntarioLawHit(BaseModel):
     source_name: str
     bill_or_reg_number: str | None = None
     favour_or_neutral: str | None = None  # 'favour' | 'neutral' | 'against'
+    reason: str | None = None  # Phase 2 — used in the markdown bullet rendering
     published_at: datetime | None = None
+
+
+class LastKnownLaw(BaseModel):
+    """Continuity pointer for Ontario Law empty-state copy.
+
+    Stored at daily_summaries.raw_sources_jsonb.ontario_law.last_known_law
+    and propagated forward across fires that produce zero surviving hits.
+    """
+    date: str  # YYYY-MM-DD — date of the fire that produced this hit
+    law_name: str  # e.g. "Bill 71 (Building Ontario Act)"
+    url: str  # link to the article that surfaced the hit
 
 
 class OntarioLawState(BaseModel):
     """Ontario law section state — hits + continuity pointer."""
     hits: list[OntarioLawHit] = Field(default_factory=list)
-    last_known_law: OntarioLawHit | None = None
+    last_known_law: LastKnownLaw | None = None  # Phase 2 narrows from OntarioLawHit to LastKnownLaw
 
 
 class OntarioStatsState(BaseModel):

@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # sandbox session is verified active.
     whatsapp_delivery_enabled: bool = False
 
+    # v2.0 Phase 2 — Ontario Law relevance filter (HIGH-1, HIGH-2, HIGH-6)
+    # Mirrors scheduler/config.py for env-var parity. Backend never invokes the
+    # filter directly today, but parity prevents drift if a future debug endpoint
+    # surfaces filter config.
+    ontario_law_filter_model: str = "claude-haiku-4-5"
+
     # Feed base URL embedded in WhatsApp teasers. Defaults to the production
     # Vercel URL so dev environments without FEED_BASE_URL set still produce
     # working clickable links to the user's feed.
