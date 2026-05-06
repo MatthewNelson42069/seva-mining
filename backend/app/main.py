@@ -14,6 +14,7 @@ from app.routers.digests import router as digests_router
 from app.routers.keywords import router as keywords_router
 from app.routers.post_to_x import router as post_to_x_router
 from app.routers.queue import router as queue_router
+from app.routers.summaries import router as summaries_router
 from app.routers.watchlists import router as watchlists_router
 
 
@@ -59,6 +60,7 @@ app.include_router(content_router)
 app.include_router(config_router)
 app.include_router(content_bundles_router)
 app.include_router(post_to_x_router)  # Phase B (quick-260424-l0d)
+app.include_router(summaries_router)  # Phase 1, Plan 04 (v2.0 daily summary feed)
 
 
 @app.get("/health")
