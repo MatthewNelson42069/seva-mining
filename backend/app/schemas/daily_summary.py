@@ -9,7 +9,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ---------------------------------------------------------------------------
 # RawSources — strict shape for raw_sources_jsonb writes (HIGH-4 mitigation)
 # ---------------------------------------------------------------------------
