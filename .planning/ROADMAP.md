@@ -113,6 +113,6 @@ step, not a build step, and is cheapest to do once the full v2.0 feature set is 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Gold News Card + Web Feed | 6/6 | Complete    | 2026-05-06 |
-| 2. Ontario Law Ingestion | 1/1 | Complete   | 2026-05-06 |
+| 2. Ontario Law Ingestion | 1/1 | Complete    | 2026-05-06 |
 | 3. Ontario Stats Ingestion | 0/TBD | Not started | - |
 | 4. Prune Cron + Operations Hardening | 0/TBD | Not started | - |
