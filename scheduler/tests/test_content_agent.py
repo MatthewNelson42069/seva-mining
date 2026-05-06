@@ -49,9 +49,84 @@ from agents import content_agent  # noqa: E402
 
 
 def test_rss_feeds_constant_preserved():
-    """RSS_FEEDS constant is preserved and reachable (CONT-02)."""
-    assert len(content_agent.RSS_FEEDS) == 7
-    assert any("kitco" in url for url, _ in content_agent.RSS_FEEDS)
+    """RSS_FEEDS constant is preserved and reachable (CONT-02).
+
+    quick-260506-i65: shrunk 7 → 4 after live HTTP probe revealed 6 of the
+    original 7 URLs returned 404/403. The 4 entries are mining.com (kept),
+    northernminer.com, goldswitzerland.com, fxstreet.com (all verified live
+    and gold-relevant).
+    """
+    assert len(content_agent.RSS_FEEDS) == 4
+    urls = [u for u, _ in content_agent.RSS_FEEDS]
+    assert any("mining.com" in u for u in urls)
+    assert any("northernminer.com" in u for u in urls)
+    assert any("goldswitzerland.com" in u for u in urls)
+    assert any("fxstreet.com" in u for u in urls)
+    # Each entry must be a (url, source_name) tuple of length 2
+    for entry in content_agent.RSS_FEEDS:
+        assert isinstance(entry, tuple) and len(entry) == 2
+        url, source_name = entry
+        assert url.startswith("https://")
+        assert "." in source_name and " " not in source_name
+
+
+def test_rss_feeds_dead_urls_removed():
+    """quick-260506-i65: confirm the 6 dead URLs are gone from RSS_FEEDS.
+
+    Live probe results that drove this removal:
+    - kitco.com/rss/news.xml → 404 (no working alternative)
+    - juniorminingnetwork.com/feed → 403 (anti-scraping)
+    - gold.org/goldhub/news/feed → 404 (WGC removed RSS)
+    - bnnbloomberg.ca/feed/ → 404
+    - feeds.bloomberg.com/commodities/news.rss → 404
+    - goldseek.com/feed/ → 404
+    """
+    urls = [u for u, _ in content_agent.RSS_FEEDS]
+    assert not any("kitco.com/rss" in u for u in urls), "dead kitco RSS still present"
+    assert not any("juniorminingnetwork.com/feed" in u for u in urls), (
+        "dead JMN RSS still present"
+    )
+    assert not any("gold.org/goldhub" in u for u in urls), "dead gold.org RSS still present"
+    assert not any("bnnbloomberg.ca/feed" in u for u in urls), "dead BNN RSS still present"
+    assert not any("feeds.bloomberg.com" in u for u in urls), "dead Bloomberg RSS still present"
+    assert not any("goldseek.com/feed" in u for u in urls), "dead goldseek RSS still present"
+
+
+def test_credibility_tiers_new_sources_present():
+    """quick-260506-i65: 3 new domains added to CREDIBILITY_TIERS.
+
+    northernminer.com is tier-2 mining authority (0.8). goldswitzerland.com
+    and fxstreet.com are tier-3 commentary/analysis (0.6).
+    """
+    assert content_agent.CREDIBILITY_TIERS.get("northernminer.com") == 0.8
+    assert content_agent.CREDIBILITY_TIERS.get("goldswitzerland.com") == 0.6
+    assert content_agent.CREDIBILITY_TIERS.get("fxstreet.com") == 0.6
+
+
+def test_credibility_tiers_legacy_sources_preserved():
+    """quick-260506-i65: legacy entries (kitco/bloomberg/etc.) MUST remain.
+
+    Even though their RSS feeds are dead, these domains may still appear in
+    SerpAPI search results. Removing them from CREDIBILITY_TIERS would
+    inappropriately penalise legitimate gold-relevant stories from those
+    publications.
+    """
+    legacy = {
+        "reuters.com": 1.0,
+        "bloomberg.com": 1.0,
+        "worldgoldcouncil.org": 0.9,
+        "gold.org": 0.9,
+        "kitco.com": 0.8,
+        "mining.com": 0.8,
+        "juniorminingnetwork.com": 0.7,
+        "goldseek.com": 0.6,
+        "investing.com": 0.6,
+    }
+    for domain, expected_score in legacy.items():
+        assert content_agent.CREDIBILITY_TIERS.get(domain) == expected_score, (
+            f"{domain} expected {expected_score}, got "
+            f"{content_agent.CREDIBILITY_TIERS.get(domain)}"
+        )
 
 
 def test_serpapi_keywords_constant_preserved():
@@ -109,10 +184,16 @@ def test_serpapi_keywords_total_count_and_unique():
 
 
 def test_rss_feeds_reuters_dropped_bnn_added():
-    """Dead Reuters feed removed, BNN Bloomberg added (htu)."""
+    """Historical: dead Reuters feed removed (htu).
+
+    quick-260506-i65 update: BNN Bloomberg ALSO removed (also went 404). Test
+    repurposed to assert no Reuters feed AND no BNN Bloomberg feed (both dead).
+    """
     urls = [u for u, _ in content_agent.RSS_FEEDS]
     assert not any("feeds.reuters.com" in u for u in urls), "dead Reuters feed still present"
-    assert any("bnnbloomberg.ca" in u for u in urls), "BNN Bloomberg feed missing"
+    assert not any("bnnbloomberg.ca" in u for u in urls), (
+        "BNN Bloomberg feed went 404 (quick-260506-i65) — should not be present"
+    )
 
 
 # ---------------------------------------------------------------------------

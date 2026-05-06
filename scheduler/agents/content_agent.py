@@ -48,15 +48,27 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # RSS feed list — module-level constant (CONT-02)
 # ---------------------------------------------------------------------------
-
+#
+# quick-260506-i65 (2026-05-06): Live HTTP probe revealed the original 7-feed
+# list had rotted to 1 working source. Modern news sites have largely killed
+# public RSS:
+#   - kitco.com/rss/news.xml         → 404 (no replacement; kitco removed RSS)
+#   - juniorminingnetwork.com/feed   → 403 (anti-scraping, blocks browser UA)
+#   - gold.org/goldhub/news/feed     → 404 (WGC removed RSS; no replacement)
+#   - bnnbloomberg.ca/feed/          → 404
+#   - feeds.bloomberg.com/...rss     → 404 (Bloomberg killed public commodity RSS)
+#   - goldseek.com/feed/             → 404
+# Replaced the dead URLs with 3 verified-live, gold-relevant feeds:
+#   - northernminer.com/feed         → 30 KB valid RSS, Canadian mining authority
+#   - goldswitzerland.com/feed       → 14 KB pure gold commentary
+#   - fxstreet.com/rss/news          → 17 KB gold + macro commodity market data
+# Credibility tiers below updated to match. SerpAPI (broader keyword sweep)
+# remains the heavy lifter; RSS is the long-tail catch.
 RSS_FEEDS = [
-    ("https://www.kitco.com/rss/news.xml", "kitco.com"),
     ("https://www.mining.com/feed/", "mining.com"),
-    ("https://www.juniorminingnetwork.com/feed", "juniorminingnetwork.com"),
-    ("https://www.gold.org/goldhub/news/feed", "gold.org"),
-    ("https://www.bnnbloomberg.ca/feed/", "bnnbloomberg.ca"),
-    ("https://feeds.bloomberg.com/commodities/news.rss", "bloomberg.com"),
-    ("https://goldseek.com/feed/", "goldseek.com"),
+    ("https://www.northernminer.com/feed/", "northernminer.com"),
+    ("https://goldswitzerland.com/feed/", "goldswitzerland.com"),
+    ("https://www.fxstreet.com/rss/news", "fxstreet.com"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -91,15 +103,21 @@ SERPAPI_KEYWORDS = [
 # ---------------------------------------------------------------------------
 
 CREDIBILITY_TIERS: dict[str, float] = {
+    # Tier 1 — institutional wire services / authoritative bodies
     "reuters.com": 1.0,
     "bloomberg.com": 1.0,
     "worldgoldcouncil.org": 0.9,
     "gold.org": 0.9,
-    "kitco.com": 0.8,
+    # Tier 2 — established mining trade press
+    "kitco.com": 0.8,                # may appear in SerpAPI even though RSS is dead
     "mining.com": 0.8,
-    "juniorminingnetwork.com": 0.7,
-    "goldseek.com": 0.6,
+    "northernminer.com": 0.8,        # quick-260506-i65 — NEW, Canadian mining authority
+    "juniorminingnetwork.com": 0.7,  # may appear in SerpAPI even though RSS is dead
+    # Tier 3 — gold-focused commentary + market analysis
+    "goldswitzerland.com": 0.6,      # quick-260506-i65 — NEW, Von Greyerz/Piepenburg gold commentary
+    "goldseek.com": 0.6,             # may appear in SerpAPI
     "investing.com": 0.6,
+    "fxstreet.com": 0.6,             # quick-260506-i65 — NEW, market analysis incl. gold
 }
 DEFAULT_CREDIBILITY = 0.4
 
