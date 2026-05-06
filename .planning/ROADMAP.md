@@ -59,7 +59,8 @@ or read on WhatsApp.
   2. On any non-release day (the default — roughly 29/30 days per month), the Ontario Stats section renders "No new production statistics released today. Next Monthly Mineral Production Survey release expected around {date}. Last data: {YYYY-MM} — Ontario gold production: {figure} oz." — not a blank section
   3. When the StatCan WDS API call fails (ingestion error), the section renders a visually distinct error state that links to the agent-runs log — distinguishable from the expected no-data state without opening the DB
   4. The `snapshot_date` (YYYY-MM) and `last_known_figure` are stored in `daily_summaries.raw_sources_jsonb.ontario_stats` so the empty-state copy renders without re-querying StatCan
-**Plans**: TBD
+**Plans:** 0/1 plans complete
+- [ ] 03-01-PLAN.md — ontario_stats.py module (StatCan WDS direct vector poll for vectorId 1146004456) + Pydantic OntarioStatsSnapshot + _build_ontario_stats_section() wired into daily_summary.py + 3 telemetry keys + comprehensive tests
 
 ### Phase 4: Prune Cron + Operations Hardening
 **Goal**: The system enforces 30-day retention automatically, daily_summary telemetry is visible in the existing /agent-runs UI, and v1.0 sub-agent retirement is confirmed as cron-deregistration-only with no source code deletion
@@ -114,5 +115,5 @@ step, not a build step, and is cheapest to do once the full v2.0 feature set is 
 |-------|----------------|--------|-----------|
 | 1. Gold News Card + Web Feed | 6/6 | Complete    | 2026-05-06 |
 | 2. Ontario Law Ingestion | 1/1 | Complete    | 2026-05-06 |
-| 3. Ontario Stats Ingestion | 0/TBD | Not started | - |
+| 3. Ontario Stats Ingestion | 0/1 | Planned | - |
 | 4. Prune Cron + Operations Hardening | 0/TBD | Not started | - |
