@@ -60,9 +60,9 @@ Replaces `/queue`. Reads from `GET /summaries`. Markdown-safe via react-markdown
 
 Teaser pattern (< 400 chars + link to feed). Failure alert is independent and isolated.
 
-- [ ] **WHA-01**: System sends a WhatsApp teaser message (< 400 chars) on each successful daily_summary fire — format: "📊 Summary {time PT}: [1-sentence lead from gold-news section]. Read full → {feed_url}"
-- [ ] **WHA-02**: System sends a separate WhatsApp failure-alert message when daily_summary errors out — format: "⚠️ Summary {time PT} FAILED: section(s) {failed_section_list}. agent_run_id: {id}"; the alert send is wrapped in its own try/except so a Twilio outage doesn't loop or cascade
-- [ ] **WHA-03**: System logs `len(teaser_message)` per send and asserts `< 400` chars at write time so accidental regressions to `build_chunks()` are caught immediately
+- [x] **WHA-01**: System sends a WhatsApp teaser message (< 400 chars) on each successful daily_summary fire — format: "📊 Summary {time PT}: [1-sentence lead from gold-news section]. Read full → {feed_url}"
+- [x] **WHA-02**: System sends a separate WhatsApp failure-alert message when daily_summary errors out — format: "⚠️ Summary {time PT} FAILED: section(s) {failed_section_list}. agent_run_id: {id}"; the alert send is wrapped in its own try/except so a Twilio outage doesn't loop or cascade
+- [x] **WHA-03**: System logs `len(teaser_message)` per send and asserts `< 400` chars at write time so accidental regressions to `build_chunks()` are caught immediately
 
 ### Operations (OPS)
 
@@ -136,9 +136,9 @@ Acknowledged but deferred. These are differentiators or follow-ups, not blockers
 | FEED-04 | Phase 1 | Pending |
 | FEED-05 | Phase 1 | Pending |
 | FEED-06 | Phase 1 | Complete |
-| WHA-01 | Phase 1 | Pending |
-| WHA-02 | Phase 1 | Pending |
-| WHA-03 | Phase 1 | Pending |
+| WHA-01 | Phase 1 | Complete |
+| WHA-02 | Phase 1 | Complete |
+| WHA-03 | Phase 1 | Complete |
 | OPS-01 | Phase 4 | Pending |
 | OPS-02 | Phase 1 | Pending |
 | OPS-03 | Phase 4 | Pending |
