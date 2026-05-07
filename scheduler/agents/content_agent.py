@@ -824,6 +824,9 @@ async def _fetch_all_rss() -> list[dict]:
                     "published": published,
                     "summary": entry.get("summary", ""),
                     "source_name": source,
+                    # quick-260507-drw — tag for downstream telemetry
+                    # so daily_summary can break down candidates by ingestion path.
+                    "_source_type": "rss",
                 }
             )
     return stories
@@ -876,6 +879,9 @@ async def _fetch_all_serpapi(serpapi_client: "serpapi.Client | None") -> list[di
                     "published": published,
                     "summary": item.get("snippet", ""),
                     "source_name": source_name,
+                    # quick-260507-drw — tag for downstream telemetry
+                    # so daily_summary can break down candidates by ingestion path.
+                    "_source_type": "serpapi",
                 }
             )
     return stories

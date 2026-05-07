@@ -922,6 +922,88 @@ async def test_fetch_analytical_historical_stories_handles_no_client():
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# quick-260507-drw — _source_type tagging on RSS + SerpAPI ingestion
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_rss_tags_source_type_rss():
+    """quick-260507-drw: _fetch_all_rss must tag every story with
+    `_source_type='rss'` so daily_summary can break down candidates by
+    ingestion path.
+    """
+    from unittest.mock import MagicMock
+
+    # Mock feedparser.parse to return a fake feed with 2 entries
+    fake_entry = {
+        "title": "Gold story 1",
+        "link": "https://example.com/1",
+        "summary": "Summary 1",
+        "published_parsed": (2026, 5, 7, 12, 0, 0, 0, 0, 0),
+    }
+    fake_feed = MagicMock()
+    fake_feed.entries = [fake_entry]
+
+    # Patch the module-level RSS_FEEDS to a single tuple to keep the test simple
+    with patch.object(content_agent, "RSS_FEEDS", [("https://x", "test-source")]), \
+         patch.object(content_agent.feedparser, "parse", return_value=fake_feed):
+        stories = await content_agent._fetch_all_rss()
+
+    assert len(stories) == 1
+    assert all(s.get("_source_type") == "rss" for s in stories), (
+        f"All RSS stories must have _source_type='rss'. Got: {[s.get('_source_type') for s in stories]}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_serpapi_tags_source_type_serpapi():
+    """quick-260507-drw: _fetch_all_serpapi must tag every story with
+    `_source_type='serpapi'` so daily_summary can break down candidates by
+    ingestion path.
+    """
+    from unittest.mock import MagicMock
+
+    fake_serpapi_result = {
+        "news_results": [
+            {
+                "title": "Gold price hits high",
+                "link": "https://example.com/gold",
+                "snippet": "Snippet text",
+                "date": "05/07/2026, 10:00 AM, +0000 UTC",
+                "source": {"name": "test.com"},
+            }
+        ]
+    }
+    mock_client = MagicMock()
+    mock_client.search = MagicMock(return_value=fake_serpapi_result)
+
+    # Limit SERPAPI_KEYWORDS to one keyword to keep the test fast and deterministic
+    with patch.object(content_agent, "SERPAPI_KEYWORDS", ["gold price"]):
+        stories = await content_agent._fetch_all_serpapi(mock_client)
+
+    assert len(stories) >= 1
+    assert all(s.get("_source_type") == "serpapi" for s in stories), (
+        f"All SerpAPI stories must have _source_type='serpapi'. Got: {[s.get('_source_type') for s in stories]}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_serpapi_returns_empty_when_no_client():
+    """quick-260507-drw — preserve existing graceful-degrade: when
+    serpapi_client is None (env var missing), return [] without raising.
+    The downstream telemetry counter `candidates_gold_serpapi=0` is the
+    operator's signal that the SerpAPI key is not configured.
+    """
+    stories = await content_agent._fetch_all_serpapi(None)
+    assert stories == [], "must return empty list when no client (graceful-degrade)"
+
+
+# ---------------------------------------------------------------------------
+# recency_score — quick-260424-j5i D3: new <48h=0.3 bucket
+# ---------------------------------------------------------------------------
+
+
 def test_recency_score_48h_bucket():
     """D3 (j5i): recency_score grows a <48h=0.3 bucket between <24h=0.4 and >=48h=0.2.
 

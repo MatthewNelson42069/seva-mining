@@ -152,7 +152,7 @@ async def test_build_gold_news_section_filters_by_score_floor():
     mock_client.messages.create = AsyncMock(return_value=mock_anthropic_response)
 
     with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
-        md, raw = await _build_gold_news_section(mock_client)
+        md, raw, counts = await _build_gold_news_section(mock_client)
 
     # Should return 5 stories (9.0, 8.0, 7.5, 6.5, 6.0) — not the 5.5
     assert len(raw) == 5, f"Expected 5 stories in raw, got {len(raw)}: {[s['title'] for s in raw]}"
@@ -181,7 +181,7 @@ async def test_build_gold_news_section_top_n_is_5():
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
-        md, raw = await _build_gold_news_section(mock_client)
+        md, raw, counts = await _build_gold_news_section(mock_client)
 
     assert len(raw) == 5, f"Expected GOLD_TOP_N=5 stories, got {len(raw)}"
 
@@ -203,7 +203,7 @@ async def test_build_gold_news_section_empty_state_when_no_qualifying_stories():
 
     with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
          patch("agents.daily_summary.fetch_market_snapshot", AsyncMock(return_value={"gold_24h_low": 3200.0, "gold_24h_high": 3280.0})):
-        md, raw = await _build_gold_news_section(mock_client)
+        md, raw, counts = await _build_gold_news_section(mock_client)
 
     assert md is not None
     assert "No major moves in gold today" in md, f"Expected empty-state copy in: {md!r}"
@@ -242,10 +242,36 @@ async def test_gold_empty_state_fallback_when_snapshot_fails():
 # ---------------------------------------------------------------------------
 
 
-def test_gold_news_system_prompt_contains_why_it_matters():
-    """GOLD_NEWS_SYSTEM_PROMPT includes 'Why it matters' lead instruction."""
-    assert "Why it matters" in GOLD_NEWS_SYSTEM_PROMPT, (
-        "GOLD_NEWS_SYSTEM_PROMPT must include 'Why it matters'"
+def test_gold_news_system_prompt_contains_headline_grouped_format():
+    """quick-260507-drw — GOLD_NEWS_SYSTEM_PROMPT instructs the headline-grouped
+    format (1-3 adaptive headlines, 2-4 bullets each).
+
+    Replaces the legacy 'Why it matters' single-lead format. The new prompt
+    must instruct **bold headline** (markdown strong) per story, with bullets
+    grouped underneath.
+    """
+    prompt = GOLD_NEWS_SYSTEM_PROMPT
+    # Adaptive headline count instruction
+    assert "1 to 3" in prompt, "must instruct adaptive 1-3 headline count"
+    # Markdown strong (bold) syntax for headlines
+    assert "**bold" in prompt, "must instruct **bold** headline syntax"
+    # Bullet count instruction (2-4 per headline)
+    assert "2 to 4" in prompt, "must instruct adaptive 2-4 bullets per headline"
+    # No legacy 'Why it matters' framing — that was the flat-format lead
+    assert "Why it matters" not in prompt, (
+        "legacy 'Why it matters' lead removed in quick-260507-drw"
+    )
+
+
+def test_gold_news_system_prompt_no_numbered_headline_prefix():
+    """quick-260507-drw — User wanted 'Gold headline #1' / '#2' as the visual
+    structure, but per the implementation note in the prompt the literal
+    prefix 'Gold headline #1:' should NOT be emitted — the bold headline IS
+    the visible separator. Verify the prompt explicitly forbids this prefix.
+    """
+    assert "Gold headline #" not in GOLD_NEWS_SYSTEM_PROMPT or (
+        "no \"Gold headline #1:\" prefix" in GOLD_NEWS_SYSTEM_PROMPT
+        or "no 'Gold headline #1:' prefix" in GOLD_NEWS_SYSTEM_PROMPT
     )
 
 
@@ -345,9 +371,16 @@ def test_gold_news_system_prompt_contains_date_instruction():
 
 @pytest.mark.asyncio
 async def test_run_daily_summary_writes_telemetry_notes_with_required_keys():
-    """agent_runs telemetry notes must contain all 6 SUM-04 keys."""
+    """agent_runs telemetry notes must contain all 6 SUM-04 keys + the 4 new
+    quick-260507-drw raw-count keys for the gold ingestion path.
+    """
     required_keys = {
         "candidates_gold",
+        # quick-260507-drw — RSS / SerpAPI / total / after_floor breakdown
+        "candidates_gold_rss",
+        "candidates_gold_serpapi",
+        "candidates_gold_total",
+        "candidates_gold_after_floor",
         "candidates_law",
         "candidates_stats",
         "sections_completed",

@@ -57,30 +57,50 @@ SONNET_MODEL = "claude-sonnet-4-6"  # locked — Sonnet for the WRITE call only
 SONNET_MAX_TOKENS = 800         # ~1200 chars target (locked SUMMARY.md budget)
 IDEMPOTENCY_WINDOW_MIN = 30     # CRIT-3 — match misfire_grace_time
 
-# GOLD-02 prompt template — kept as a module-level constant so tests can
-# grep for the locked structural elements (1-sentence lead, 3-5 bullets,
-# inline source citation, ≤ 25 words per bullet).
+# GOLD-02 prompt template — quick-260507-drw moved from a flat 1-lead +
+# 3-5-bullets format to a headline-grouped format per user feedback after the
+# first 08:00 PT card landed: "Lets make it so the gold headlines and news
+# stuff is 1 by 1. Gold headline #1 / [bullets] / Gold headline #2 / [bullets].
+# If it warrants a second gold headline." Each headline is rendered as a
+# **bold story heading** (markdown strong, NOT `#` heading — rehype-sanitize
+# strips `<h1>..<h6>` but renders `<strong>` cleanly). Adaptive 1-3 headlines
+# based on the candidate pool's diversity. Each headline gets 2-4 bullets
+# digging into supporting details / market angles. Bullets under one headline
+# can cite multiple sources.
 GOLD_NEWS_SYSTEM_PROMPT = """\
 You are the writer for a daily gold-sector intelligence summary.
 
 Output MUST be markdown in this exact structure (no preamble, no postamble):
 
-1. ONE sentence on its own line — a "Why it matters" lead that synthesises the
-   top story's significance for gold investors. This lead is reused as the
-   WhatsApp teaser body, so make it self-contained.
-2. A blank line.
-3. 3 to 5 markdown bullet points (use `*` style). Choose the count adaptively
-   based on how many of the supplied stories deserve a bullet — do not pad.
-   Each bullet:
+1. Identify 1 to 3 distinct gold-sector stories from the supplied articles.
+   Group articles that cover the same story (e.g., the same price move, the
+   same M&A deal, the same regulatory change) under ONE headline — do not
+   emit a separate headline for every article.
+   - Use 1 headline if there is one dominant gold story today.
+   - Use 2 headlines if there are two genuinely distinct stories.
+   - Use 3 headlines only if the news is unusually rich AND each story stands
+     on its own; do NOT pad to fill space.
+2. For each story, emit a `**bold one-line headline**` (markdown strong,
+   surrounded by `**`). Keep the headline ≤ 12 words and concrete — name
+   the company, the price, the bill, etc. NOT generic ("Gold rallies").
+3. After each headline, emit 2 to 4 markdown bullet points (use `*` style).
+   Choose the count adaptively based on how many supplied articles speak to
+   that headline — do NOT pad. Each bullet:
      - Maximum 25 words.
      - Ends with `(Source Name)` referencing the article's source.
-     - Does NOT repeat the lead.
+     - Pulls a distinct angle: data point, market reaction, analyst view,
+       supporting context. Do not repeat the headline.
      - Uses ONLY dates explicitly stated in the supplied articles. Do not
        infer, estimate, or use training knowledge for dates. If a story has
        no date, write 'recently' rather than inventing one.
+4. Insert ONE blank line between each headline group (between the last bullet
+   of headline #1 and the `**` line of headline #2).
+5. The first headline is reused as the WhatsApp teaser body — make it
+   self-contained and concrete.
 
-Do NOT emit headings (#, ##, ###). Do NOT emit a 'Sources:' footnote section.
-Do NOT use tables. Do NOT use blockquotes.
+Do NOT emit `#`, `##`, or `###` headings. Do NOT emit a 'Sources:' footnote
+section. Do NOT use tables. Do NOT use blockquotes. Do NOT number the
+headlines (no "Gold headline #1:" prefix — just the bold headline itself).
 """
 
 # GOLD-03 empty-state copy (locked CONTEXT decision):
@@ -110,27 +130,42 @@ async def _idempotency_skip(session: AsyncSession, now_utc: datetime) -> bool:
 
 async def _build_gold_news_section(
     anthropic_client: AsyncAnthropic,
-) -> tuple[str | None, list[dict]]:
-    """GOLD-01/02/03. Returns (markdown_or_None, raw_stories_for_jsonb).
+) -> tuple[str | None, list[dict], dict[str, int]]:
+    """GOLD-01/02/03. Returns (markdown_or_None, raw_stories_for_jsonb, counts).
 
-    Returns (None, []) on hard failure so the caller marks the section as failed.
-    Returns (empty_state_md, []) when no stories clear the score floor.
+    Returns (None, [], counts) on hard failure so the caller marks the section as failed.
+    Returns (empty_state_md, [], counts) when no stories clear the score floor.
+
+    quick-260507-drw — added 4 telemetry counters in `counts`:
+      - rss: pre-filter count of stories tagged `_source_type='rss'`
+      - serpapi: pre-filter count of stories tagged `_source_type='serpapi'`
+      - total: total candidates returned by fetch_stories (post-dedup)
+      - after_floor: count of stories that cleared the >= 6.0 score floor
+    These nest into agent_runs.notes JSONB so the operator can see at a glance
+    if SerpAPI is contributing zero stories (likely missing API key).
     """
+    counts: dict[str, int] = {"rss": 0, "serpapi": 0, "total": 0, "after_floor": 0}
     try:
         stories = await fetch_stories()
     except Exception:
         logger.exception("daily_summary: fetch_stories raised — gold section failed")
-        return (None, [])
+        return (None, [], counts)
+
+    # quick-260507-drw — break down by ingestion path BEFORE any filtering.
+    counts["total"] = len(stories)
+    counts["rss"] = sum(1 for s in stories if s.get("_source_type") == "rss")
+    counts["serpapi"] = sum(1 for s in stories if s.get("_source_type") == "serpapi")
 
     if not stories:
-        return (await _gold_empty_state(), [])
+        return (await _gold_empty_state(), [], counts)
 
     # GOLD-01 — score floor + top N
     relevant = [s for s in stories if (s.get("score") or 0) >= GOLD_SCORE_FLOOR]
+    counts["after_floor"] = len(relevant)
     top = sorted(relevant, key=lambda s: s.get("score") or 0, reverse=True)[:GOLD_TOP_N]
 
     if not top:
-        return (await _gold_empty_state(), [])
+        return (await _gold_empty_state(), [], counts)
 
     # MOD-5 grounding: published_at is in each story dict already.
     # Build the user prompt with explicit per-story context.
@@ -155,7 +190,7 @@ async def _build_gold_news_section(
         md = response.content[0].text.strip()
     except Exception:
         logger.exception("daily_summary: Sonnet write call raised")
-        return (None, top)
+        return (None, top, counts)
 
     # Build raw_sources entry for JSONB (HIGH-4 shape):
     raw = [
@@ -172,7 +207,7 @@ async def _build_gold_news_section(
         }
         for s in top
     ]
-    return (md, raw)
+    return (md, raw, counts)
 
 
 async def _gold_empty_state() -> str:
@@ -452,9 +487,12 @@ async def run_daily_summary() -> None:
             "previous-summary read failed — proceeding with no continuity"
         )
 
+    # quick-260507-drw — gold-section telemetry counts (rss/serpapi/total/after_floor)
+    gold_counts: dict[str, int] = {"rss": 0, "serpapi": 0, "total": 0, "after_floor": 0}
+
     try:
         # --- Section 1: Gold News (real) ---
-        gold_news_md, gold_raw = await _build_gold_news_section(anthropic_client)
+        gold_news_md, gold_raw, gold_counts = await _build_gold_news_section(anthropic_client)
         candidates_gold = len(gold_raw)
         if gold_news_md is not None:
             sections_completed.append("gold_news")
@@ -576,6 +614,11 @@ async def run_daily_summary() -> None:
         try:
             notes_payload = {
                 "candidates_gold": candidates_gold,
+                # quick-260507-drw — raw-count telemetry per ingestion path
+                "candidates_gold_rss": gold_counts.get("rss", 0),
+                "candidates_gold_serpapi": gold_counts.get("serpapi", 0),
+                "candidates_gold_total": gold_counts.get("total", 0),
+                "candidates_gold_after_floor": gold_counts.get("after_floor", 0),
                 "candidates_law": law_counts.get("after_filter", 0),  # Phase 2: real count
                 "candidates_law_serpapi": law_counts.get("serpapi", 0),
                 "candidates_law_nrcan": law_counts.get("nrcan", 0),
