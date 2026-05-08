@@ -187,6 +187,59 @@ async def test_build_gold_news_section_top_n_is_5():
 
 
 # ---------------------------------------------------------------------------
+# quick-260508-dj5 — datetime-not-JSON-serializable regression
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_build_gold_news_section_returns_json_serializable_raw_when_sonnet_raises():
+    """quick-260508-dj5 regression test for the bug that crashed the 2026-05-08
+    08:00 PT fire (run id 50875012). When Sonnet raises, the returned raw list
+    MUST be JSON-serializable (no datetime objects) so the downstream
+    daily_summaries INSERT does not crash with
+    "TypeError: Object of type datetime is not JSON serializable".
+
+    Pre-fix: the except path returned the raw `top` list which still had
+    datetime objects in s["published"], because the JSON-safe conversion only
+    ran on the success path AFTER the try/except.
+    Post-fix: the JSON-safe `raw` is constructed BEFORE the try/except and is
+    returned from both success and failure paths.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+
+    stories = [
+        {
+            "title": "G", "score": 8.0, "link": "http://g", "source_name": "kitco.com",
+            # The critical input: a real datetime object (matches what
+            # _fetch_all_rss / _fetch_all_serpapi populate).
+            "published": datetime(2026, 5, 8, 12, 0, 0, tzinfo=timezone.utc),
+            "summary": "summary",
+        },
+    ]
+
+    mock_client = AsyncMock()
+    # Force the Sonnet call to raise — exercise the fallback path.
+    mock_client.messages.create = AsyncMock(side_effect=RuntimeError("anthropic hiccup"))
+
+    with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
+        md, raw, counts = await _build_gold_news_section(mock_client)
+
+    assert md is None, "md must be None when Sonnet raises"
+    # The critical regression assertion: raw must be JSON-serializable
+    # (this is what would be put into raw_sources_jsonb["gold_news"]).
+    json_str = _json.dumps(raw)  # MUST NOT raise TypeError
+    assert "2026-05-08" in json_str, (
+        f"published_at should be ISO-formatted string in raw, got: {json_str[:200]}"
+    )
+    # Confirm raw retains story metadata for forensic value (we don't lose visibility).
+    assert len(raw) == 1
+    assert raw[0]["title"] == "G"
+    assert raw[0]["score"] == 8.0
+    assert raw[0]["published_at"] is not None
+
+
+# ---------------------------------------------------------------------------
 # Test 4 — GOLD-03 empty state
 # ---------------------------------------------------------------------------
 

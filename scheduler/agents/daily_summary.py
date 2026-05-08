@@ -167,6 +167,27 @@ async def _build_gold_news_section(
     if not top:
         return (await _gold_empty_state(), [], counts)
 
+    # Build raw_sources entry for JSONB (HIGH-4 shape) BEFORE the Sonnet
+    # try/except. quick-260508-dj5: this MUST happen up front so the failure
+    # path returns JSON-serializable data — datetime objects in s["published"]
+    # would otherwise crash the daily_summaries INSERT with
+    # "TypeError: Object of type datetime is not JSON serializable" (this is
+    # what crashed the 2026-05-08 08:00 PT fire when Sonnet timed out).
+    raw = [
+        {
+            "title": s.get("title", ""),
+            "link": s.get("link", ""),
+            "source_name": s.get("source_name", ""),
+            "score": float(s.get("score") or 0.0),
+            "published_at": (
+                s.get("published").isoformat()
+                if hasattr(s.get("published"), "isoformat")
+                else str(s.get("published") or "")
+            ) or None,
+        }
+        for s in top
+    ]
+
     # MOD-5 grounding: published_at is in each story dict already.
     # Build the user prompt with explicit per-story context.
     user_prompt_parts = ["Top gold-sector stories from the last 24 hours:\n"]
@@ -190,23 +211,8 @@ async def _build_gold_news_section(
         md = response.content[0].text.strip()
     except Exception:
         logger.exception("daily_summary: Sonnet write call raised")
-        return (None, top, counts)
+        return (None, raw, counts)  # quick-260508-dj5: return JSON-safe raw, not top
 
-    # Build raw_sources entry for JSONB (HIGH-4 shape):
-    raw = [
-        {
-            "title": s.get("title", ""),
-            "link": s.get("link", ""),
-            "source_name": s.get("source_name", ""),
-            "score": float(s.get("score") or 0.0),
-            "published_at": (
-                s.get("published").isoformat()
-                if hasattr(s.get("published"), "isoformat")
-                else str(s.get("published") or "")
-            ) or None,
-        }
-        for s in top
-    ]
     return (md, raw, counts)
 
 
