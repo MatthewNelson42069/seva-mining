@@ -136,7 +136,7 @@ def test_derive_period_label_at_1200_returns_1200_pt():
 
 @pytest.mark.asyncio
 async def test_build_gold_news_section_filters_by_score_floor():
-    """_build_gold_news_section selects top 5 stories with score >= 6.0 (drops 5.5)."""
+    """_build_gold_news_section selects up to GOLD_TOP_N stories with score >= 6.0 (drops 5.5)."""
     stories = [
         {"title": "A", "score": 9.0, "link": "http://a", "source_name": "kitco.com", "published": "2026-05-06", "summary": "A summary"},
         {"title": "B", "score": 7.5, "link": "http://b", "source_name": "kitco.com", "published": "2026-05-06", "summary": "B summary"},
@@ -155,7 +155,7 @@ async def test_build_gold_news_section_filters_by_score_floor():
         md, raw, counts = await _build_gold_news_section(mock_client)
 
     # Should return 5 stories (9.0, 8.0, 7.5, 6.5, 6.0) — not the 5.5
-    assert len(raw) == 5, f"Expected 5 stories in raw, got {len(raw)}: {[s['title'] for s in raw]}"
+    assert len(raw) == 5, f"Expected 5 stories (5 above floor in input), got {len(raw)}: {[s['title'] for s in raw]}"
     scores = [s["score"] for s in raw]
     assert 5.5 not in scores, f"Score 5.5 (below floor {GOLD_SCORE_FLOOR}) should be excluded"
     # Sorted descending
@@ -163,27 +163,27 @@ async def test_build_gold_news_section_filters_by_score_floor():
 
 
 @pytest.mark.asyncio
-async def test_build_gold_news_section_top_n_is_5():
-    """_build_gold_news_section takes at most GOLD_TOP_N (5) stories."""
-    assert GOLD_TOP_N == 5
+async def test_build_gold_news_section_top_n_is_12():
+    """_build_gold_news_section takes at most GOLD_TOP_N (12) stories — quick-260512-of1."""
+    assert GOLD_TOP_N == 12
     assert GOLD_SCORE_FLOOR == 6.0
 
-    # 7 stories all above floor — should select top 5
+    # 20 stories all above floor — should select top 12 (quick-260512-of1 bumped from 5)
     stories = [
-        {"title": f"S{i}", "score": float(10 - i), "link": f"http://s{i}", "source_name": "kitco.com",
-         "published": "2026-05-06", "summary": f"Summary {i}"}
-        for i in range(7)
+        {"title": f"S{i}", "score": float(20 - i * 0.5), "link": f"http://s{i}", "source_name": "kitco.com",
+         "published": "2026-05-12", "summary": f"Summary {i}"}
+        for i in range(20)
     ]
 
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="Lead sentence.\n\n* Bullet (kitco.com)")]
+    mock_response.content = [MagicMock(text="### 🟡 Top Gold Headlines\n\n**Gold rallies** (kitco.com)\n* Bullet (kitco.com)")]
     mock_client = AsyncMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
         md, raw, counts = await _build_gold_news_section(mock_client)
 
-    assert len(raw) == 5, f"Expected GOLD_TOP_N=5 stories, got {len(raw)}"
+    assert len(raw) == 12, f"Expected GOLD_TOP_N=12 stories, got {len(raw)}"
 
 
 # ---------------------------------------------------------------------------
@@ -295,37 +295,49 @@ async def test_gold_empty_state_fallback_when_snapshot_fails():
 # ---------------------------------------------------------------------------
 
 
-def test_gold_news_system_prompt_contains_headline_grouped_format():
-    """quick-260507-drw — GOLD_NEWS_SYSTEM_PROMPT instructs the headline-grouped
-    format (1-3 adaptive headlines, 2-4 bullets each).
+def test_gold_news_system_prompt_contains_bull_thesis_structure():
+    """quick-260512-of1 — GOLD_NEWS_SYSTEM_PROMPT instructs the bull-thesis brief
+    with 4 labeled sub-sections (Top Gold Headlines, Top Macro Headlines,
+    Analyst & Bank Predictions, Macro Economic Stats) + optional Bearish Risk.
 
-    Replaces the legacy 'Why it matters' single-lead format. The new prompt
-    must instruct **bold headline** (markdown strong) per story, with bullets
-    grouped underneath.
+    Replaces the quick-260507-drw 'headline-grouped 1-3 stories' format.
     """
     prompt = GOLD_NEWS_SYSTEM_PROMPT
-    # Adaptive headline count instruction
-    assert "1 to 3" in prompt, "must instruct adaptive 1-3 headline count"
-    # Markdown strong (bold) syntax for headlines
-    assert "**bold" in prompt, "must instruct **bold** headline syntax"
-    # Bullet count instruction (2-4 per headline)
-    assert "2 to 4" in prompt, "must instruct adaptive 2-4 bullets per headline"
-    # No legacy 'Why it matters' framing — that was the flat-format lead
+    # All 6 required markers present
+    assert "Top Gold Headlines" in prompt, "missing 'Top Gold Headlines' section header"
+    assert "Top Macro Headlines" in prompt, "missing 'Top Macro Headlines' section header"
+    assert "Analyst & Bank Predictions" in prompt, "missing 'Analyst & Bank Predictions' section header"
+    assert "Macro Economic Stats" in prompt, "missing 'Macro Economic Stats' section header"
+    assert "Bearish Risk to Watch" in prompt, "missing 'Bearish Risk to Watch' section header"
+    assert "Does this point to a higher gold price?" in prompt, (
+        "missing bull-thesis framing question"
+    )
+    # No legacy 'Why it matters' single-lead framing
     assert "Why it matters" not in prompt, (
-        "legacy 'Why it matters' lead removed in quick-260507-drw"
+        "legacy 'Why it matters' lead removed in quick-260507-drw and stays gone in quick-260512-of1"
     )
 
 
-def test_gold_news_system_prompt_no_numbered_headline_prefix():
-    """quick-260507-drw — User wanted 'Gold headline #1' / '#2' as the visual
-    structure, but per the implementation note in the prompt the literal
-    prefix 'Gold headline #1:' should NOT be emitted — the bold headline IS
-    the visible separator. Verify the prompt explicitly forbids this prefix.
-    """
-    assert "Gold headline #" not in GOLD_NEWS_SYSTEM_PROMPT or (
-        "no \"Gold headline #1:\" prefix" in GOLD_NEWS_SYSTEM_PROMPT
-        or "no 'Gold headline #1:' prefix" in GOLD_NEWS_SYSTEM_PROMPT
+def test_gold_news_system_prompt_contains_analyst_names():
+    """quick-260512-of1 — prompt prioritizes specific named analysts/banks for highest signal."""
+    prompt = GOLD_NEWS_SYSTEM_PROMPT
+    assert "Pierre Lassonde" in prompt
+    assert "Peter Schiff" in prompt
+    assert "Goldman Sachs" in prompt
+
+
+def test_gold_news_system_prompt_references_v2_1_macro_stats_future_work():
+    """quick-260512-of1 — Macro Economic Stats sub-section references v2.1 for live indicators."""
+    assert "v2.1" in GOLD_NEWS_SYSTEM_PROMPT, (
+        "Macro Economic Stats sub-section must reference v2.1 as the future-work hint"
     )
+
+
+def test_sonnet_max_tokens_is_1500():
+    """quick-260512-of1 — bumped from 800 because bull-thesis brief is structurally larger."""
+    from agents.daily_summary import SONNET_MAX_TOKENS
+    assert SONNET_MAX_TOKENS == 1500
+
 
 
 def test_gold_news_system_prompt_contains_source_name():

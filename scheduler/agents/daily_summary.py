@@ -52,55 +52,62 @@ logger = logging.getLogger(__name__)
 
 LA_TZ = ZoneInfo("America/Los_Angeles")
 GOLD_SCORE_FLOOR = 6.0          # GOLD-01 — locked in research SUMMARY.md
-GOLD_TOP_N = 5                  # GOLD-01
+GOLD_TOP_N = 12                 # quick-260512-of1 — bumped from 5 for bull-thesis brief
 SONNET_MODEL = "claude-sonnet-4-6"  # locked — Sonnet for the WRITE call only
-SONNET_MAX_TOKENS = 800         # ~1200 chars target (locked SUMMARY.md budget)
+SONNET_MAX_TOKENS = 1500        # quick-260512-of1 — bumped from 800; bull-thesis brief is structurally larger
 IDEMPOTENCY_WINDOW_MIN = 30     # CRIT-3 — match misfire_grace_time
 
-# GOLD-02 prompt template — quick-260507-drw moved from a flat 1-lead +
-# 3-5-bullets format to a headline-grouped format per user feedback after the
-# first 08:00 PT card landed: "Lets make it so the gold headlines and news
-# stuff is 1 by 1. Gold headline #1 / [bullets] / Gold headline #2 / [bullets].
-# If it warrants a second gold headline." Each headline is rendered as a
-# **bold story heading** (markdown strong, NOT `#` heading — rehype-sanitize
-# strips `<h1>..<h6>` but renders `<strong>` cleanly). Adaptive 1-3 headlines
-# based on the candidate pool's diversity. Each headline gets 2-4 bullets
-# digging into supporting details / market angles. Bullets under one headline
-# can cite multiple sources.
+# GOLD-02 prompt template — quick-260512-of1 refactored from "1-3 headline-grouped
+# stories" to a curated bull-thesis brief with 4 labeled sub-sections (Top Gold
+# Headlines, Top Macro Headlines, Analyst & Bank Predictions, Macro Economic
+# Stats) plus an optional Bearish Risk section. Every story surfaced must
+# advance the thesis "gold price goes higher" — see user verbatim feedback in
+# .planning/quick/260512-of1-refine-gold-news-section-into-bull-thesi/. Live
+# macro stat indicators (10Y real yield, DXY, CPI, gold/silver ratio) will ship
+# in v2.1; for v2.0 the Macro Economic Stats sub-section surfaces any hard
+# numerical macro data already embedded in the supplied story summaries.
 GOLD_NEWS_SYSTEM_PROMPT = """\
-You are the writer for a daily gold-sector intelligence summary.
+You are the writer for a daily gold-sector intelligence brief. The reader is a gold-sector operator producing social-media content for a gold-focused audience. Every story you surface must answer the question: "Does this point to a higher gold price?"
+
+Stories that DO NOT advance the bull thesis for gold should be excluded. This is a curated bull-thesis brief, not balanced market commentary. You may briefly note bearish risks ONLY when macro data genuinely contradicts the bull case (see Bearish Risk section below).
 
 Output MUST be markdown in this exact structure (no preamble, no postamble):
 
-1. Identify 1 to 3 distinct gold-sector stories from the supplied articles.
-   Group articles that cover the same story (e.g., the same price move, the
-   same M&A deal, the same regulatory change) under ONE headline — do not
-   emit a separate headline for every article.
-   - Use 1 headline if there is one dominant gold story today.
-   - Use 2 headlines if there are two genuinely distinct stories.
-   - Use 3 headlines only if the news is unusually rich AND each story stands
-     on its own; do NOT pad to fill space.
-2. For each story, emit a `**bold one-line headline**` (markdown strong,
-   surrounded by `**`). Keep the headline ≤ 12 words and concrete — name
-   the company, the price, the bill, etc. NOT generic ("Gold rallies").
-3. After each headline, emit 2 to 4 markdown bullet points (use `*` style).
-   Choose the count adaptively based on how many supplied articles speak to
-   that headline — do NOT pad. Each bullet:
-     - Maximum 25 words.
-     - Ends with `(Source Name)` referencing the article's source.
-     - Pulls a distinct angle: data point, market reaction, analyst view,
-       supporting context. Do not repeat the headline.
-     - Uses ONLY dates explicitly stated in the supplied articles. Do not
-       infer, estimate, or use training knowledge for dates. If a story has
-       no date, write 'recently' rather than inventing one.
-4. Insert ONE blank line between each headline group (between the last bullet
-   of headline #1 and the `**` line of headline #2).
-5. The first headline is reused as the WhatsApp teaser body — make it
-   self-contained and concrete.
+### 🟡 Top Gold Headlines
 
-Do NOT emit `#`, `##`, or `###` headings. Do NOT emit a 'Sources:' footnote
-section. Do NOT use tables. Do NOT use blockquotes. Do NOT number the
-headlines (no "Gold headline #1:" prefix — just the bold headline itself).
+Direct gold-sector news that supports higher gold prices: central bank gold buying, gold-price moves, major producer news, M&A, exploration results from credible miners, supply constraints, large ETF inflows.
+
+Format: 1-3 grouped headlines. Each headline is **bold** on its own line. Underneath, 2-4 bullets explaining why this is bullish for gold. Each bullet ≤ 25 words, ends with `(Source Name)`.
+
+### 🌐 Top Macro Headlines (Why It Matters for Gold)
+
+Macro stories that support higher gold prices: rising inflation, dovish Fed, USD weakness, real-yield compression, geopolitical risk, debt-crisis warnings, banking-system stress, sovereign-debt concerns.
+
+Format: 1-2 grouped headlines. Each headline is **bold** on its own line, followed by a 1-sentence "why this points to higher gold" framing. Then 2-3 bullets unpacking the mechanism. Each bullet ≤ 25 words, ends with `(Source Name)`.
+
+### 🎯 Analyst & Bank Predictions
+
+Specific named-analyst or named-bank calls on gold: price targets, catalyst narratives, allocation recommendations. Prioritize: Pierre Lassonde, Peter Schiff, Egon von Greyerz, Matthew Piepenburg, Frank Giustra, John Hathaway, Rick Rule, Mike Maloney, Goldman Sachs, JPMorgan, Bank of America, UBS, World Gold Council. Specific price targets ($X target for gold) and named catalysts are highest-signal.
+
+Format: 1-3 entries. Each formatted as **{Name/Bank} — {target or thesis headline}** on its own line, then 2-3 bullets unpacking their reasoning, catalysts, and timeframe. Each bullet ≤ 25 words, ends with `(Source Name)`. If NO analyst/bank call appears in today's candidates, write the single line: "No major analyst or bank calls today." (no bullets).
+
+### 📊 Macro Economic Stats
+
+*Live indicators (10Y real yield, DXY, Fed funds rate, CPI, gold/silver ratio) ship in v2.1. For now, surface any hard numerical macro data points already embedded in the supplied stories — e.g., "April CPI: 3.2% y/y", "10Y yield: 4.5%". Each as a single line in this format: `**{indicator}:** {value} ({direction-vs-prior}) — {gold implication in ≤ 12 words}`. Max 3-5 lines. If no embedded numerical macro data is available, write the single line: "No fresh macro data today." (no bullets).*
+
+### ⚠️ Bearish Risk to Watch
+
+Include this section ONLY when one or more supplied stories presents a clear bearish-for-gold catalyst (e.g., hawkish Fed surprise, real-yield spike, dollar strength, gold technical breakdown, ETF outflows). Format: single italicized sentence acknowledging the risk. If no such risk surfaced today, OMIT this section entirely.
+
+---
+
+Rules across all sub-sections:
+- Use markdown headings (###) for sub-sections — do NOT skip them.
+- Each story bullet ends with `(Source Name)` citation — match the source the story came from.
+- Use ONLY dates explicitly stated in the supplied articles. Do not infer, estimate, or use training knowledge for dates. If a story has no date, write "recently" rather than inventing one.
+- Do NOT emit tables. Do NOT emit blockquotes (except the italicized Bearish Risk line).
+- Do NOT pad. If a sub-section has nothing worth showing, write its empty-state line and move on.
+- Bias toward specific people, specific numbers, specific catalysts. "Sentiment improved" is weak. "Lassonde says $17,250 gold from $40T US debt crisis" is strong.
 """
 
 # GOLD-03 empty-state copy (locked CONTEXT decision):
