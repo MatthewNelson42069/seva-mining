@@ -348,14 +348,58 @@ def test_gold_news_system_prompt_contains_source_name():
 
 
 def test_gold_news_system_prompt_contains_word_limit():
-    """GOLD_NEWS_SYSTEM_PROMPT includes 25-word bullet limit."""
+    """GOLD_NEWS_SYSTEM_PROMPT includes per-bullet word limit.
+
+    quick-260512-oxr: bumped 25 → 35 words to give Sonnet room to land both
+    the fact AND the gold-mechanism in each bullet.
+    """
     prompt = GOLD_NEWS_SYSTEM_PROMPT
-    assert (
-        "Maximum 25 words" in prompt
-        or "<= 25 words" in prompt
-        or "≤ 25 words" in prompt
-        or "25 words" in prompt
-    ), f"GOLD_NEWS_SYSTEM_PROMPT must mention 25-word limit: {prompt[:200]}"
+    assert "≤ 35 words" in prompt, (
+        f"GOLD_NEWS_SYSTEM_PROMPT must mention 35-word limit: {prompt[:200]}"
+    )
+    # The 35-word limit appears once per section (3 sections) — assert all 3.
+    assert prompt.count("≤ 35 words") >= 3, (
+        f"Expected '≤ 35 words' to appear in at least 3 sections, "
+        f"got {prompt.count('≤ 35 words')}"
+    )
+    # The legacy 25-word limit must NOT linger.
+    assert "≤ 25 words" not in prompt, (
+        "GOLD_NEWS_SYSTEM_PROMPT still contains the legacy 25-word limit; "
+        "quick-260512-oxr bumped it to 35 words across all sections."
+    )
+
+
+def test_gold_news_system_prompt_contains_bullet_rule():
+    """quick-260512-oxr: top-level rule mandates every bullet ties back to gold.
+
+    The rule must explicitly forbid descriptive ('X happened') bullets that
+    don't make the gold-bull-case connection.
+    """
+    prompt = GOLD_NEWS_SYSTEM_PROMPT
+    assert "Bullet rule (applies to all sections)" in prompt, (
+        "GOLD_NEWS_SYSTEM_PROMPT must include the top-level Bullet rule"
+    )
+    # Examples / mechanism keywords that anchor the rule
+    assert "tie the fact back to the gold bull case" in prompt
+    assert "Descriptive bullets" in prompt
+
+
+def test_gold_news_system_prompt_contains_example_bullets():
+    """quick-260512-oxr: few-shot examples anchor Sonnet's output style."""
+    prompt = GOLD_NEWS_SYSTEM_PROMPT
+    assert "Example bullets (use these as a model)" in prompt, (
+        "GOLD_NEWS_SYSTEM_PROMPT must include the example-bullets section"
+    )
+    # The 3 worked examples — exact substring matches per quick-260512-oxr spec
+    assert "Spot gold surged 3.6%" in prompt, (
+        "Top Gold Headlines worked example missing"
+    )
+    assert "sticky inflation keeps real yields suppressed" in prompt, (
+        "Top Macro Headlines worked example missing"
+    )
+    assert "Lassonde points to $40T US debt" in prompt, (
+        "Analyst & Bank Predictions worked example missing"
+    )
 
 
 def test_gold_news_system_prompt_no_build_chunks():
