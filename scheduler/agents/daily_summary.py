@@ -469,8 +469,15 @@ async def run_daily_summary() -> None:
     error_text: str | None = None
 
     settings = get_settings()
+    # quick-260514-ii6: bumped from 30s → 60s. The bull-thesis prompt (of1/oxr)
+    # tripled the gold section's effective compute: 12 candidates × ~3 KB each
+    # in the user prompt + 1500-token output target + 4-sub-section structural
+    # ask. The 30s ceiling caused the 2026-05-14 12:00 PT fire to fall back to
+    # status=partial when Sonnet's WRITE call hit timeout. 60s gives headroom
+    # for heavy-news days without being reckless (cron is daily, so 2-min wall
+    # time is still well under any misfire concern).
     anthropic_client = AsyncAnthropic(
-        api_key=settings.anthropic_api_key, timeout=30.0,
+        api_key=settings.anthropic_api_key, timeout=60.0,
     )
 
     # Construct SerpAPI client if credentials are available (mirrors content_agent pattern)

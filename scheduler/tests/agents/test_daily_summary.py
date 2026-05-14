@@ -1267,3 +1267,44 @@ def test_s8_stub_constant_and_text_removed():
     assert "(stub) Ontario stats section" not in source, (
         "Stub text must be removed from daily_summary.py in Phase 3"
     )
+
+
+# ---------------------------------------------------------------------------
+# quick-260514-ii6 — Sonnet per-request timeout regression guards
+# ---------------------------------------------------------------------------
+
+
+def test_anthropic_client_timeout_is_60_seconds():
+    """quick-260514-ii6: AsyncAnthropic construction in run_daily_summary must use
+    a 60-second per-request timeout.
+
+    The 2026-05-14 12:00 PT fire fell back to status=partial because Sonnet's
+    WRITE call hit the prior 30s ceiling on a heavy-news day. The bull-thesis
+    prompt (of1/oxr) tripled the gold section's effective compute load:
+    12 candidates × ~3 KB each in the user prompt + 1500-token output target +
+    4-sub-section structural ask. 60s gives headroom without being reckless.
+
+    Regression guard: if anyone reverts the timeout, this test catches it.
+    """
+    import inspect
+    import agents.daily_summary as ds_module
+
+    source = inspect.getsource(ds_module)
+    # The exact construction must use timeout=60.0 (not 30.0, not 45.0)
+    assert "timeout=60.0" in source, (
+        "AsyncAnthropic in run_daily_summary must use timeout=60.0 "
+        "(quick-260514-ii6 bumped from 30s to absorb bull-thesis prompt size)"
+    )
+    # The legacy 30s ceiling must NOT linger in daily_summary's anthropic_client
+    # construction. (Other modules — content_agent's fetch_stories — still use
+    # 30s and that's intentional; this test is scoped to daily_summary only.)
+    # Check by ensuring the run_daily_summary scope contains 60.0 and the AsyncAnthropic
+    # construction inside it does NOT mention timeout=30.0
+    construction_block = source[source.find("anthropic_client = AsyncAnthropic"):]
+    construction_block = construction_block[:construction_block.find(")") + 1]
+    assert "timeout=60.0" in construction_block, (
+        f"AsyncAnthropic construction must use timeout=60.0; got: {construction_block}"
+    )
+    assert "timeout=30.0" not in construction_block, (
+        "Legacy 30s timeout in daily_summary's AsyncAnthropic must be removed"
+    )
