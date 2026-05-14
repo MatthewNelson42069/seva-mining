@@ -159,11 +159,15 @@ async def _build_gold_news_section(
     These nest into agent_runs.notes JSONB so the operator can see at a glance
     if SerpAPI is contributing zero stories (likely missing API key).
     """
-    counts: dict[str, int] = {"rss": 0, "serpapi": 0, "total": 0, "after_floor": 0}
+    counts: dict[str, object] = {
+        "rss": 0, "serpapi": 0, "total": 0, "after_floor": 0,
+        "last_error": None,  # quick-260514-jny: captures exception text for agent_runs.errors
+    }
     try:
         stories = await fetch_stories()
-    except Exception:
+    except Exception as exc:
         logger.exception("daily_summary: fetch_stories raised — gold section failed")
+        counts["last_error"] = f"fetch_stories: {type(exc).__name__}: {exc}"
         return (None, [], counts)
 
     # quick-260507-drw — break down by ingestion path BEFORE any filtering.
@@ -224,8 +228,13 @@ async def _build_gold_news_section(
             messages=[{"role": "user", "content": user_prompt}],
         )
         md = response.content[0].text.strip()
-    except Exception:
+    except Exception as exc:
+        # quick-260514-jny: capture exception text into counts so it lands in
+        # agent_runs.errors via run_daily_summary. logger.exception still writes
+        # the full traceback to Railway logs; counts["last_error"] gives DB-level
+        # visibility without log access. Format: "{stage}: {ExceptionType}: {message}"
         logger.exception("daily_summary: Sonnet write call raised")
+        counts["last_error"] = f"sonnet_write: {type(exc).__name__}: {exc}"
         return (None, raw, counts)  # quick-260508-dj5: return JSON-safe raw, not top
 
     return (md, raw, counts)
@@ -269,17 +278,22 @@ async def _build_ontario_law_section(
     constructs the serpapi_client + reads previous_last_known_law from the most
     recent daily_summaries row before invoking.
     """
-    counts: dict[str, int] = {
-        "serpapi": 0, "nrcan": 0, "after_dedup": 0, "after_filter": 0
+    counts: dict[str, object] = {
+        "serpapi": 0, "nrcan": 0, "after_dedup": 0, "after_filter": 0,
+        "last_error": None,  # quick-260514-jny: captures exception text for agent_runs.errors
     }
     try:
-        survivors, counts = await fetch_ontario_law_hits(
+        survivors, fetched_counts = await fetch_ontario_law_hits(
             serpapi_client=serpapi_client,
             anthropic_client=anthropic_client,
             model=model,
         )
-    except Exception:
+        # Merge fetched counts in (preserve last_error key)
+        counts.update(fetched_counts)
+        counts.setdefault("last_error", None)
+    except Exception as exc:
         logger.exception("ontario_law: fetch_ontario_law_hits raised — section failed")
+        counts["last_error"] = f"fetch_ontario_law_hits: {type(exc).__name__}: {exc}"
         return (None, [], previous_last_known_law, counts)
 
     if survivors:
@@ -660,6 +674,23 @@ async def run_daily_summary() -> None:
                 "sections_failed": sections_failed,
                 "whatsapp_sent": whatsapp_sent,
             }
+            # quick-260514-jny — collect per-section errors so failures land in
+            # agent_runs.errors (not just Railway logs). Format: list of
+            # "{section}: {ExceptionType}: {message}" strings.
+            per_section_errors: list[str] = []
+            gold_err = gold_counts.get("last_error") if isinstance(gold_counts, dict) else None
+            if gold_err:
+                per_section_errors.append(f"gold_news: {gold_err}")
+            law_err = law_counts.get("last_error") if isinstance(law_counts, dict) else None
+            if law_err:
+                per_section_errors.append(f"ontario_law: {law_err}")
+            stats_err = (
+                stats_jsonb.get("last_error_text")
+                if isinstance(stats_jsonb, dict) else None
+            )
+            if stats_err:
+                per_section_errors.append(f"ontario_stats: {stats_err}")
+
             async with AsyncSessionLocal() as session:
                 fresh = await session.get(AgentRun, agent_run.id)
                 if fresh is not None:
@@ -669,8 +700,12 @@ async def run_daily_summary() -> None:
                     fresh.items_queued = len(sections_completed)
                     fresh.items_filtered = len(sections_failed)
                     fresh.notes = json.dumps(notes_payload)
-                    if error_text:
-                        fresh.errors = [error_text]
+                    # Combine top-level run error (if any) with per-section errors
+                    combined_errors = [
+                        e for e in ([error_text] + per_section_errors) if e
+                    ]
+                    if combined_errors:
+                        fresh.errors = combined_errors
                     await session.commit()
         except Exception:
             logger.exception("daily_summary agent_runs telemetry update failed")

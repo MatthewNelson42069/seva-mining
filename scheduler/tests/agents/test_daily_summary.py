@@ -1270,6 +1270,93 @@ def test_s8_stub_constant_and_text_removed():
 
 
 # ---------------------------------------------------------------------------
+# quick-260514-jny — Per-section error capture into agent_runs.errors
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_gold_section_captures_sonnet_exception_into_counts():
+    """quick-260514-jny: when Sonnet's WRITE call raises, the exception type
+    and message must be captured into counts['last_error'] so the orchestrator
+    can propagate it to agent_runs.errors. Format: 'sonnet_write: {Type}: {msg}'.
+
+    Without this, post-mortem diagnostics require Railway log access; with it,
+    operators can query agent_runs.errors directly via Neon SQL.
+    """
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock, patch
+
+    from anthropic import APITimeoutError
+
+    stories = [
+        {
+            "title": "Gold up", "link": "http://x", "source_name": "kitco.com",
+            "summary": "...", "published": datetime.now(timezone.utc),
+            "score": 7.5, "_source_type": "rss",
+        }
+    ]
+    anthropic_client = AsyncMock()
+    # Simulate a real APITimeoutError; SDK uses httpx under the hood
+    anthropic_client.messages.create = AsyncMock(
+        side_effect=APITimeoutError(request=AsyncMock())
+    )
+
+    with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
+        md, raw, counts = await _build_gold_news_section(anthropic_client)
+
+    assert md is None, "gold section md must be None on Sonnet failure"
+    assert raw, "raw_sources must be populated even on Sonnet failure (forensic value)"
+    assert counts.get("last_error") is not None, (
+        "counts['last_error'] must be populated when Sonnet raises"
+    )
+    last_error = counts["last_error"]
+    assert "sonnet_write" in last_error, (
+        f"last_error must be tagged with 'sonnet_write' stage; got: {last_error}"
+    )
+    assert "APITimeoutError" in last_error, (
+        f"last_error must include exception type name; got: {last_error}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_gold_section_captures_fetch_stories_exception_into_counts():
+    """quick-260514-jny: when fetch_stories raises, the exception text is
+    captured into counts['last_error'] with the 'fetch_stories' stage tag.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    with patch(
+        "agents.daily_summary.fetch_stories",
+        AsyncMock(side_effect=RuntimeError("network down")),
+    ):
+        md, raw, counts = await _build_gold_news_section(AsyncMock())
+
+    assert md is None
+    assert raw == []
+    assert counts.get("last_error") is not None
+    last_error = counts["last_error"]
+    assert "fetch_stories" in last_error
+    assert "RuntimeError" in last_error
+    assert "network down" in last_error
+
+
+def test_gold_section_counts_has_last_error_key_on_success():
+    """quick-260514-jny: counts dict must declare the last_error key (with None
+    value) on success paths too — so the orchestrator can do a uniform
+    counts.get('last_error') without KeyError.
+    """
+    # Just check the constant init in _build_gold_news_section by inspecting source.
+    import inspect
+    import agents.daily_summary as ds_module
+
+    source = inspect.getsource(ds_module._build_gold_news_section)
+    # The counts dict must initialize last_error to None
+    assert '"last_error": None' in source, (
+        "counts dict in _build_gold_news_section must initialize last_error: None"
+    )
+
+
+# ---------------------------------------------------------------------------
 # quick-260514-ii6 — Sonnet per-request timeout regression guards
 # ---------------------------------------------------------------------------
 
