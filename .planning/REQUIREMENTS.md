@@ -23,7 +23,7 @@ Alembic migrations and dual-model parity for the two new tables. Backend router 
 
 - [x] **DB-01**: System adds Alembic migration `0011_add_calendar_items.py` creating table `calendar_items` with columns: `id UUID PK gen_random_uuid()`, `date DATE NOT NULL` (Date, not DateTime), `title TEXT NOT NULL`, `notes_md TEXT NULL`, `tag VARCHAR(20) NULL` with CHECK `tag IN ('thread','video','podcast','tweet','idea','other')`, `created_at`/`updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`, index `ix_calendar_items_date` on `date`
 - [x] **DB-02**: System adds Alembic migration `0012_add_weekly_sweeps.py` creating table `weekly_sweeps` with columns: `id UUID PK`, `generated_at TIMESTAMPTZ NOT NULL`, `week_start DATE NOT NULL`, `week_end DATE NOT NULL`, `reddit_top_md TEXT NULL`, `story_virality_md TEXT NULL`, `content_angles_md TEXT NULL`, `raw_sources_jsonb JSONB NULL`, `status VARCHAR(20) NOT NULL DEFAULT 'completed'` with CHECK `status IN ('completed','failed','partial')`, `error_text TEXT NULL`, `agent_run_id UUID FK agent_runs.id ON DELETE SET NULL`, index `ix_weekly_sweeps_generated_at` on `(generated_at DESC)`
-- [ ] **DB-03**: System creates dual-model parity — SQLAlchemy 2.0 model files `backend/app/models/calendar_item.py`, `backend/app/models/weekly_sweep.py`, `scheduler/models/calendar_item.py`, `scheduler/models/weekly_sweep.py`; structurally identical, each imports from its local `models/base.py`
+- [x] **DB-03**: System creates dual-model parity — SQLAlchemy 2.0 model files `backend/app/models/calendar_item.py`, `backend/app/models/weekly_sweep.py`, `scheduler/models/calendar_item.py`, `scheduler/models/weekly_sweep.py`; structurally identical, each imports from its local `models/base.py`
 - [ ] **DB-04**: System registers backend routes by adding `app.include_router(calendar_router)` and `app.include_router(weekly_sweeps_router)` to `backend/app/main.py`; both routers carry `dependencies=[Depends(get_current_user)]` at the router level so they inherit the existing JWT auth gate
 - [x] **DB-05**: System verifies `alembic heads` returns exactly one head before both migrations land; each migration sets the prior head as `down_revision`; `alembic upgrade head` + `alembic downgrade -1` round-trips cleanly in dev before commit
 
@@ -119,7 +119,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TAB-05 | Phase 5 | Complete |
 | DB-01 | Phase 5 | Complete |
 | DB-02 | Phase 5 | Complete |
-| DB-03 | Phase 5 | Pending |
+| DB-03 | Phase 5 | Complete |
 | DB-04 | Phase 5 | Pending |
 | DB-05 | Phase 5 | Complete |
 | CAL-01 | Phase 6 | Pending |
