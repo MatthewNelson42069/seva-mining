@@ -110,6 +110,9 @@ JOB_LOCK_IDS: dict[str, int] = {
     # rejects PITFALLS.md proposal of 1020/1021).
     "daily_summary": 1017,
     "daily_summary_prune": 1018,
+    # v2.1 Phase 5: weekly_sweeper advisory lock reserved (used by Phase 7 cron).
+    # ID 1019 is the next-free integer above 1018 (1010-1016 are dead-code reserved).
+    "weekly_sweeper": 1019,
 }
 
 # OPS-02 — startup uniqueness assertion. Costs nothing and catches future
