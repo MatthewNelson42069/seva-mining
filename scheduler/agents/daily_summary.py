@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 LA_TZ = ZoneInfo("America/Los_Angeles")
 GOLD_SCORE_FLOOR = 6.0          # GOLD-01 — locked in research SUMMARY.md
-GOLD_TOP_N = 12                 # quick-260512-of1 — bumped from 5 for bull-thesis brief
+GOLD_TOP_N = 20                 # quick-260518-fyq — bumped 12→20; analyst content was getting edged out on heavy M&A days (Equinox/Orla saturated 05-17 fires while Goldman gold-target story missed)
 SONNET_MODEL = "claude-sonnet-4-6"  # locked — Sonnet for the WRITE call only
 SONNET_MAX_TOKENS = 1500        # quick-260512-of1 — bumped from 800; bull-thesis brief is structurally larger
 IDEMPOTENCY_WINDOW_MIN = 30     # CRIT-3 — match misfire_grace_time
@@ -72,6 +72,15 @@ You are the writer for a daily gold-sector intelligence brief. The reader is a g
 Stories that DO NOT advance the bull thesis for gold should be excluded. This is a curated bull-thesis brief, not balanced market commentary. You may briefly note bearish risks ONLY when macro data genuinely contradicts the bull case (see Bearish Risk section below).
 
 **Bullet rule (applies to all sections):** Every bullet must explicitly tie the fact back to the gold bull case. State the fact, then make the connection — e.g., "Fed paused rate hikes" + "real yields drop, gold's inflation-hedge thesis strengthens". Descriptive bullets ("X happened") without the gold connection should be rewritten or dropped.
+
+**Tier-1 analyst/bank promotion rule (MANDATORY):** If any supplied story names one of these analysts or institutions AND makes a specific gold price target, allocation recommendation, or named catalyst narrative — that story MUST go into the **Analyst & Bank Predictions** section. Do NOT bucket it under Top Gold Headlines or Top Macro Headlines, even if it would also fit there. This is the highest-leverage content type for the reader and must be surfaced consistently.
+
+Tier-1 list (any of these triggers the promotion rule):
+- People: Pierre Lassonde, Peter Schiff, Egon von Greyerz, Matthew Piepenburg, Frank Giustra, John Hathaway, Rick Rule, Mike Maloney, Jeffrey Gundlach (when on gold)
+- Banks: Goldman Sachs, JPMorgan, Bank of America, UBS, Morgan Stanley, Citigroup, Deutsche Bank (when issuing a gold target or thesis)
+- Authorities: World Gold Council (WGC), IMF (when on gold), BIS (when on gold)
+
+Example: a Bloomberg story headlined "Goldman says central banks to step up gold buying, aiding prices" is a Goldman-named call with a catalyst (central-bank demand) and an outcome (aiding prices) — it goes to the **Analyst & Bank Predictions** section as a single entry like "**Goldman Sachs — central-bank gold buying to step up, aiding prices** / [2-3 bullets unpacking the mechanism]". It does NOT go under Top Macro Headlines.
 
 Output MUST be markdown in this exact structure (no preamble, no postamble):
 

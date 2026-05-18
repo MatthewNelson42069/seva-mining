@@ -159,10 +159,12 @@ def test_credibility_tiers_legacy_sources_preserved():
 def test_serpapi_keywords_constant_preserved():
     """SERPAPI_KEYWORDS is preserved (CONT-03).
 
-    quick-260424-j5i D8: count drops 18 → 17 after removing the unhyphenated
-    rare-earth keyword.
+    quick-260424-j5i D8: count drops 18 → 17 after removing the unhyphenated rare-earth keyword.
+    quick-260518-fyq: bumped 17 → 25 with 8 analyst/bank-targeted keywords to
+    bias the candidate pool toward named-analyst stories (the highest-leverage
+    content type — Goldman gold targets, Lassonde calls, etc.).
     """
-    assert len(content_agent.SERPAPI_KEYWORDS) == 17
+    assert len(content_agent.SERPAPI_KEYWORDS) == 25
     assert "gold price" in content_agent.SERPAPI_KEYWORDS
 
 
@@ -205,9 +207,38 @@ def test_serpapi_keywords_existing_preserved():
 
 
 def test_serpapi_keywords_total_count_and_unique():
-    """Total = 17, no duplicates (quick-260424-j5i D8 dropped one from htu's 18)."""
-    assert len(content_agent.SERPAPI_KEYWORDS) == 17
-    assert len(set(content_agent.SERPAPI_KEYWORDS)) == 17
+    """Total = 25, no duplicates.
+
+    quick-260424-j5i D8 dropped one from htu's 18 → 17.
+    quick-260518-fyq added 8 analyst/bank-targeted keywords → 25.
+    """
+    assert len(content_agent.SERPAPI_KEYWORDS) == 25
+    assert len(set(content_agent.SERPAPI_KEYWORDS)) == 25
+
+
+def test_serpapi_keywords_analyst_targeting_quick_260518_fyq():
+    """quick-260518-fyq: 8 analyst & bank-targeted keywords must be present.
+
+    These keywords specifically target the highest-leverage content type for
+    the social-media use case: named-analyst price targets, bank gold forecasts,
+    and central-bank-buying narratives (e.g. the Bloomberg 'Goldman says
+    central banks to step up gold buying' story that wasn't surfacing under
+    the prior 17-keyword set).
+    """
+    required = [
+        "Goldman Sachs gold",
+        "JPMorgan gold forecast",
+        "Bank of America gold",
+        "UBS gold target",
+        "Pierre Lassonde",
+        "Peter Schiff gold",
+        "Egon von Greyerz",
+        "World Gold Council central bank",
+    ]
+    for kw in required:
+        assert kw in content_agent.SERPAPI_KEYWORDS, (
+            f"quick-260518-fyq analyst keyword missing: {kw!r}"
+        )
 
 
 def test_rss_feeds_reuters_dropped_bnn_added():

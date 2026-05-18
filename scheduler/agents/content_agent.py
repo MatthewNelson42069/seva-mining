@@ -107,6 +107,19 @@ SERPAPI_KEYWORDS = [
     "gold mining M&A",
     "US China metals",
     "mineral supply chain",
+    # quick-260518-fyq — analyst & bank named-target keywords. User feedback after
+    # 4 days of cards without surfacing any named-analyst calls (Bloomberg's
+    # Goldman/JPMorgan gold-target stories etc. weren't reaching the Analyst &
+    # Bank Predictions section). These keywords explicitly target the highest-
+    # leverage content type: named-analyst price targets + catalyst narratives.
+    "Goldman Sachs gold",
+    "JPMorgan gold forecast",
+    "Bank of America gold",
+    "UBS gold target",
+    "Pierre Lassonde",
+    "Peter Schiff gold",
+    "Egon von Greyerz",
+    "World Gold Council central bank",
 ]
 
 # ---------------------------------------------------------------------------

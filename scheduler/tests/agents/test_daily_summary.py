@@ -163,16 +163,23 @@ async def test_build_gold_news_section_filters_by_score_floor():
 
 
 @pytest.mark.asyncio
-async def test_build_gold_news_section_top_n_is_12():
-    """_build_gold_news_section takes at most GOLD_TOP_N (12) stories — quick-260512-of1."""
-    assert GOLD_TOP_N == 12
+async def test_build_gold_news_section_top_n_is_20():
+    """_build_gold_news_section takes at most GOLD_TOP_N stories.
+
+    quick-260512-of1 bumped 5 → 12 for the bull-thesis structure.
+    quick-260518-fyq bumped 12 → 20 to absorb heavy M&A days without edging
+    out analyst-named stories (the Equinox/Orla saturation on 05-17 was the
+    smoking gun: a Goldman gold-target story missed the cut because 12 was
+    too tight when one big story dominated the pool).
+    """
+    assert GOLD_TOP_N == 20
     assert GOLD_SCORE_FLOOR == 6.0
 
-    # 20 stories all above floor — should select top 12 (quick-260512-of1 bumped from 5)
+    # 30 stories all above floor — should select top 20
     stories = [
-        {"title": f"S{i}", "score": float(20 - i * 0.5), "link": f"http://s{i}", "source_name": "kitco.com",
-         "published": "2026-05-12", "summary": f"Summary {i}"}
-        for i in range(20)
+        {"title": f"S{i}", "score": float(30 - i * 0.3), "link": f"http://s{i}", "source_name": "kitco.com",
+         "published": "2026-05-18", "summary": f"Summary {i}"}
+        for i in range(30)
     ]
 
     mock_response = MagicMock()
@@ -183,7 +190,30 @@ async def test_build_gold_news_section_top_n_is_12():
     with patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)):
         md, raw, counts = await _build_gold_news_section(mock_client)
 
-    assert len(raw) == 12, f"Expected GOLD_TOP_N=12 stories, got {len(raw)}"
+    assert len(raw) == 20, f"Expected GOLD_TOP_N=20 stories, got {len(raw)}"
+
+
+def test_gold_news_system_prompt_contains_tier1_promotion_rule():
+    """quick-260518-fyq: prompt must contain the MANDATORY rule forcing tier-1
+    analyst/bank stories to the Analyst & Bank Predictions section.
+
+    Without this rule, Sonnet has discretion to bucket a Goldman / Lassonde
+    story under Top Gold Headlines or Top Macro Headlines, which dilutes the
+    highest-leverage content type for the social-media use case.
+    """
+    prompt = GOLD_NEWS_SYSTEM_PROMPT
+    # The promotion rule itself
+    assert "Tier-1 analyst/bank promotion rule" in prompt
+    assert "MANDATORY" in prompt
+    assert "MUST go into the **Analyst & Bank Predictions** section" in prompt
+    # The Tier-1 list must include named institutions
+    assert "Pierre Lassonde" in prompt
+    assert "Peter Schiff" in prompt
+    assert "Goldman Sachs" in prompt
+    assert "JPMorgan" in prompt
+    assert "World Gold Council" in prompt
+    # Worked example referencing the actual Bloomberg story type the user flagged
+    assert "Goldman says central banks to step up gold buying" in prompt
 
 
 # ---------------------------------------------------------------------------
