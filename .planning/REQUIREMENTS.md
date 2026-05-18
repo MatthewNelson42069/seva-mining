@@ -11,11 +11,11 @@ Each requirement maps to exactly one phase. Categories follow the research SUMMA
 
 The 3-tab shell that wraps News Funnel (Tab 1) + Content Calendar (Tab 2) + Weekly Viral Sweeper (Tab 3). Foundation for everything else.
 
-- [ ] **TAB-01**: System installs the shadcn `Tabs` Radix primitive into `frontend/src/components/ui/` via `npx shadcn@latest add tabs` (Tailwind v4 branch); commits the resulting `tabs.tsx` component file alongside existing shadcn primitives
-- [ ] **TAB-02**: System introduces `frontend/src/components/layout/TabbedDashboard.tsx` — a thin wrapper rendering `<TabNav />` then `<Outlet />` (analogous to AppShell rendering AppHeader + Outlet); placed under the existing `<AppShell />` route so tabs only appear inside the 3-tab surface, NOT on `/digest` or `/settings`
-- [ ] **TAB-03**: System introduces `frontend/src/components/layout/TabNav.tsx` — a tab strip of 3 React Router `<NavLink>` elements styled to match shadcn Tabs visually; active-state driven by `useLocation()` (NEVER by local state) so browser Back/Forward navigation updates the tab highlight correctly
-- [ ] **TAB-04**: System restructures `frontend/src/App.tsx` routes so `/` (index), `/calendar`, and `/viral` are nested children under `<TabbedDashboard />`; preserves all existing routes intact (`/queue`, `/agents/:slug`, `/digest`, `/settings`, `/login` + `Navigate` redirects)
-- [ ] **TAB-05**: System leaves `frontend/src/components/layout/AppShell.tsx` and `AppHeader.tsx` structurally unchanged — TabbedDashboard handles the tab nav; existing wordmark + Log out button stay in AppHeader
+- [x] **TAB-01**: System installs the shadcn `Tabs` Radix primitive into `frontend/src/components/ui/` via `npx shadcn@latest add tabs` (Tailwind v4 branch); commits the resulting `tabs.tsx` component file alongside existing shadcn primitives
+- [x] **TAB-02**: System introduces `frontend/src/components/layout/TabbedDashboard.tsx` — a thin wrapper rendering `<TabNav />` then `<Outlet />` (analogous to AppShell rendering AppHeader + Outlet); placed under the existing `<AppShell />` route so tabs only appear inside the 3-tab surface, NOT on `/digest` or `/settings`
+- [x] **TAB-03**: System introduces `frontend/src/components/layout/TabNav.tsx` — a tab strip of 3 React Router `<NavLink>` elements styled to match shadcn Tabs visually; active-state driven by `useLocation()` (NEVER by local state) so browser Back/Forward navigation updates the tab highlight correctly
+- [x] **TAB-04**: System restructures `frontend/src/App.tsx` routes so `/` (index), `/calendar`, and `/viral` are nested children under `<TabbedDashboard />`; preserves all existing routes intact (`/queue`, `/agents/:slug`, `/digest`, `/settings`, `/login` + `Navigate` redirects)
+- [x] **TAB-05**: System leaves `frontend/src/components/layout/AppShell.tsx` and `AppHeader.tsx` structurally unchanged — TabbedDashboard handles the tab nav; existing wordmark + Log out button stay in AppHeader
 
 ### Database + Backend Foundation (DB)
 
@@ -112,11 +112,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TAB-01 | Phase 5 | Pending |
-| TAB-02 | Phase 5 | Pending |
-| TAB-03 | Phase 5 | Pending |
-| TAB-04 | Phase 5 | Pending |
-| TAB-05 | Phase 5 | Pending |
+| TAB-01 | Phase 5 | Complete |
+| TAB-02 | Phase 5 | Complete |
+| TAB-03 | Phase 5 | Complete |
+| TAB-04 | Phase 5 | Complete |
+| TAB-05 | Phase 5 | Complete |
 | DB-01 | Phase 5 | Complete |
 | DB-02 | Phase 5 | Complete |
 | DB-03 | Phase 5 | Pending |
