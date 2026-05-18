@@ -74,7 +74,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 - [x] 05-01-PLAN.md — Reserve weekly_sweeper advisory lock ID 1019 in scheduler/worker.py JOB_LOCK_IDS (Phase 7 pre-req)
 - [x] 05-02-PLAN.md — Hand-write Alembic migrations 0011 (calendar_items) + 0012 (weekly_sweeps) with round-trip verification (DB-01, DB-02, DB-05)
 - [x] 05-03-PLAN.md — Create 4 dual-parity SQLAlchemy models + parity test (DB-03)
-- [ ] 05-04-PLAN.md — Backend stub routers calendar.py + weekly_sweeps.py + main.py wiring + smoke tests (DB-04)
+- [x] 05-04-PLAN.md — Backend stub routers calendar.py + weekly_sweeps.py + main.py wiring + smoke tests (DB-04)
 - [x] 05-05-PLAN.md — Frontend tab shell: TabbedDashboard, TabNav (NavLink isActive), stub pages, App.tsx restructure (TAB-01..05)
 
 **UI hint**: yes
