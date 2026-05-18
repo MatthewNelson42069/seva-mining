@@ -1,31 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: milestone
-status: v2.0 milestone complete
-stopped_at: Completed 04-prune-cron-operations-hardening/04-01-PLAN.md
-last_updated: "2026-05-06T18:38:50.953Z"
-last_activity: 2026-05-06
+milestone: v2.1
+milestone_name: Three-Tab Content Engine + UI Polish
+status: defining-requirements
+stopped_at: v2.0 Daily Summary Feed milestone complete (4/4 phases, audit PASSED, tagged v2.0). Then post-v2.0 polish quick tasks 260506-i65, 260506-inz, 260506-gmg, 260507-drw, 260508-dj5, 260512-of1, 260512-oxr, 260514-ii6, 260514-jny, 260518-fyq all shipped. v2.1 pivot initiated 2026-05-18 — expanding the single-feed product surface into a 3-tab content engine (News Funnel + Content Calendar + Weekly Viral Sweeper) with a Linear-style UI redesign.
+last_updated: "2026-05-18T19:00:00.000Z"
+last_activity: "2026-05-18 — Milestone v2.1 (Three-Tab Content Engine + UI Polish) initiated. User authored scope through tab-by-tab discussion."
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-27)
+See: .planning/PROJECT.md (updated 2026-05-18)
 
-**Core value:** Every piece of content the system drafts must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made.
-**Current focus:** Phase 4 — Prune Cron + Operations Hardening
+**Core value:** Every piece of intelligence the digest surfaces must be genuinely useful to a senior gold analyst — a data point, an insight, a connection no one else made.
+**Current focus:** v2.1 — Three-Tab Content Engine + UI Polish (defining requirements)
 
 ## Current Position
 
-Phase: 4
-Plan: Not started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-18 — Milestone v2.1 started. User locked 3-tab scope + Linear-style UI direction.
 
 ## Performance Metrics
 

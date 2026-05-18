@@ -10,21 +10,39 @@ A 2x-daily AI gold-intelligence digest. Twice a day (08:00 PT + 12:00 PT) a cron
 
 Every piece of intelligence the digest surfaces must be genuinely useful to a senior gold analyst — a data point, an insight, a connection no one else made. If a bullet wouldn't make that analyst stop scrolling, it shouldn't be in the summary.
 
-## Current State
+## Current Milestone: v2.1 Three-Tab Content Engine + UI Polish
 
-**Shipped:** v2.0 Daily Summary Feed (2026-05-06)
-**Active:** Awaiting next milestone definition (run `/gsd:new-milestone` to begin v2.1+).
+**Goal:** Expand the v2.0 daily summary feed (a single-page product surface) into a 3-tab content engine: (1) News Funnel — the existing feed, becomes Tab 1 unchanged; (2) Content Calendar — a simple personal planning surface for content ideas; (3) Weekly Viral Sweeper — surfaces what's getting traction in the gold/mining sector via Reddit + story virality. Layer in a Linear-style UI redesign with amber-gold accents.
 
-## Next Milestone Goals
+**Target features:**
+- **Tab 1 — News Funnel:** Existing daily summary feed becomes the first tab in the new navigation. Content unchanged. Label: "News Funnel".
+- **Tab 2 — Content Calendar:** Weekly grid view, plan items with title + optional markdown notes + tag/category. Click-to-edit, drag-or-dropdown reschedule. New `calendar_items` DB table + REST CRUD endpoints. Optimistic UI via TanStack Query. **NO AI drafting, NO autoposting, NO scheduled cron triggers** — pure personal planning surface.
+- **Tab 3 — Weekly Viral Sweeper:** Sunday-morning cron (08:00 PT) ingests top Reddit posts (r/gold, r/Wallstreetsilver, r/silverbugs, etc. via `praw`) AND computes story virality from the existing news pipeline (count cross-references across feeds over past 7 days). Produces a weekly card with three sections: top Reddit posts, top viral stories, and 3 Sonnet-authored content angle suggestions. New `weekly_sweeps` DB table.
+- **UI redesign:** Linear-style modern SaaS aesthetic. Dark theme preserved, amber-gold accents (Tailwind `amber-500`), top tab navigation via shadcn `Tabs` primitive, refined Inter typography, generous whitespace, subtle borders + hover states.
 
-Backlog candidates (deferred from v2.0, none yet locked into a milestone):
-- **CSC-01** — Cross-summary continuity: 12:00 fire receives 08:00 gold bullets in Sonnet context to enable narrative arc and dedup
-- **URL-01** — Click-through source URLs per bullet (requires storing `link` per bullet in JSONB)
-- **ANC-01** — Section anchor links (`#gold-news`, `#ontario-law`, `#ontario-stats`)
-- **ADD-01** — Ontario Mining Association RSS as 4th law source (if/when feed URL is published)
-- **Strip retired v1.0 source files** — currently kept as dead code (cron-deregistered, source intact). After v2.0 stability is confirmed, prune the 6 sub-agent modules, approval-flow components, and Phase B post-to-X infrastructure.
+**Budget:** $0 incremental — Reddit API is free (praw + read-only public access via OAuth client credentials), no X API revival, no new paid integrations. Total monthly cost stays ~$200.
 
-Open `/gsd:new-milestone` to scope the next milestone.
+**Stack additions:**
+- `praw` ~7.x (Python Reddit API Wrapper) — backend
+- `shadcn Tabs` component (Radix UI Tabs primitive on Tailwind v4 branch) — frontend
+- `@dnd-kit/core` for drag-and-drop OR date-dropdown fallback (research-determined)
+- 3 new env vars: `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`
+
+**Hard parts the roadmap addresses:**
+1. **Reddit API auth.** User creates a Reddit app at reddit.com/prefs/apps; stores client_id/secret in Railway env. Same setup pattern as SerpAPI/Twilio.
+2. **Drag-and-drop complexity.** Real DnD in a calendar grid is more code than it looks. Research evaluates `@dnd-kit/core` vs date-dropdown fallback — let the planner decide based on risk.
+3. **Story virality compute.** URL-similarity dedup (SequenceMatcher 0.85 threshold per existing content_agent pattern) over `daily_summaries.raw_sources_jsonb.gold_news[].link` for the past 7 days. Heaviest piece of sweeper logic.
+4. **Sonnet "3 content angles" generation.** Single weekly Sonnet call combining Reddit + virality inputs.
+5. **UI migration.** Restructure App.tsx routes: `/` becomes the tabbed layout; legacy redirects from v2.0 must be preserved.
+
+**Out of scope (explicit exclusions for v2.1):**
+- AI content drafting (v1.0 sub-agents stay retired)
+- Autoposting to X / IG / LinkedIn (Phase B stays dormant)
+- Instagram / LinkedIn integration
+- Live macro stat indicators (FRED API — deferred to v2.2)
+- Kitco scraping (deferred to v2.2)
+- Mobile-responsive UI (desktop-only constraint preserved)
+- WhatsApp ping for calendar items (deferred to v2.2)
 
 ## Requirements
 
@@ -161,4 +179,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-06 after v2.0 Daily Summary Feed milestone shipped. 31/31 requirements validated, 4 phases complete, audit PASSED. Tagged as v2.0 in git.*
+*Last updated: 2026-05-18 — Milestone v2.1 (Three-Tab Content Engine + UI Polish) initiated. Expands v2.0 single-feed into a 3-tab product surface with Reddit-powered viral sweeper and Linear-style UI redesign.*
