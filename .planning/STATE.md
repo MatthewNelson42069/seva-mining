@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Three-Tab Content Engine + UI Polish
-status: defining-requirements
-stopped_at: v2.0 Daily Summary Feed milestone complete (4/4 phases, audit PASSED, tagged v2.0). Then post-v2.0 polish quick tasks 260506-i65, 260506-inz, 260506-gmg, 260507-drw, 260508-dj5, 260512-of1, 260512-oxr, 260514-ii6, 260514-jny, 260518-fyq all shipped. v2.1 pivot initiated 2026-05-18 — expanding the single-feed product surface into a 3-tab content engine (News Funnel + Content Calendar + Weekly Viral Sweeper) with a Linear-style UI redesign.
-last_updated: "2026-05-18T19:00:00.000Z"
-last_activity: "2026-05-18 — Milestone v2.1 (Three-Tab Content Engine + UI Polish) initiated. User authored scope through tab-by-tab discussion."
+status: ready-to-plan
+stopped_at: v2.1 roadmap complete — 41 requirements across TAB/DB/CAL/SWEEP/UI mapped to 4 phases (5/6/7/8). Research synthesis + REQUIREMENTS.md + ROADMAP.md committed. Ready for /gsd:plan-phase 5.
+last_updated: "2026-05-18T19:45:00.000Z"
+last_activity: "2026-05-18 — v2.1 ROADMAP.md complete. Phases 5-8 defined: Foundation → Content Calendar → Weekly Viral Sweeper → UI Polish + Dead-Code Strip. 41 reqs mapped 1:1. Next: /gsd:plan-phase 5."
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (ready to plan)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-18 — Milestone v2.1 started. User locked 3-tab scope + Linear-style UI direction.
+Status: ROADMAP.md complete. Phases 5-8 defined. Ready for `/gsd:plan-phase 5` (Foundation — Tabs + DB + Backend Stubs).
+Last activity: 2026-05-18 — v2.1 ROADMAP.md complete. 41 reqs mapped 1:1 across 4 phases. SUMMARY/REQUIREMENTS/ROADMAP committed.
 
 ## Performance Metrics
 

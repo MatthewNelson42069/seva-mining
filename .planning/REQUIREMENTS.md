@@ -70,7 +70,7 @@ Linear-style dark theme with amber-500 accents applied across all 3 tabs. Existi
 - [ ] **UI-03**: System refines typography weights using existing Geist Variable font — headings 600, sub-headings 500, body 400, monospace numerics for upvote counts (Reddit posts) and source counts (virality stories); NO font swap to Inter
 - [ ] **UI-04**: System refines subtle borders + hover states on all cards using `border border-zinc-800` baseline + `hover:border-zinc-700` transition; consistent across summary cards, calendar items, sweep card sections
 - [ ] **UI-05**: System renders subreddit attribution on Reddit posts as monospace-styled pills (e.g., `r/gold` in `font-mono text-xs bg-zinc-800/60 px-2 py-0.5 rounded`)
-- [ ] **UI-06**: System strips v1.0 dead-code content sub-agent source files (`scheduler/agents/content/*.py` for retired formats + dead-code lock-ID dict entries 1010-1016 + comments referencing them) once Phases 1-3 are merged and verifier confirms no surviving callers; runs as the final task of Phase 4
+- [ ] **UI-06**: System strips v1.0 dead-code content sub-agent source files (`scheduler/agents/content/*.py` for retired formats + dead-code lock-ID dict entries 1010-1016 + comments referencing them) once Phases 5-7 are merged and verifier confirms no surviving callers; runs as the final task of Phase 8
 - [ ] **UI-07**: System completes a visual QA pass across all 3 tabs at desktop resolution (1440x900 minimum) — confirms no layout regressions, no dark-mode contrast failures (WCAG AA on text), and no broken shadcn primitive interactions; intentionally skips mobile-responsive (out of scope per single-user desktop constraint)
 
 ## v2.2+ Requirements
@@ -112,47 +112,47 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TAB-01 | Phase 1 | Pending |
-| TAB-02 | Phase 1 | Pending |
-| TAB-03 | Phase 1 | Pending |
-| TAB-04 | Phase 1 | Pending |
-| TAB-05 | Phase 1 | Pending |
-| DB-01 | Phase 1 | Pending |
-| DB-02 | Phase 1 | Pending |
-| DB-03 | Phase 1 | Pending |
-| DB-04 | Phase 1 | Pending |
-| DB-05 | Phase 1 | Pending |
-| CAL-01 | Phase 2 | Pending |
-| CAL-02 | Phase 2 | Pending |
-| CAL-03 | Phase 2 | Pending |
-| CAL-04 | Phase 2 | Pending |
-| CAL-05 | Phase 2 | Pending |
-| CAL-06 | Phase 2 | Pending |
-| CAL-07 | Phase 2 | Pending |
-| CAL-08 | Phase 2 | Pending |
-| CAL-09 | Phase 2 | Pending |
-| CAL-10 | Phase 2 | Pending |
-| SWEEP-01 | Phase 3 | Pending |
-| SWEEP-02 | Phase 3 | Pending |
-| SWEEP-03 | Phase 3 | Pending |
-| SWEEP-04 | Phase 3 | Pending |
-| SWEEP-05 | Phase 3 | Pending |
-| SWEEP-06 | Phase 3 | Pending |
-| SWEEP-07 | Phase 3 | Pending |
-| SWEEP-08 | Phase 3 | Pending |
-| SWEEP-09 | Phase 3 | Pending |
-| SWEEP-10 | Phase 3 | Pending |
-| SWEEP-11 | Phase 3 | Pending |
-| SWEEP-12 | Phase 3 | Pending |
-| SWEEP-13 | Phase 3 | Pending |
-| SWEEP-14 | Phase 3 | Pending |
-| UI-01 | Phase 4 | Pending |
-| UI-02 | Phase 4 | Pending |
-| UI-03 | Phase 4 | Pending |
-| UI-04 | Phase 4 | Pending |
-| UI-05 | Phase 4 | Pending |
-| UI-06 | Phase 4 | Pending |
-| UI-07 | Phase 4 | Pending |
+| TAB-01 | Phase 5 | Pending |
+| TAB-02 | Phase 5 | Pending |
+| TAB-03 | Phase 5 | Pending |
+| TAB-04 | Phase 5 | Pending |
+| TAB-05 | Phase 5 | Pending |
+| DB-01 | Phase 5 | Pending |
+| DB-02 | Phase 5 | Pending |
+| DB-03 | Phase 5 | Pending |
+| DB-04 | Phase 5 | Pending |
+| DB-05 | Phase 5 | Pending |
+| CAL-01 | Phase 6 | Pending |
+| CAL-02 | Phase 6 | Pending |
+| CAL-03 | Phase 6 | Pending |
+| CAL-04 | Phase 6 | Pending |
+| CAL-05 | Phase 6 | Pending |
+| CAL-06 | Phase 6 | Pending |
+| CAL-07 | Phase 6 | Pending |
+| CAL-08 | Phase 6 | Pending |
+| CAL-09 | Phase 6 | Pending |
+| CAL-10 | Phase 6 | Pending |
+| SWEEP-01 | Phase 7 | Pending |
+| SWEEP-02 | Phase 7 | Pending |
+| SWEEP-03 | Phase 7 | Pending |
+| SWEEP-04 | Phase 7 | Pending |
+| SWEEP-05 | Phase 7 | Pending |
+| SWEEP-06 | Phase 7 | Pending |
+| SWEEP-07 | Phase 7 | Pending |
+| SWEEP-08 | Phase 7 | Pending |
+| SWEEP-09 | Phase 7 | Pending |
+| SWEEP-10 | Phase 7 | Pending |
+| SWEEP-11 | Phase 7 | Pending |
+| SWEEP-12 | Phase 7 | Pending |
+| SWEEP-13 | Phase 7 | Pending |
+| SWEEP-14 | Phase 7 | Pending |
+| UI-01 | Phase 8 | Pending |
+| UI-02 | Phase 8 | Pending |
+| UI-03 | Phase 8 | Pending |
+| UI-04 | Phase 8 | Pending |
+| UI-05 | Phase 8 | Pending |
+| UI-06 | Phase 8 | Pending |
+| UI-07 | Phase 8 | Pending |
 
 **Coverage:**
 - v2.1 requirements: 41 total (5 TAB + 5 DB + 10 CAL + 14 SWEEP + 7 UI)
@@ -161,4 +161,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-05-18*
-*Last updated: 2026-05-18 after research synthesis*
+*Last updated: 2026-05-18 — traceability updated with v2.1 phase numbering (Phases 5-8)*
