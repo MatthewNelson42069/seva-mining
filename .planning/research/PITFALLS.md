@@ -1,518 +1,649 @@
-# Pitfalls Research
+# Pitfalls Research — v2.1 Three-Tab Content Engine
 
-**Domain:** v2.0 Daily Summary Feed — integrating a scheduled daily news summary into an existing news-ingestion system
-**Researched:** 2026-05-05
-**Confidence:** HIGH (based on direct code inspection of m49/m51-era production files in worker.py, content_agent.py, whatsapp.py)
+**Domain:** Adding multi-tab nav + Reddit ingestion + first-user-write CRUD to an existing scheduled-cron production system
+**Researched:** 2026-05-18
+**Confidence:** HIGH (most pitfalls grounded in actual code paths read from the repo)
 
 ---
 
-## Critical Pitfalls
+## 1. Reddit Ingestion (praw)
 
-### CRIT-1: Duplicate WhatsApp delivery — morning_digest + daily_summary both registered
+### CRITICAL — praw is sync; blocking the AsyncIOScheduler event loop
 
 **What goes wrong:**
-`morning_digest` (lock ID 1005, job ID `midday_digest`) is still registered in `worker.py`'s `build_scheduler()` when the new `daily_summary` cron is added. Both jobs fire, both call `send_whatsapp_message`. The user receives two separate messages per fire window. Worse: if `morning_digest` references the old approval-flow pipeline while `daily_summary` references the new `daily_summaries` table, the user sees a duplicate plus a stale message within the same minute.
+`praw.Reddit` and its `subreddit.hot()` / `subreddit.top()` calls are synchronous blocking I/O. The weekly_sweeper runs inside `AsyncIOScheduler`'s event loop (same process as `with_advisory_lock`, DB sessions, Sonnet calls). A bare `for post in subreddit.hot(limit=25)` call blocks the entire event loop for the duration of the HTTP round-trip. Every other coroutine — including the 08:00/12:00 daily_summary advisory-lock heartbeat — stalls until the Reddit call returns.
 
 **Why it happens:**
-v2.0 retires `morning_digest` "as dead code, don't strip" — it is natural to add the new cron in a separate commit without removing the old one, especially because the retirement instruction says not to delete code.
+`praw` uses `requests` under the hood (sync). `asyncpraw` exists and is the direct async replacement, but developers reaching for the canonical "praw" library miss this distinction.
 
 **How to avoid:**
-In the SAME commit that adds `daily_summary` to `CONTENT_CRON_AGENTS` (or as its own standalone `scheduler.add_job` call), remove the `scheduler.add_job(...)` call for `midday_digest` from `build_scheduler()`. The `_make_midday_digest_job` factory and the `"midday_digest": 1005` dict entry in `JOB_LOCK_IDS` can remain as dead code — but the registration MUST be removed. Test: confirm `len(_scheduler.get_jobs())` in startup logs reflects the new count and no `midday_digest` appears in `_scheduler.get_jobs()`.
+Use `asyncpraw` (the async fork, maintained in the same `praw-dev` org) instead of `praw`. All calls become `await subreddit.hot(limit=25)` and fit naturally into the existing async codebase. `asyncpraw` is a drop-in API replacement.
+
+If `praw` is chosen instead for any reason (e.g., a specific feature gap), every network call must be wrapped in `asyncio.to_thread(lambda: ...)` — the same pattern already used for `serpapi` calls in `content_agent.py` (`loop.run_in_executor(None, _call)`). Do NOT call praw methods directly in async context.
 
 **Warning signs:**
-Two WhatsApp messages arriving within seconds of each other on the first post-pivot cron fire.
+- Weekly sweeper takes >10s to complete in local testing with real Reddit calls
+- Railway logs show daily_summary fires delayed or skipped on Sundays
+- APScheduler logs `"Execution of job ... skipped: maximum number of running instances reached"`
 
-**Phase to address:**
-The phase that registers `daily_summary` in `worker.py` — same commit, not a follow-up.
-
----
-
-### CRIT-2: Advisory lock ID collision — accidental reuse of retired or gap IDs
-
-**What goes wrong:**
-`JOB_LOCK_IDS` in `worker.py` uses 1005 (`midday_digest`) and 1010-1016 (six sub-agents). Lock ID 1012 is a gap left by `sub_long_form` retirement. If `daily_summary` or `daily_summary_prune` is assigned 1012 (or any ID currently in the dict), `pg_try_advisory_lock` either silently refuses to acquire when the retired-but-still-registered old job holds the lock, or the two jobs race — producing zero output with no error log. The log message would read `"Job daily_summary: skipped (advisory lock held by another instance)"` with no concurrent instance running.
-
-**Why it happens:**
-Advisory locks are bare integers in Postgres — no semantic ownership. A developer scanning the dict and seeing 1012 is unused would naturally fill it.
-
-**How to avoid:**
-Reserve IDs 1020 and 1021 explicitly. Add to `JOB_LOCK_IDS`:
-```python
-"daily_summary": 1020,
-"daily_summary_prune": 1021,
-# Gap 1017-1019 reserved for future use — do NOT fill without checking production
-```
-Assert uniqueness at startup: `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` — this costs nothing and catches collisions immediately.
-
-**Warning signs:**
-`Job daily_summary: skipped (advisory lock held by another instance)` appearing at the scheduled fire time with no other scheduler process running.
-
-**Phase to address:**
-Phase that creates the `daily_summary` cron registration.
+**Phase to address:** Reddit ingestion phase (Phase A or whichever phase introduces `weekly_sweeper.py`)
 
 ---
 
-### CRIT-3: Multiple summary fires during Railway restart churn — misfire_grace_time interaction
+### HIGH — praw/asyncpraw client construction is NOT zero-latency; Reddit auth can hang
 
 **What goes wrong:**
-`build_scheduler()` sets `misfire_grace_time=1800` (30 min) globally. APScheduler fires a coalesced missed run once when the scheduler restarts if the missed fire was within the grace window. With `coalesce=True` and `max_instances=1`, this is correct for a single process lifetime. The danger: Railway occasionally produces a flappy restart sequence (start → crash → start → crash → start) across the 08:00 PT window. Each process restart creates a new scheduler instance. Three restarts within the 30-minute grace window = three scheduler lifetimes = three coalesced fires = three summaries + three WhatsApp messages. The m49 fix (CronTrigger + coalesce) prevents the IntervalTrigger "fire every 10 seconds" pattern but does NOT prevent "fire once per process start if within grace window."
+`praw.Reddit(client_id=..., client_secret=..., user_agent=...)` (or the asyncpraw equivalent) does not immediately connect — it defers OAuth token fetch to the first API call. But that first API call inside an APScheduler job (e.g., the first `await subreddit.hot()`) will block for as long as Reddit's OAuth endpoint takes to respond. If Reddit's auth endpoint is slow (degraded, rate-limited, or timing out), the entire sweeper hangs without a timeout.
 
-**Why it happens:**
-The m49 pattern was validated against a single clean restart. Flappy restarts during a bad Railway deploy expose the per-lifetime coalesce behavior.
+The existing 60s `AsyncAnthropic(timeout=60.0)` pattern in `daily_summary.py` demonstrates the project already knows this problem exists — but the pattern hasn't been pre-applied to the Reddit client.
 
 **How to avoid:**
-Add a database-level idempotency guard in the `daily_summary` agent function, BEFORE writing any row or sending any WhatsApp:
+Set a connection timeout on the asyncpraw session at construction time:
 ```python
-existing = await session.execute(
-    select(DailySummary).where(
-        DailySummary.fire_time >= now - timedelta(minutes=30),
-        DailySummary.status.in_(["running", "complete"]),
-    )
+reddit = asyncpraw.Reddit(
+    client_id=settings.reddit_client_id,
+    client_secret=settings.reddit_client_secret,
+    user_agent=settings.reddit_user_agent,
+    requestor_kwargs={"timeout": 15},  # 15s ceiling per request
 )
-if existing.scalar_one_or_none():
-    logger.info("daily_summary: skipping — recent run already exists within grace window")
-    return
 ```
-This mirrors what `reconcile_stale_runs` does for `agent_runs` rows. It is the correct defense for any job where exactly-once semantics matter.
+Wrap the entire Reddit ingestion block in a try/except that captures `asyncpraw.exceptions.AsyncPRAWException`, `asyncio.TimeoutError`, and bare `Exception` — using the same `counts["last_error"]` pattern from `quick-260514-jny` so failures surface in `agent_runs.errors`, not just Railway logs.
 
 **Warning signs:**
-Multiple `daily_summaries` rows with `generated_at` within 5 minutes of each other on the same day. WhatsApp burst of identical summaries.
+- `weekly_sweeper` agent_run stays `status='running'` for >2 minutes
+- `reconcile_stale_runs` sweeps a `weekly_sweeper` row to `failed` on the next scheduler boot
 
-**Phase to address:**
-Phase that writes the `daily_summary` agent run logic.
+**Phase to address:** Reddit ingestion phase
 
 ---
 
-### CRIT-4: fetch_stories() cache contamination — sharing sub-agent scored results with the summary
+### HIGH — Subreddit quarantine/private returns 403; crashes the whole sweeper
 
 **What goes wrong:**
-`fetch_stories()` caches on `int(time.time() // 1800)`. The `daily_summary` cron fires at 08:00 PT and 12:00 PT. `sub_breaking_news` fires every hour at HH:00 UTC — that is 00:00, 01:00, 02:00, ... 15:00 PT. If `sub_breaking_news` fires at 08:00 UTC (= 01:00 PT) and `daily_summary` fires at 08:00 PT (= 15:00 UTC), they do NOT share a bucket — different 30-minute windows. So the contamination is not from a concurrent hit but from a different concern: the `score` field on cached stories is calibrated for sub-agent approval queue selection (relevance × 0.4, recency × 0.3, credibility × 0.3), and the `predicted_format` label is an artifact for sub-agent content-type routing. If `daily_summary` calls `fetch_stories()` and uses `story['score']` to rank the top 5 gold headlines, it is using approval-queue scores — which are reasonable but subtly wrong for summary ranking (recency matters more for summaries; credibility should be weighted higher).
-
-More importantly: if a sub-agent fires within the same 30-minute bucket as `daily_summary` (e.g., `sub_breaking_news` at HH:00 UTC fires at 15:00 UTC = 08:00 PT on the nose), `daily_summary` will get a cache hit. This is harmless performance-wise but means the summary gets sub-agent-scored stories with `predicted_format` keys that have no meaning in the summary context — and a future developer might accidentally filter on `predicted_format` to get "only breaking news stories," excluding valid summary material.
-
-**How to avoid:**
-Do NOT use `fetch_stories()` directly in `daily_summary`. Implement a thin `fetch_stories_for_summary()` wrapper that bypasses the shared bucket cache and uses its own isolated cache key (e.g., `"summary_" + str(bucket)`), or simply calls `_do_fetch()` directly. Strip `predicted_format` from the returned stories before passing to the summary agent — or assert its absence in tests.
-
-**Warning signs:**
-Summary cards showing `predicted_format` in `raw_sources_jsonb` JSONB. Sub-agent run logs showing "cache hit" at the same timestamp as a daily_summary fire.
-
-**Phase to address:**
-Phase that implements the `daily_summary` agent's gold news ingestion.
-
----
-
-## High Pitfalls
-
-### HIGH-1: Ontario law filter — false positives from political speech
-
-**What goes wrong:**
-A Sonnet prompt asking "Is this a new Ontario mining-favourable law or policy?" returns `keep=True` for: "Ontario Premier announces intention to streamline mining permits" (political intent, no enacted law), "Mining industry welcomes government's pro-development stance" (editorial), "Ontario minister praises mining sector at conference" (speech). None of these are new laws. Over 30 days, the Ontario law section fills with noise and the user stops trusting it.
+`r/Wallstreetsilver` and similar subreddits can be quarantined. Accessing a quarantined subreddit via praw/asyncpraw raises a 403 error (documented in official praw docs across versions 7.1.4 through current). If the sweeper iterates over a hardcoded list of subreddits without per-subreddit error isolation, a single 403 will abort ALL subreddit fetches — the sweeper produces zero Reddit posts even though 4 out of 5 subreddits were accessible.
 
 **Why it happens:**
-Without explicit negative examples, Sonnet pattern-matches on "Ontario + mining + positive sentiment" — exactly what the existing `is_gold_relevant_or_systemic_shock` function in `content_agent.py` avoids by including detailed REJECT examples with specific company names and scenarios.
+The natural implementation is `for sub in SUBREDDIT_LIST: posts += await fetch_subreddit(sub)`. One exception propagates up and kills the loop.
 
 **How to avoid:**
-The Ontario law filter prompt MUST include:
-
-Positive examples (KEEP): "Bill 71, Building Ontario Act, amends Mining Act s.XX effective Jan 1 2026" — "Ontario Regulation 123/26 reduces royalty rates for junior explorers, effective April 2026"
-
-Negative examples (REJECT): "Premier says Ontario is open for business" (intent, not law) — "Mining association praises new policy direction" (industry reaction) — "Ontario government studying changes to permitting" (study, not enacted) — "Government announces consultation on mining reform" (pre-legislative)
-
-Require: the article must mention a specific bill number, regulation number, or enacted/effective date to qualify. Return structured JSON: `{"is_law": bool, "bill_or_reg_number": str|null, "reason": str}` for auditability.
-
-Pass the article BODY (first 1500 chars via the existing `fetch_article()` in `content_agent.py`), not just headline + snippet.
-
-**Warning signs:**
-Ontario law section averaging more than 1 article per 3 days in the first two weeks — that rate is too high for enacted Ontario mining law.
-
-**Phase to address:**
-Phase that implements Ontario law ingestion + Sonnet filter.
-
----
-
-### HIGH-2: Ontario law filter — false negatives on bills with opaque names
-
-**What goes wrong:**
-"Bill 71, the Building Ontario Act, 2026" amends the Mining Act in section 47. The bill name does not say "mining." A headline-only filter rejects this. This is the highest-value signal for the Ontario law section — the cross-domain legislative change the user most wants surfaced — and it disappears silently.
-
-**Why it happens:**
-The existing `is_gold_relevant_or_systemic_shock` function explicitly avoids this by checking `title + summary`, not title alone. An Ontario law filter built hastily from the headline would make the same mistake.
-
-**How to avoid:**
-Pass the full article body (first 1500 chars) to the Ontario law filter. If `fetch_article()` returns `success=False`, fall back to headline + snippet — do not discard. Add to the filter prompt: "Search the article body for references to: Mining Act, Mineral Tenure Act, Ontario Geological Survey Act, Aggregate Resources Act, Crown lands, royalty, exploration permit, or staking regulation."
-
-Synthetic test: pass "Building Ontario Act amends Mining Act" — confirm `is_law=True`. This test case must be in the test suite before merge.
-
-**Warning signs:**
-Zero Ontario law hits in a month when the Ontario legislature was actively in session (Ontario Hansard is publicly searchable — verify against it).
-
-**Phase to address:**
-Phase that implements Ontario law ingestion + Sonnet filter.
-
----
-
-### HIGH-3: Prune-vs-read race — frontend 404 on a just-deleted row
-
-**What goes wrong:**
-The `daily_summary_prune` cron runs `DELETE FROM daily_summaries WHERE generated_at < NOW() - INTERVAL '30 days'`. Simultaneously, the feed page has rendered a card. The user clicks the card to view the detail route `GET /summaries/{id}`. If the row was deleted between the list render and the detail fetch, the API returns 404. Neon PgBouncer in transaction mode handles MVCC correctly (reads see a consistent snapshot), so the race is not a data integrity issue — it is a UX issue.
-
-**Why it happens:**
-Prune crons are typically implemented as simple DELETEs without considering in-flight frontend requests against just-pruned rows.
-
-**How to avoid:**
-Two-part mitigation:
-1. Frontend: `GET /summaries/{id}` returning 404 must produce "This summary is no longer available" toast + auto-redirect to `/`, not an unhandled error screen.
-2. Backend: consider soft delete — add a `pruned_at TIMESTAMP` column; the prune cron sets it instead of hard-deleting; the feed query filters `WHERE pruned_at IS NULL`; an optional weekly hard-delete batch runs during low-traffic hours.
-
-Additionally: Neon PgBouncer in transaction mode routes each statement to potentially a different backend connection. Advisory locks acquired in one statement do NOT persist to the next statement in the same "logical session." The prune cron MUST acquire and release its advisory lock within the same `engine.connect()` context (which `with_advisory_lock` already does correctly) — do not attempt to hold the lock across a disconnection.
-
-**Warning signs:**
-Frontend 404 errors in browser console appearing at predictable clock times (around the prune cron schedule). Visible in Railway API access logs as `GET /summaries/{id} 404` in bursts.
-
-**Phase to address:**
-Phase that implements the 30-day prune cron + `GET /summaries/{id}` detail endpoint.
-
----
-
-### HIGH-4: JSONB schema drift on raw_sources_jsonb — no validation gate
-
-**What goes wrong:**
-`raw_sources_jsonb` on `daily_summaries` stores article URLs + headlines per section. Future shape changes (rename `url` to `link`, add `published_date`, add `section` discriminator) are not caught by Alembic migrations — Postgres JSONB has no column-level schema enforcement. A phase-3 change renames a key; the phase-1 read query silently returns `None` for every affected field. The breakage reaches production because there is no migration gate to enforce the change.
-
-**Why it happens:**
-The existing codebase uses JSONB for `draft_items.alternatives` with no Pydantic model validating the output shape — a developer extending that pattern to `raw_sources_jsonb` would naturally skip the validation layer.
-
-**How to avoid:**
-Define and use a Pydantic model on write:
+Per-subreddit try/except with graceful degrade — the same section-isolation pattern already used in `run_daily_summary`:
 ```python
-class RawSource(BaseModel):
-    url: str
-    headline: str
-    section: Literal["gold_news", "ontario_law", "ontario_stats"]
-    published_date: datetime | None = None
-
-class DailySummaryRawSources(BaseModel):
-    sources: list[RawSource]
+for sub_name in SUBREDDIT_LIST:
+    try:
+        sub = await reddit.subreddit(sub_name)
+        async for post in sub.hot(limit=25):
+            posts.append(...)
+    except Exception as exc:
+        logger.warning("weekly_sweeper: subreddit r/%s failed (%s) — skipping", sub_name, type(exc).__name__)
+        counts["subreddit_errors"].append(f"{sub_name}: {type(exc).__name__}")
 ```
-The `daily_summary` agent writes: `raw_sources=DailySummaryRawSources(sources=[...]).model_dump()`. The `GET /summaries/{id}` endpoint validates on read using the same model. Any future schema change requires updating the Pydantic model — that is a code change surfaced in review, not a silent JSONB mutation.
+Log the skip; do NOT re-raise. The sweeper completes with partial data and marks the subreddit_errors in `agent_runs.errors`.
 
 **Warning signs:**
-Frontend showing empty source lists or `undefined` for source fields after a backend change that touched the summary writer.
+- `r/Wallstreetsilver` or `r/Gold_and_Silver` appear in subreddit_errors on first deploy
+- Weekly card has zero Reddit posts section despite the sweeper completing
 
-**Phase to address:**
-Phase that creates the `daily_summaries` table migration.
+**Phase to address:** Reddit ingestion phase
 
 ---
 
-### HIGH-5: WhatsApp message length — 3-section summary exceeds 1600 chars
+### MEDIUM — Reddit user-agent string causes aggressive rate limiting if generic
 
 **What goes wrong:**
-Twilio's hard limit is 1600 characters per message. A 3-section summary with 5 gold headlines + 2 Ontario law hits + 1 Ontario stats note easily reaches 1200-2500 characters. The existing `build_chunks()` in `whatsapp.py` handles chunking at a 1500-char safety margin, but it was designed for numbered draft-item lists. A 3-section summary chunked mid-section produces incoherent messages — the gold section header appears in message 1, the gold bullets split across messages 1 and 2.
-
-**Why it happens:**
-`send_agent_run_notification` and `build_chunks` were designed for the approval-flow firehose. v2.0's summary has structured sections that do not fit the item-list chunking pattern.
+Reddit's API rules require a descriptive user-agent in the format `<platform>:<app ID>:<version string> (by /u/<reddit username>)`. A generic UA (e.g., `Python/asyncpraw` or `Mozilla/5.0`) causes Reddit to rate-limit more aggressively and can result in requests being silently dropped or returning 403.
 
 **How to avoid:**
-Do NOT use `build_chunks` for `daily_summary` WhatsApp delivery. Instead, send a teaser message that links to the web feed:
-```
-Summary as of 08:00 PT — 2026-05-05
-• Gold: 5 stories (markets up 0.8% on tariff news)
-• Ontario law: 1 update
-• Ontario stats: no new data
-Full summary: https://seva-mining-smm.vercel.app/
-```
-This fits under 300 characters, never chunks, and is the correct architecture — the web feed is the primary surface; WhatsApp is the notification. Log `len(teaser_message)` on every send and assert < 400 chars.
+Set `REDDIT_USER_AGENT` in Railway env to a specific string, e.g., `"seva-mining-viral-sweeper/0.1 (by /u/<owner-reddit-handle>)"`. This requires a one-time decision on which Reddit account "owns" the app (used at reddit.com/prefs/apps setup). Document this in the Railway env-var setup runbook (mirrors the X Developer Portal runbook in CLAUDE.md).
 
 **Warning signs:**
-WhatsApp messages arriving as `[daily_summary 1/3]`, `[daily_summary 2/3]`, `[daily_summary 3/3]` — technically correct but signals the wrong design choice.
+- Intermittent 429 responses even at low request volume
+- Reddit calls succeed locally but fail on Railway
 
-**Phase to address:**
-Phase that implements WhatsApp delivery for `daily_summary`.
+**Phase to address:** Reddit ingestion phase (env var setup step)
 
 ---
 
-### HIGH-6: Anthropic cost overrun — using Sonnet for the Ontario law relevance filter
+### MEDIUM — REDDIT_CLIENT_SECRET logged at startup alongside other env vars
 
 **What goes wrong:**
-If the Ontario law filter uses `claude-sonnet-4-6` (the model used in `_score_relevance` in `content_agent.py`), the cost calculation is: ~30 Ontario articles × Sonnet × 2 fires/day × 30 days ≈ 1800 Sonnet calls/month for the Ontario law filter alone. Combined with gold news scoring (~120 articles × 2 fires/day = 7200 calls/month) and 2 summary write calls/day, total Anthropic spend exceeds the $30-50 AI budget.
-
-**Why it happens:**
-`content_agent.py` uses `claude-sonnet-4-6` for `_score_relevance` — a developer extending that pattern to the Ontario law filter would naturally reach for the same model without recalculating the cost at new call volume.
+`_validate_env()` in `worker.py` logs whether env vars are SET/MISSING. The current implementation logs `bool(settings.x_api_bearer_token)` etc. — presence only, not value. If v2.1 adds `REDDIT_CLIENT_ID/SECRET/USER_AGENT` to the log block carelessly (e.g., `logger.info("REDDIT_CLIENT_SECRET: %s", settings.reddit_client_secret)`), the secret will appear in Railway log stream.
 
 **How to avoid:**
-Ontario law relevance filter: use `claude-haiku-4-5` — the same model as `classify_format_lightweight` and the gold gate `is_gold_relevant_or_systemic_shock` (which defaults to `config.get("content_gold_gate_model", "claude-haiku-4-5")`). Only the final summary WRITE call (one per fire) should use Sonnet.
-
-Budget estimate with Haiku for filtering:
-- ~30 Ontario articles × Haiku × 2/day × 30 days ≈ $5/month
-- ~120 gold articles × Haiku × 2/day × 30 days ≈ $20/month
-- 2 Sonnet summary writes/day × 30 days ≈ $2/month
-- Total ≈ $27/month — within the $30-50 budget with headroom
-
-Make the filter model configurable: `ontario_law_filter_model` DB config key defaulting to `"claude-haiku-4-5"`, matching the pattern of `content_gold_gate_model`.
-
-**Warning signs:**
-Anthropic dashboard showing unexpectedly high Sonnet usage from the scheduler service starting after v2.0 deploy.
-
-**Phase to address:**
-Phase that implements the Ontario law ingestion + relevance filter.
-
----
-
-## Moderate Pitfalls
-
-### MOD-1: DST transitions — 08:00 and 12:00 PT are safe, but document why
-
-**What goes wrong:**
-Nothing — these specific times are safe. APScheduler with `timezone='America/Los_Angeles'` handles DST correctly. The 08:00 and 12:00 fire times do not fall in the ambiguous 01:00-02:00 window during fall-back. However, if the fire times are ever changed in a future sprint, a developer might not know that times between 01:00-02:00 PT are problematic.
-
-**How to avoid:**
-Add a comment at the CronTrigger registration:
+In `_validate_env()`, add Reddit vars to the `optional` dict (presence-only check, same as `SERPAPI_API_KEY`):
 ```python
-CronTrigger(hour=8, minute=0, timezone="America/Los_Angeles")
-# 08:00 PT is outside the DST-ambiguous 01:00-02:00 window.
-# If you change this time, verify the new time is not 01:00-02:00 PT.
+optional["REDDIT_CLIENT_ID"] = bool(settings.reddit_client_id)
+optional["REDDIT_CLIENT_SECRET"] = bool(settings.reddit_client_secret)
+optional["REDDIT_USER_AGENT"] = bool(settings.reddit_user_agent)
 ```
-No additional code needed — the CronTrigger handles spring-forward and fall-back automatically.
+Never log the value, only the boolean. Mirror exactly the existing pattern.
 
-**Warning signs:**
-Missing or duplicate fire on the first Sunday in November or second Sunday in March. Check the `daily_summaries` table on those dates.
-
-**Phase to address:**
-Phase that creates the `daily_summary` CronTrigger registration.
+**Phase to address:** Reddit ingestion phase
 
 ---
 
-### MOD-2: Alembic migration 0010 — accidentally touching the ApprovalState enum
+## 2. Story Virality Compute
+
+### HIGH — JSONB gold_news array extraction shape must match HIGH-4 contract exactly
 
 **What goes wrong:**
-Migration 0010 adds the `daily_summaries` table. If Alembic autogenerate is used (`alembic revision --autogenerate`), it compares ALL models to the current DB state. If any model drift exists in the `ApprovalState` enum (defined in migration 0009), autogenerate emits spurious `op.execute("CREATE TYPE ...")` or `op.alter_column` DDL. Postgres enums are notoriously difficult to modify post-creation — a failed migration on an enum in production can leave the database in a partial state requiring manual repair.
-
-**Why it happens:**
-Alembic autogenerate is convenient but inspects every model, not just the changed one. It is easy to run `--autogenerate` without reviewing the generated diff carefully.
-
-**How to avoid:**
-Write migration 0010 by hand: `alembic revision -m "add_daily_summaries"` (no `--autogenerate`). The migration body should contain ONLY:
-1. `op.create_table("daily_summaries", ...)`
-2. `op.create_index(...)` on `generated_at` (needed for the prune `WHERE generated_at < NOW() - INTERVAL '30 days'` query)
-
-Review the migration file before running `alembic upgrade head` in production. Confirm the file contains no `op.execute` statements referencing `approvalstate` or any existing enum type.
-
-**Warning signs:**
-Migration 0010's `upgrade()` function contains `CREATE TYPE` or `ALTER TYPE` DDL referencing `approvalstate`.
-
-**Phase to address:**
-Phase that creates the `daily_summaries` table migration.
-
----
-
-### MOD-3: SerpAPI quota — daily_summary fires are cache-cold by design
-
-**What goes wrong:**
-`fetch_stories()` caches on a 30-minute bucket. In v1.0, `sub_breaking_news` fires every hour — the cache was warm for most of the day, amortizing SerpAPI calls across many hits. With v2.0 retiring those sub-agents, only `daily_summary` calls the ingestion — at 08:00 and 12:00 PT, 4 hours apart. Each fire is a fresh full ingestion: 17 `SERPAPI_KEYWORDS` × 5 results each = 85 SerpAPI searches. Two fires/day × 30 days = 60 full ingestions/month, ~5,100 search result fetches/month.
-
-The $50/mo SerpAPI plan provides approximately 5,000-6,000 searches/month depending on tier. This is right at the limit with minimal headroom.
-
-**How to avoid:**
-Reduce `SERPAPI_KEYWORDS` from 17 to 10 for the summary use case. The sub-agents needed broad coverage for format diversity (infographics needed different signals than threads). The summary only needs the top gold + macro stories. A `SUMMARY_SERPAPI_KEYWORDS` constant with the 10 highest-signal keywords avoids modifying the existing `SERPAPI_KEYWORDS` constant (which should remain in place for any future sub-agent resurrection).
-
-Verify the SerpAPI plan quota in the dashboard before v2.0 go-live.
-
-**Warning signs:**
-SerpAPI returning empty results or 429 errors in Railway logs after day 15-20 of the month.
-
-**Phase to address:**
-Phase that implements the `daily_summary` agent's gold news ingestion.
-
----
-
-### MOD-4: Stale TanStack Query cache — new summary not appearing while tab is open
-
-**What goes wrong:**
-TanStack Query's default stale time is 0ms — it refetches on every mount. But the feed component is mounted once when the user opens the page. If the 12:00 PT summary fires while the tab is open (user opened it after the 08:00 summary), the new summary does not appear until the user navigates away and back. The data is stale in the query cache but no refetch fires while the component is mounted.
-
-**How to avoid:**
-Set `refetchInterval: 5 * 60 * 1000` on the `useSummaries()` hook. This is safe — `GET /summaries` is a lightweight `SELECT * FROM daily_summaries ORDER BY generated_at DESC LIMIT 30`. When the refetch detects a new `id` or `generated_at` that wasn't in the previous result, show a "New summary available" banner prompting the user to scroll to the top.
-
-**Warning signs:**
-User reports "I don't see the 12:00 summary until I hard-refresh the page."
-
-**Phase to address:**
-Phase that implements the web feed frontend.
-
----
-
-### MOD-5: Hallucinated dates in Sonnet summary output
-
-**What goes wrong:**
-When Sonnet writes the summary narrative, it may produce "The Bank of Canada raised rates in March 2025" when the article is from March 2024. For the Ontario stats section, Sonnet might write "as of Q1 2025" when the most recent StatCan release is Q3 2024. This is a known Sonnet pattern — it anchors to training data rather than the article's stated date.
-
-**Why it happens:**
-Sonnet is prompted to write a narrative but is not explicitly grounded to each article's `published_date`.
-
-**How to avoid:**
-Include `published_date` in every article passed to the summary write prompt. Add an explicit instruction:
+The virality compute queries `daily_summaries.raw_sources_jsonb` for the past 7 days. The HIGH-4 contract (documented in `daily_summary.py` line 591) defines the JSONB shape as:
 ```
-For every factual claim in your summary, use ONLY dates explicitly stated in the provided articles.
-Do NOT infer, estimate, or use training knowledge for dates.
-If an article does not include a date, write "recently" rather than inventing a date.
+{"gold_news": [{"title": str, "link": str, "source_name": str, "score": float, "published_at": str|None}]}
 ```
-Post-process: scan the output for 4-digit years outside the range `[current_year - 1, current_year]` and log a WARNING if found — do not send a summary containing dates from 3+ years ago without review.
+The virality code must navigate `row.raw_sources_jsonb["gold_news"]` to get the story list. If any call site in the past ever wrote a different shape (e.g., direct dict assignment without the HIGH-4 wrapper, a test fixture with `"stories"` instead of `"gold_news"`), the virality compute silently returns 0 cross-references for those rows.
 
-**Warning signs:**
-Summary cards showing dates 1-2 years in the past for what were presented as current news articles.
-
-**Phase to address:**
-Phase that implements the Sonnet summary write prompt.
-
----
-
-### MOD-6: Failure alert deadlock — WhatsApp send failure during summary failure
-
-**What goes wrong:**
-If `daily_summary` fails AND the failure-alert WhatsApp send also fails (Twilio sandbox session expired, credentials rotated), `send_whatsapp_message` raises `TwilioRestException` after one retry. If the failure-alert call is made inline in the `daily_summary` job function, the `TwilioRestException` propagates up to `with_advisory_lock`, which catches it (EXEC-04 — worker must survive), logs it, and releases the lock. The original error is lost. The user never learns the summary failed.
-
-**Why it happens:**
-The natural pattern is `try: run_summary() except: send_failure_alert()` — but this does not protect against the alert itself failing.
+Additionally: `raw_sources_jsonb` is typed as `JSONB` in the ORM model but retrieved as Python `dict` by SQLAlchemy + asyncpg. If a row was written with `raw_sources_jsonb=None` (the failure-path in `run_daily_summary`'s `except` block), iterating `row.raw_sources_jsonb["gold_news"]` raises `TypeError: 'NoneType' object is not subscriptable`.
 
 **How to avoid:**
-Wrap the failure alert send in its own try/except that NEVER re-raises:
+Defensive extraction with None guard:
 ```python
-try:
-    await send_whatsapp_message(
-        f"SUMMARY FAILED: {section_name} — {type(original_exc).__name__}: {str(original_exc)[:200]}"
-    )
-except Exception as alert_exc:
-    logger.error(
-        "daily_summary failure alert ALSO failed (%s) — original error was: %s. "
-        "Check Railway logs at %s.",
-        type(alert_exc).__name__,
-        original_exc,
-        datetime.now(timezone.utc).isoformat(),
-    )
-    # Do not re-raise — EXEC-04
+stories = (row.raw_sources_jsonb or {}).get("gold_news", [])
 ```
-The alert message MUST include which section failed (gold_news / ontario_law / ontario_stats), the error type, and a timestamp so the user can locate the Railway log entry.
+Add a unit test that exercises a row where `raw_sources_jsonb` is `None` (failure row) — the virality compute must return empty for that row, not raise.
+
+**Phase to address:** Weekly sweeper phase
+
+---
+
+### HIGH — Title-based dedup must be applied WITHIN a summary row before cross-summary count
+
+**What goes wrong:**
+The virality algorithm counts how many daily_summary rows (across 14 rows over 7 days) contain a given story. But a story can appear in the TOP 20 list of the same row more than once if dedup was imperfect at ingest time (different URLs for the same story slipping through URL-dedup but not title-dedup). If not deduplicated per-row before counting, one story appears to cross-reference itself within the same row, inflating its virality count.
+
+**How to avoid:**
+Before cross-summary counting, apply title-based dedup within each row's `gold_news` list using the existing `deduplicate_stories` pattern (SequenceMatcher 0.85 threshold already in `content_agent.py`). This is a one-liner: run `deduplicate_stories(stories_for_row)` on each row's list before adding to the aggregate cross-reference dict.
+
+**Phase to address:** Weekly sweeper phase
+
+---
+
+### MEDIUM — URL canonicalization before link-based dedup (UTM params, mobile vs desktop)
+
+**What goes wrong:**
+The virality compute groups stories by title similarity (SequenceMatcher 0.85). If the implementation uses URL equality as a secondary grouping key without canonicalization, two versions of the same story (`https://bloomberg.com/...?utm_source=email` and `https://bloomberg.com/...`) appear as different stories and split the cross-reference count, diluting the virality signal for that story.
+
+**How to avoid:**
+For any URL-based grouping (even as a secondary key), strip query parameters and normalize trailing slashes before comparison:
+```python
+from urllib.parse import urlparse, urlunparse
+def canonical_url(url: str) -> str:
+    p = urlparse(url.lower())
+    return urlunparse(p._replace(query="", fragment=""))
+```
+Primary grouping key should always be title similarity (more robust than URL). URL canonical is a tiebreaker only.
+
+**Phase to address:** Weekly sweeper phase
+
+---
+
+### LOW — O(N²) title similarity is tractable at N=210 but should be measured
+
+**What goes wrong:**
+14 rows × 15 stories/row = 210 story records. SequenceMatcher O(N²) = ~44,100 comparisons. In Python this is fast (~0.5-2s depending on string lengths) but it runs synchronously inside the async event loop. If future data volume grows (GOLD_TOP_N was recently bumped 12→20, and could grow again), this becomes a latency issue.
+
+**How to avoid:**
+Add a timing log for the dedup pass: `logger.info("virality_dedup: %d stories, %.2fs", n, elapsed)`. If it exceeds 1s, move the dedup pass to `asyncio.to_thread`. No action required for v2.1 launch, but the measurement flag should be in the code from day one.
+
+**Phase to address:** Weekly sweeper phase
+
+---
+
+## 3. Weekly Sonnet "Content Angles" Generation
+
+### HIGH — Reddit post bodies can exceed token budget without truncation
+
+**What goes wrong:**
+Some Reddit posts (especially r/Gold_and_Silver long-form discussions) can be 1,000-2,000 words. If all selected Reddit posts are passed full-body to the Sonnet prompt, the input token count can reach 8,000-12,000 tokens for a 5-post sample. This is within Sonnet's context window but:
+1. Costs more than necessary (the weekly_sweeper must stay within the ~$200/month budget)
+2. Can push toward Sonnet's output limit when the prompt demands 3 structured angles
+
+**How to avoid:**
+Truncate each Reddit post body to 500 characters before including in the Sonnet user prompt (mirrors the existing `[:500]` truncation in `content_agent.py` line 290 for the format classifier). Apply the same ceiling to story titles (truncate at 200 chars). Document the truncation in the prompt comment: "# Bodies truncated to 500 chars to control token budget."
 
 **Warning signs:**
-A `daily_summaries` row with `status='failed'` in the DB and no corresponding WhatsApp notification received on that date.
+- Anthropic API returns `max_tokens` truncation warnings in response metadata
+- Weekly Sonnet call costs >$0.10/week (visible in Anthropic usage dashboard)
 
-**Phase to address:**
-Phase that implements the WhatsApp failure-alert hook for `daily_summary`.
+**Phase to address:** Weekly sweeper phase
 
 ---
 
-## Minor Pitfalls
-
-### MIN-1: Markdown XSS — rendering Claude output without sanitization
+### HIGH — Sonnet content angles must stay within the gold bull thesis; no bearish drift
 
 **What goes wrong:**
-Sonnet returns markdown. If the frontend renders it with `dangerouslySetInnerHTML` or an unsanitized renderer, a `<script>` tag in the Sonnet output creates an XSS vector. Probability is low (Sonnet does not typically emit script tags in summaries), but it is a trivially-preventable class of vulnerability.
+If Reddit posts that week are dunking on gold (e.g., r/Wallstreetsilver posts arguing gold is overvalued), Sonnet will incorporate that bearish sentiment into the content angles unless explicitly prohibited. A bearish angle in the weekly card contradicts the project's locked bull-thesis rule (GOLD_NEWS_SYSTEM_PROMPT explicitly states this).
 
 **How to avoid:**
-Use `react-markdown` (which rejects `<script>` tags by default) with `allowedElements` explicitly set to `['p', 'ul', 'ol', 'li', 'strong', 'em', 'a', 'h3', 'h4', 'blockquote']`. Never use `dangerouslySetInnerHTML` on LLM output.
+The weekly_sweeper Sonnet system prompt must include an explicit constraint:
+```
+All three content angles MUST support the gold bull thesis — gold price going higher,
+central bank demand, inflation hedge, etc. Do NOT produce an angle that is neutral or
+bearish toward gold price, regardless of what the Reddit posts contain. If Reddit
+posts express bearish sentiment, extract the underlying data point and reframe it
+through the bull lens, or discard it.
+```
+This is a direct analogue of the GOLD_NEWS_SYSTEM_PROMPT "stories that DO NOT advance the bull thesis should be excluded" rule.
 
-**Phase to address:**
-Phase that implements the web feed frontend rendering.
+**Phase to address:** Weekly sweeper phase
 
 ---
 
-### MIN-2: Ontario stats empty-state indistinguishable from ingestion failure
+### HIGH — Timeout wrapping for weekly Sonnet call must mirror post-ii6 pattern exactly
 
 **What goes wrong:**
-Ontario stats (StatCan / OGS) release monthly or quarterly. Most daily fires produce no new stats — this is expected. If the empty state renders as a blank section or a generic "No data" message, the user cannot distinguish "no new stats released this month" (correct) from "the stats ingestion is broken" (problem). After weeks of correct empty states, the user stops noticing — and when the ingestion actually breaks, it looks the same.
+The post-ii6 fix set `AsyncAnthropic(timeout=60.0)` in `daily_summary.py`. The weekly_sweeper constructs its own Anthropic client. If the client is constructed without an explicit timeout, it inherits the SDK default (600s). A hung Sonnet call will hold the event loop (or in-thread executor) for up to 10 minutes — long enough to block the next scheduler tick and stall the entire worker process.
 
 **How to avoid:**
-Two distinct states persisted in the `daily_summaries` row:
-1. `ontario_stats_status = "no_new_data"` + `ontario_stats_last_data_date = <date>` → render: "No new Ontario stats since 2026-04-01"
-2. `ontario_stats_status = "error"` → render: "Ontario stats unavailable — check agent logs" (distinct visual treatment, links to `/settings/agent-runs`)
+Construct the Anthropic client with an explicit 60s timeout in `weekly_sweeper.py`, identical to `daily_summary.py`:
+```python
+anthropic_client = AsyncAnthropic(
+    api_key=settings.anthropic_api_key, timeout=60.0,
+)
+```
+A single weekly Sonnet call is lower risk than the 2×-daily call, but the pattern must be consistent across all agents.
 
-The `last_data_date` should be a column on `daily_summaries`, not inferred by querying previous rows — querying previous rows is fragile when the prune cron runs.
-
-**Phase to address:**
-Phase that implements the Ontario stats section + empty-state design.
+**Phase to address:** Weekly sweeper phase
 
 ---
 
-### MIN-3: Frontend route /queue bookmark breaks on pivot day
+### MEDIUM — Hallucinated facts in content angles; grounding constraint required
 
 **What goes wrong:**
-The old `/queue` route was the primary URL used by the user. After v2.0 replaces it with `/`, any browser bookmark pointing to `/queue` returns a 404 — a bad first impression on the first open after deploy.
+Sonnet may synthesize plausible-sounding gold price figures or analyst quotes that are NOT in the supplied Reddit posts or viral stories. Without an explicit grounding constraint, the content angles could contain invented data points that mislead the operator when used for social-media planning.
 
 **How to avoid:**
-Add a React Router redirect: `<Route path="/queue" element={<Navigate to="/" replace />} />`. Include it in the phase that ships the new feed page. Add a `// TODO: remove after 2026-07-05` comment. Remove after 60 days.
+Add a grounding rule to the Sonnet system prompt:
+```
+Use ONLY facts, figures, and claims present in the supplied Reddit posts and viral stories.
+Do NOT introduce outside knowledge, invented price targets, or analyst names not
+mentioned in the supplied inputs.
+```
+Mirror the MOD-5 grounding rule already applied in `daily_summary.py` (published_at injection to prevent date hallucination).
 
-**Phase to address:**
-Phase that implements the web feed frontend.
-
----
-
-## Technical Debt Patterns
-
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Retire sub-agents as dead code (not stripped) | Fast pivot, no regression risk on retired code | Tests for retired sub-agents keep passing; dead code accumulates; cognitive overhead | Acceptable for v2.0; strip in v2.1 after 30 days confidence |
-| No Pydantic model for JSONB raw_sources_jsonb | One less abstraction layer | Silent schema drift; breaks go undetected until production shows empty fields | Never for fields read by the frontend |
-| WhatsApp teaser-only message (no full content) | Constant message size, zero chunking logic | User cannot read summary content offline — must open web feed | Acceptable — web feed is the primary surface |
-| Single misfire_grace_time=1800 for all jobs | Simple global config, reuses m49 pattern | daily_summary and prune cron have different recovery needs; prune should NOT fire multiple times in a restart burst | Use DB-level idempotency guard (CRIT-3) as defense-in-depth |
+**Phase to address:** Weekly sweeper phase
 
 ---
 
-## Integration Gotchas
+## 4. Calendar CRUD (First User-Write Surface)
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Twilio Sandbox | Sandbox session expires if user has not sent a message in 24h; `send_whatsapp_message` returns `None` (credentials present, but session lapsed) — success looks the same as failure | Move to production Twilio sender before v2.0 go-live; sandbox is correct for local dev only |
-| Neon PgBouncer (transaction mode) | Using `pg_try_advisory_lock` and expecting it to persist across multiple statements — PgBouncer routes each statement to potentially a different backend connection | Advisory locks work when acquired and released within a single `engine.connect()` context — which `with_advisory_lock` already does correctly; prune cron must use the same pattern |
-| APScheduler + asyncio Python 3.12+ | Calling `asyncio.get_event_loop()` inside an async job function — deprecated in Python 3.10+, raises DeprecationWarning in 3.12 | Use `asyncio.get_running_loop()` inside async job functions; `_do_fetch` in `content_agent.py` uses `get_event_loop()` — new daily_summary code should use `get_running_loop()` |
-| SerpAPI in async context | Calling `serpapi_client.search()` synchronously inside an async function without `run_in_executor` — blocks the event loop | Use `loop.run_in_executor(None, _call)` pattern from `_fetch_all_serpapi` |
+### CRITICAL — Date field sends as DATE but FastAPI/Pydantic may interpret as datetime with TZ conversion
+
+**What goes wrong:**
+The frontend user is in PT (UTC-7/8). When creating or patching a calendar item with `date: "2026-05-20"`, Pydantic may silently convert a Python `date` field into a UTC datetime if the model uses `datetime` instead of `date`. A user clicks "Wednesday May 20" and the server stores `2026-05-19` (Tuesday) because the midnight PT datetime rolled back to the previous UTC day during serialization.
+
+This is the classic timezone-off-by-one bug. It will be invisible in development (both client and server on same machine) but visible on Railway (UTC server, PT user).
+
+**Why it happens:**
+Developers reach for `datetime` for all date/time fields. SQLAlchemy's `Date` column type is distinct from `DateTime`. If the model uses `Column(DateTime)` instead of `Column(Date)`, Postgres stores a full timestamp and Pydantic serializes it with timezone context on reads.
+
+**How to avoid:**
+- SQLAlchemy model: `date = Column(Date, nullable=False)` (NOT `DateTime`)
+- Pydantic schema: `date: datetime.date` (NOT `datetime.datetime`)
+- Frontend: send explicit `"YYYY-MM-DD"` string, never a JS `Date` object
+- Backend: parse as `date` type; no timezone conversion happens on a bare date
+- Add a test: create a calendar item with `date="2026-05-20"`, read it back, assert `response["date"] == "2026-05-20"` — run this test with the server process in UTC timezone (`TZ=UTC pytest`)
+
+**Warning signs:**
+- Calendar items created in the evening PT appear on the previous day's grid cell
+
+**Phase to address:** Calendar CRUD phase
 
 ---
 
-## "Looks Done But Isn't" Checklist
+### HIGH — Optimistic UI rollback not wired on PATCH failure; orphaned UI state
 
-- [ ] **Dual registration removed:** Startup logs show `midday_digest` is absent from `_scheduler.get_jobs()` output
-- [ ] **Advisory lock uniqueness:** `assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)` passes at startup; daily_summary=1020, daily_summary_prune=1021
-- [ ] **WhatsApp teaser length:** `len(teaser_message)` logged and confirmed < 400 chars on first real fire
-- [ ] **Ontario law filter has negative examples:** Prompt string reviewed and confirmed to contain at least one REJECT example before merge
-- [ ] **Ontario law filter uses Haiku:** Model config key confirmed as `claude-haiku-4-5`; not `claude-sonnet-4-6`
-- [ ] **JSONB Pydantic model validates on write:** Unit test: write a malformed `RawSource` — confirm `ValidationError` raised
-- [ ] **DB-level idempotency guard:** `daily_summary` agent queries for recent rows before writing; unit test simulates two concurrent fires
-- [ ] **Prune 404 handled gracefully:** Frontend shows "no longer available" message on `GET /summaries/{id}` 404 — not an error screen
-- [ ] **Ontario stats shows last_data_date:** Empty-state component renders a specific date string, not just "No data"
-- [ ] **`/queue` redirect in place:** Browser navigation to `/queue` redirects to `/` with 301
+**What goes wrong:**
+TanStack Query `useMutation` optimistic updates require a three-step pattern: `onMutate` (apply optimistic update + snapshot old data), `onError` (restore snapshot), `onSettled` (invalidate query). If `onError` is omitted or only calls `invalidateQueries` (not `setQueryData` with the snapshot), the calendar grid shows the new date after a failed drag-and-drop, permanently out of sync with the DB until the user refreshes.
+
+**Why it happens:**
+The `onMutate` snapshot pattern is non-obvious. Developers write the happy path (optimistic update + invalidation on success) and miss the rollback.
+
+**How to avoid:**
+```typescript
+const mutation = useMutation({
+  mutationFn: (vars: { id: string; date: string }) =>
+    api.patch(`/calendar/${vars.id}`, { date: vars.date }),
+  onMutate: async (vars) => {
+    await queryClient.cancelQueries({ queryKey: ['calendar'] })
+    const snapshot = queryClient.getQueryData(['calendar'])
+    queryClient.setQueryData(['calendar'], (old) => /* apply optimistic */)
+    return { snapshot }  // returned context is passed to onError
+  },
+  onError: (_err, _vars, context) => {
+    queryClient.setQueryData(['calendar'], context?.snapshot)
+  },
+  onSettled: () => {
+    queryClient.invalidateQueries({ queryKey: ['calendar'] })
+  },
+})
+```
+This pattern is required for ALL calendar mutations (create, update, delete, reschedule). Test the rollback path explicitly: mock the PATCH endpoint to return 500 and assert the UI restores the pre-drag position.
+
+**Phase to address:** Calendar CRUD phase
 
 ---
 
-## Pitfall-to-Phase Mapping
+### HIGH — Empty title allowed by frontend but rejected by backend — silent UX failure
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| CRIT-1: Duplicate WhatsApp dual registration | Phase that registers `daily_summary` cron | `midday_digest` absent from `get_jobs()` at startup |
-| CRIT-2: Advisory lock ID collision | Phase that registers `daily_summary` cron | Lock ID uniqueness assertion passes; 1020 and 1021 assigned |
-| CRIT-3: Multiple fires on Railway restart | Phase that writes `daily_summary` agent logic | Integration test: two scheduler starts 5 min apart → one `daily_summaries` row |
-| CRIT-4: fetch_stories() cache contamination | Phase that implements gold news ingestion for summary | Unit test: summary story list has no `predicted_format` keys |
-| HIGH-1: Ontario law false positives | Phase that implements Ontario law filter | Manual review: first week's Ontario law section has zero political-speech articles |
-| HIGH-2: Ontario law false negatives | Phase that implements Ontario law filter | Synthetic test: "Building Ontario Act amends Mining Act" → `is_law=True` |
-| HIGH-3: Prune-vs-read race | Phase that implements prune cron + detail endpoint | Frontend handles `GET /summaries/{id}` 404 with redirect |
-| HIGH-4: JSONB schema drift | Phase that creates `daily_summaries` migration | `RawSource` Pydantic model exists and used in writer |
-| HIGH-5: WhatsApp >1600 chars | Phase that implements WhatsApp delivery | `len(teaser_message)` asserted < 400 on send |
-| HIGH-6: Anthropic cost (Sonnet for filtering) | Phase that implements Ontario law filter | Filter model confirmed as `claude-haiku-4-5` |
-| MOD-2: Alembic enum collision | Phase that creates `daily_summaries` migration | Migration 0010 contains no `CREATE TYPE` / `ALTER TYPE` referencing `approvalstate` |
-| MOD-3: SerpAPI quota | Phase that implements gold news ingestion | `SUMMARY_SERPAPI_KEYWORDS` ≤ 10 keywords |
-| MOD-5: Hallucinated dates | Phase that implements Sonnet summary write prompt | Prompt contains date-grounding instruction; post-process warns on out-of-range years |
-| MOD-6: Failure alert deadlock | Phase that implements WhatsApp failure-alert hook | Alert send wrapped in its own try/except; original error preserved in log |
+**What goes wrong:**
+A calendar item with an empty title string is meaningless in the grid view. If the backend validates `title: str` (non-empty) and the frontend does not pre-validate before firing the mutation, the mutation returns 422, and without proper error surfacing the user sees no feedback — the modal closes, the grid refreshes, and the item is gone (it was never created).
+
+**How to avoid:**
+Both layers must validate:
+- Frontend: disable submit button when `title.trim() === ""`, show inline error message
+- Backend: Pydantic `@field_validator("title")` that raises `ValueError` if `title.strip() == ""`; FastAPI returns 422 with a detail message that the frontend can display as a toast
+
+**Phase to address:** Calendar CRUD phase
+
+---
+
+### MEDIUM — No `updated_at` field makes mutation ordering ambiguous in dev tools
+
+**What goes wrong:**
+For a single-user system, last-write-wins is acceptable (no real concurrent edit conflict). But without an `updated_at` column on `calendar_items`, there is no server-side audit trail for "when was this item last changed." This matters during debugging: if an item appears in the wrong state, there is no timestamp to cross-reference with Railway logs.
+
+**How to avoid:**
+Add `updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())` to the `calendar_items` model. The PATCH endpoint need not enforce any optimistic concurrency (no `If-Match` header required for single-user), but the field must be present for observability. Include it in the `CalendarItemResponse` Pydantic schema so the frontend can display "last edited: ..." in the detail view.
+
+**Phase to address:** Calendar CRUD phase (migration + model)
+
+---
+
+## 5. Tab Nav Route Restructure
+
+### CRITICAL — shadcn Tabs `value` prop must be driven by React Router location, not local state
+
+**What goes wrong:**
+The shadcn `Tabs` primitive has two modes: uncontrolled (internal state, `defaultValue`) and controlled (`value` + `onValueChange`). If the tab is implemented with `defaultValue="news-funnel"` and `onValueChange` only calls `navigate()`, a browser Back/Forward click changes the URL but does NOT update the `Tabs` value prop — the wrong tab appears highlighted while the correct page content renders via React Router's `<Outlet />`. This splits the tab UI from the router state.
+
+**Why it happens:**
+Developers wire `onValueChange → navigate()` (tab click → URL change) but miss the reverse: URL change → tab highlight update. The tab only re-renders when its `value` prop changes.
+
+**How to avoid:**
+Drive the `value` prop from `useLocation()`:
+```typescript
+const location = useLocation()
+const activeTab = location.pathname === '/' ? 'news-funnel'
+  : location.pathname === '/calendar' ? 'calendar'
+  : location.pathname === '/viral' ? 'viral'
+  : 'news-funnel'
+return (
+  <Tabs value={activeTab} onValueChange={(v) => navigate(v === 'news-funnel' ? '/' : `/${v}`)}>
+    ...
+  </Tabs>
+)
+```
+The tab highlights, browser back/forward, and direct URL entry all stay in sync.
+
+**Phase to address:** Tab nav / UI restructure phase
+
+---
+
+### HIGH — v2.0 redirects `/queue` and `/agents/:slug` must survive the route restructure
+
+**What goes wrong:**
+`App.tsx` currently defines:
+```tsx
+<Route path="/queue" element={<Navigate to="/" replace />} />
+<Route path="/agents/:slug" element={<Navigate to="/" replace />} />
+```
+These "bookmark-grace" redirects (FEED-04) point to `/`. After v2.1, `/` becomes the tabbed layout with the News Funnel tab active — which is the correct target. BUT: if the route restructure moves `<AppShell />` to a different nesting level (e.g., adding a layout wrapper above it), these `<Navigate to="/" replace />` statements may no longer be inside the `<ProtectedRoute />` subtree, making them publicly accessible without auth. Also, if `"/"` changes meaning (e.g., redirects to `/news-funnel`), the redirect targets must be updated in lockstep.
+
+**How to avoid:**
+Keep the redirect routes inside `<ProtectedRoute />` — never let them escape to public routes. After v2.1's route restructure, explicitly test: visit `/queue` as an authenticated user → confirm redirect to the News Funnel tab content. The test must verify the *rendered page*, not just the URL.
+
+**Phase to address:** Tab nav / UI restructure phase
+
+---
+
+### HIGH — AppHeader max-width `max-w-[720px]` conflicts with 3-tab layout at narrow desktop widths
+
+**What goes wrong:**
+`AppHeader.tsx` uses `max-w-[720px] mx-auto`. The News Funnel feed content at 720px is appropriate. But the shadcn `Tabs` primitive added to the header area renders tab labels inside that 720px constraint. With 3 medium-length labels ("News Funnel", "Content Calendar", "Weekly Viral") plus the brand mark + logout button, the header will overflow at 720px on standard 1280px desktop displays.
+
+**How to avoid:**
+Either:
+1. Move the tab nav below the header (in a sub-header bar), keeping `max-w-[720px]` for the brand + logout row only
+2. Widen the header `max-w` to `max-w-[960px]` or `max-w-[1100px]` for the tab row only
+
+Option 1 is lower-risk (no layout cascade). The tab nav sits in its own `<nav>` bar between `<AppHeader />` and `<main>`, styled with `border-b border-zinc-800`. This mirrors the Linear-style pattern (top bar → sub-nav → content area).
+
+**Phase to address:** Tab nav / UI restructure phase
+
+---
+
+### MEDIUM — Tab URL paths must be decided before building the Calendar and Viral pages
+
+**What goes wrong:**
+If the Tab nav phase builds tab navigation using `defaultValue` with no URL routing, and the Calendar phase later adds `react-router` integration to `/calendar`, the routing patterns conflict. Each phase will need to redo the other's work.
+
+**How to avoid:**
+Decide tab URL mapping before writing any tab code:
+- Tab 1 (News Funnel) → `/` (preserves v2.0 canonical URL, no redirect needed)
+- Tab 2 (Content Calendar) → `/calendar`
+- Tab 3 (Weekly Viral Sweeper) → `/viral`
+
+Add all three `<Route>` entries in the same phase as the tab nav, even if the Calendar and Viral page components are stubs initially. This locks the URL contract before content is built.
+
+**Phase to address:** Tab nav / UI restructure phase (establish URL contract first)
+
+---
+
+## 6. shadcn Tabs + Linear UI Redesign
+
+### HIGH — shadcn Tabs must be installed from the Tailwind v4 branch, not main
+
+**What goes wrong:**
+The project is on Tailwind CSS v4. The main `shadcn/ui` branch targets Tailwind v3. Installing Tabs via `npx shadcn@latest add tabs` without confirming the v4 branch produces a component with v3 utility class syntax that either silently renders incorrectly or requires manual v4 migration. This is a pre-existing risk noted in `CLAUDE.md` ("verify Tailwind v4 compatibility — the `tailwind-v4` branch of shadcn is the correct one").
+
+**How to avoid:**
+Confirm the shadcn CLI init was done with the `tailwind-v4` branch (`npx shadcn@canary add tabs` or via the component installer on `ui.shadcn.com` with v4 confirmed). Verify the installed `components/ui/tabs.tsx` uses CSS custom property-based color references (e.g., `bg-background`, `text-foreground`) rather than hardcoded Tailwind v3 color classes. If unsure: compare the generated file against the `tailwind-v4` branch source at https://ui.shadcn.com/docs/components/radix/tabs.
+
+**Phase to address:** Tab nav / UI restructure phase (before any other shadcn Tabs work)
+
+---
+
+### HIGH — Tailwind v4 dark mode defaults changed: class-based dark mode strategy requires explicit opt-in
+
+**What goes wrong:**
+Tailwind v4 defaults dark mode to `@media (prefers-color-scheme: dark)` — the media-query strategy — removing the v3 class-based `dark:` strategy that relies on a `class="dark"` attribute on `<html>`. The project is locked to dark theme (no toggle). If the app was initialized under v3's class-based strategy (the common Linear-inspired pattern) and v4 is now active, all existing `dark:` utilities may have stopped working, or are conditionally active based on OS preference rather than a fixed class.
+
+**How to avoid:**
+Audit current Tailwind config / CSS: confirm whether `dark:` class-based strategy is declared. If it is, add `@custom-variant dark (&:is(.dark *));` to the v4 CSS config to preserve the class-based behavior. If it isn't, the app is already using media-query dark mode and works correctly on any OS in dark mode — but the Linear-style UI redesign's amber-gold token additions must use CSS custom properties, not rely on `dark:` class prefix.
+
+**Phase to address:** UI redesign phase
+
+---
+
+### MEDIUM — New color tokens in the UI redesign must not clobber existing `zinc-*` references in AppHeader
+
+**What goes wrong:**
+`AppHeader.tsx` uses hardcoded Tailwind classes: `border-zinc-800`, `bg-zinc-900`, `text-zinc-400`, `text-zinc-100`. The Linear-style redesign introduces amber-gold accents and a refined palette. If the redesign changes Tailwind's default `zinc` token values via `@theme` overrides (e.g., redefining `--color-zinc-900`), the AppHeader's existing classes will render with the new values unexpectedly — possibly invisible text or wrong background.
+
+**How to avoid:**
+Do the UI redesign in a single pass, not piecemeal. Before merging, do a visual review of AppHeader, SummaryFeedPage, and all existing card components using the new token set. Prefer ADDING new semantic tokens (e.g., `--color-surface`, `--color-surface-elevated`) and migrating existing components to them, rather than redefining the `zinc` scale.
+
+**Phase to address:** UI redesign phase — one comprehensive pass only
+
+---
+
+### MEDIUM — Vite chunk-size warning will worsen; lazy-load Calendar and Viral pages
+
+**What goes wrong:**
+Adding @dnd-kit (for drag-and-drop), shadcn Tabs, the Calendar page, and the Viral page to the bundle increases main chunk size. The v2.0 build already triggers Vite's 500 KiB warning. Without code-splitting, all three tab pages load on initial auth — the user pays the Calendar and Viral page parse cost even if they only use the News Funnel.
+
+**How to avoid:**
+Lazy-load the Calendar and Viral page components:
+```typescript
+const CalendarPage = React.lazy(() => import('@/pages/CalendarPage'))
+const ViralPage = React.lazy(() => import('@/pages/ViralPage'))
+```
+Wrap the route subtree in `<Suspense fallback={<div className="p-8 text-zinc-500">Loading...</div>}>`. This is the standard Vite + React Router code-splitting pattern. `@dnd-kit` should be in the same lazy chunk as CalendarPage (it is only needed there).
+
+**Phase to address:** Tab nav / UI restructure phase (establish lazy-load boundary when routes are added)
+
+---
+
+## 7. Advisory Lock + Cron Discipline
+
+### CRITICAL — Lock ID 1019 must be added to JOB_LOCK_IDS BEFORE registering weekly_sweeper
+
+**What goes wrong:**
+The OPS-02 uniqueness assertion at module import time (`assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS)`) prevents duplicate IDs. But it only catches duplicates within the dict — it does NOT catch a new job registered directly in `build_scheduler()` without being added to `JOB_LOCK_IDS`. If `weekly_sweeper` uses a hardcoded lock ID that happens to equal an existing ID (e.g., someone picks `1017` thinking "daily_summary uses 1018"), the two jobs will silently skip each other on every fire.
+
+**How to avoid:**
+Add `"weekly_sweeper": 1019` to `JOB_LOCK_IDS` BEFORE any other work. The OPS-02 assertion will then guard against future collisions. Confirm 1010-1018 are accounted for:
+- 1005: midday_digest (dead code, reserved)
+- 1010-1016: sub-agent dead code (reserved)
+- 1017: daily_summary
+- 1018: daily_summary_prune
+- 1019: weekly_sweeper (NEXT FREE)
+
+**Phase to address:** Weekly sweeper phase — first task in that phase
+
+---
+
+### HIGH — reconcile_stale_runs must be extended to include agent_name='weekly_sweeper'
+
+**What goes wrong:**
+`reconcile_stale_runs()` sweeps ALL `agent_runs` rows where `status='running'` and `started_at < cutoff`. The query uses no `agent_name` filter — it already handles `weekly_sweeper` automatically by design. BUT: the 30-minute `threshold_minutes` was calibrated for the daily_summary's worst-case runtime. The weekly sweeper's expected runtime (Reddit fetch ~5s + virality compute ~2s + Sonnet call ~15s = ~25s) fits within 30 minutes easily. No change required — but this must be explicitly verified, not assumed.
+
+**How to avoid:**
+Add a comment in `reconcile_stale_runs()` noting that the 30-minute threshold covers all registered agents including weekly_sweeper. Add a test: insert a `weekly_sweeper` agent_run row with `status='running'` and `started_at=now - 31 min`, run `reconcile_stale_runs()`, assert the row is now `status='failed'`.
+
+**Phase to address:** Weekly sweeper phase
+
+---
+
+### HIGH — Weekly sweeper Sunday 08:00 PT CronTrigger uses the same misfire_grace_time as daily_summary
+
+**What goes wrong:**
+`build_scheduler()` sets `misfire_grace_time=1800` globally (30 minutes). A Railway deploy that completes between 08:00 and 08:30 PT on a Sunday will catch the weekly sweeper via the grace window. BUT: a Railway deploy that completes AFTER 08:30 PT on a Sunday will miss the weekly sweep entirely — it will not fire until the following Sunday.
+
+APScheduler 3.x documents that `day_of_week='sun'` is valid and that the `timezone` parameter on `CronTrigger` correctly handles DST transitions (the 08:00-09:00 hour is well outside the DST-ambiguous 01:00-02:00 window — same safety check already documented for daily_summary in `worker.py` MOD-1 comment).
+
+**How to avoid:**
+Document the "first deploy may miss" scenario in the weekly_sweeper agent file (mirror the midday_digest retiming comment pattern in `worker.py`). Provide a manual trigger escape hatch: `python -m agents.weekly_sweeper` can be run directly from Railway's shell to produce the first sweep without waiting for Sunday. This is the same pattern the user would use for any missed first fire.
+
+**Phase to address:** Weekly sweeper phase
+
+---
+
+## 8. Database Migration
+
+### CRITICAL — `down_revision` chain must reference 0010 exactly; Alembic will refuse to run on mismatch
+
+**What goes wrong:**
+Alembic builds its migration chain by following `down_revision` pointers. If the new migration(s) reference `down_revision = '0009'` but the actual last migration is `'0010'`, Alembic raises `CommandError: Can't locate revision identified by '0009'` and refuses to run `alembic upgrade head`. The entire Railway deploy fails (migrations run before app start on deploy).
+
+**How to avoid:**
+Before writing the v2.1 migration file: `alembic heads` to confirm the current head. The `down_revision` in the new file must equal this output exactly (not assumed from memory). Add a CI check: `alembic check` (Alembic 1.9+) verifies the migration chain is consistent without running migrations.
+
+**Phase to address:** Database migration phase (first task)
+
+---
+
+### HIGH — Two new tables should ship as one migration for atomicity within the same deploy
+
+**What goes wrong:**
+If `0011_add_calendar_items` and `0012_add_weekly_sweeps` ship in the same Railway deploy but the deploy fails between the two migrations (e.g., Neon connection timeout during migration), the database is in a partial state: `calendar_items` exists but `weekly_sweeps` does not. The backend code that expects both tables will throw `ProgrammingError: table weekly_sweeps does not exist` on startup, making the app non-recoverable without manual intervention.
+
+**How to avoid:**
+Ship `calendar_items` and `weekly_sweeps` as ONE migration file (`0011_add_calendar_and_sweeps`) if they ship in the same deploy. Alembic migration files are transactional in Postgres — both tables are created atomically or neither is. Only split them across separate migrations if they ship in separate deploys (different phases).
+
+**Phase to address:** Database migration phase
+
+---
+
+### HIGH — Dual-model parity: `weekly_sweeps` and `calendar_items` each need a parity test
+
+**What goes wrong:**
+The project has an established pattern (Phase B precedent): every new SQLAlchemy model must have a parity test verifying that the scheduler model (`scheduler/models/`) and the backend model (`backend/app/models/`) are byte-identical. If only the backend model has the new column (or vice versa), writes from the scheduler worker produce DB rows that the backend API cannot read correctly.
+
+The parity test catches this at test time rather than at deploy time.
+
+**How to avoid:**
+Add `scheduler/tests/test_calendar_item_model.py` and `scheduler/tests/test_weekly_sweep_model.py` that:
+1. Import both model classes
+2. Assert `scheduler_model.__tablename__ == backend_model.__tablename__`
+3. Assert column names match (using `sqlalchemy.inspect`)
+
+This mirrors the existing Phase B parity test pattern. Run these tests in CI before merge.
+
+**Phase to address:** Database migration phase (alongside model creation)
+
+---
+
+### MEDIUM — `agent_run_id` FK on `weekly_sweeps` should be `SET NULL ON DELETE` (mirror daily_summaries)
+
+**What goes wrong:**
+`daily_summaries.agent_run_id` is a nullable FK with `SET NULL ON DELETE` — if an agent_run row is deleted (e.g., manual cleanup), the summary row is preserved with `agent_run_id=NULL` rather than cascade-deleted. If `weekly_sweeps.agent_run_id` is defined as `CASCADE DELETE` instead, manual cleanup of agent_run rows would silently delete weekly sweep data. Given that sweeps are produced once weekly and represent high-signal content, data loss on cleanup would be noticeable.
+
+**How to avoid:**
+```python
+agent_run_id = Column(UUID(as_uuid=True), ForeignKey("agent_runs.id", ondelete="SET NULL"), nullable=True)
+```
+Mirror `daily_summaries` exactly. `calendar_items` has no FK (standalone table) — no ondelete behavior needed.
+
+**Phase to address:** Database migration phase
+
+---
+
+## Phase-to-Pitfall Mapping
+
+| Pitfall | Category | Severity | Prevention Phase |
+|---------|----------|----------|-----------------|
+| praw sync blocks event loop | Reddit | CRITICAL | Reddit ingestion phase |
+| asyncpraw timeout not set | Reddit | HIGH | Reddit ingestion phase |
+| Subreddit 403 crashes sweeper | Reddit | HIGH | Reddit ingestion phase |
+| Weak user-agent causes rate limiting | Reddit | MEDIUM | Reddit ingestion phase (env setup) |
+| SECRET logged in _validate_env | Reddit | MEDIUM | Reddit ingestion phase |
+| JSONB None guard missing | Virality | HIGH | Weekly sweeper phase |
+| Title dedup within-row before cross-count | Virality | HIGH | Weekly sweeper phase |
+| URL canonicalization for dedup | Virality | MEDIUM | Weekly sweeper phase |
+| O(N²) timing not measured | Virality | LOW | Weekly sweeper phase |
+| Reddit post body blows token budget | Sonnet | HIGH | Weekly sweeper phase |
+| Bearish angles in content suggestions | Sonnet | HIGH | Weekly sweeper phase |
+| Sonnet timeout not set (60s) | Sonnet | HIGH | Weekly sweeper phase |
+| Hallucinated facts in angles | Sonnet | MEDIUM | Weekly sweeper phase |
+| Date field TZ off-by-one (DATE vs datetime) | Calendar | CRITICAL | Calendar CRUD phase |
+| Optimistic rollback not wired | Calendar | HIGH | Calendar CRUD phase |
+| Empty title passes frontend | Calendar | HIGH | Calendar CRUD phase |
+| No updated_at column | Calendar | MEDIUM | Calendar CRUD phase (migration) |
+| Tabs value not driven by router location | Tab nav | CRITICAL | Tab nav phase |
+| v2.0 redirects escape ProtectedRoute | Tab nav | HIGH | Tab nav phase |
+| AppHeader 720px constraint overflow | Tab nav | HIGH | Tab nav phase |
+| Tab URL paths decided too late | Tab nav | MEDIUM | Tab nav phase (first) |
+| shadcn Tabs from v3 branch | UI | HIGH | Tab nav phase |
+| Tailwind v4 dark mode strategy change | UI | HIGH | UI redesign phase |
+| Color tokens clobber existing zinc refs | UI | MEDIUM | UI redesign phase |
+| Bundle size / no lazy loading | UI | MEDIUM | Tab nav phase |
+| Lock 1019 not in JOB_LOCK_IDS | Cron | CRITICAL | Weekly sweeper phase (first task) |
+| reconcile_stale_runs coverage | Cron | HIGH | Weekly sweeper phase |
+| Sunday 08:00 misfire on first deploy | Cron | HIGH | Weekly sweeper phase |
+| down_revision chain mismatch | Migration | CRITICAL | Migration phase (first task) |
+| Two tables in separate migrations same deploy | Migration | HIGH | Migration phase |
+| Dual-model parity tests missing | Migration | HIGH | Migration phase |
+| agent_run_id FK should be SET NULL | Migration | MEDIUM | Migration phase |
 
 ---
 
 ## Sources
 
-- Direct code inspection: `/Users/matthewnelson/seva-mining/scheduler/worker.py` — JOB_LOCK_IDS (1005, 1010-1016), misfire_grace_time=1800, coalesce=True, max_instances=1, CronTrigger pattern, reconcile_stale_runs implementation
-- Direct code inspection: `/Users/matthewnelson/seva-mining/scheduler/agents/content_agent.py` — _CACHE_LOCK held microseconds only, coalesce pattern via _FETCH_IN_FLIGHT Future, cache bucket = `int(time.time() // 1800)`, parallel scoring via asyncio.gather, Sonnet model = `claude-sonnet-4-6`, Haiku model = `claude-haiku-4-5` for is_gold_relevant_or_systemic_shock
-- Direct code inspection: `/Users/matthewnelson/seva-mining/scheduler/services/whatsapp.py` — 1500-char safety margin in build_chunks, single-retry pattern, graceful skip on missing credentials returning None
-- `.planning/PROJECT.md` — v2.0 milestone spec, Ontario law/stats hard parts, stack contract, lock ID history
-- Neon PgBouncer transaction-mode behavior: advisory locks require session-mode connection to persist across statements (documented in Neon connection pooling docs)
-- APScheduler 3.x coalesce + misfire_grace_time behavior: fires once per missed window within a single scheduler instance lifetime — new process start = new scheduler instance
+- `daily_summary.py` — post-jny error capture pattern, post-ii6 60s timeout, HIGH-4 JSONB shape discipline (read directly)
+- `content_agent.py` — post-m51 coalesce pattern, cache TTL, SequenceMatcher 0.85 dedup, `run_in_executor` pattern for sync libs (read directly)
+- `worker.py` — advisory lock IDs 1005/1010-1018, OPS-02 uniqueness assertion, CronTrigger pattern, reconcile_stale_runs, _validate_env (read directly)
+- `summaries.py` — auth pattern via `Depends(get_current_user)` at router level (read directly)
+- `App.tsx` — v2.0 redirect routes `/queue` and `/agents/:slug` (read directly)
+- `AppShell.tsx` / `AppHeader.tsx` — max-w-[720px] constraint, existing zinc color classes (read directly)
+- PRAW official docs (v7.1.4/7.7.1/current) — quarantined subreddit 403 behavior, user-agent requirements, rate limiting
+- asyncpraw GitHub / readthedocs — async drop-in replacement, `requestor_kwargs={"timeout": N}` pattern
+- APScheduler 3.11.2 docs — CronTrigger `day_of_week='sun'` valid, misfire_grace_time behavior
+- TanStack Query v5 docs — optimistic update `onMutate`/`onError`/`onSettled` three-step pattern
+- Tailwind CSS v4 migration guide — dark mode strategy change (`@media` default vs class-based), CSS custom property color tokens, `@apply` breakage
+- shadcn/ui v4 branch docs — Tabs primitive installation, Radix UI compatibility
 
 ---
-*Pitfalls research for: v2.0 Daily Summary Feed (seva-mining)*
-*Researched: 2026-05-05*
+
+*Pitfalls research for: v2.1 Three-Tab Content Engine + UI Polish*
+*Researched: 2026-05-18*

@@ -1,320 +1,201 @@
-# Technology Stack — v2.0 Daily Summary Feed (Delta)
+# Research: STACK additions for v2.1 Three-Tab Content Engine + UI Polish
 
-**Project:** Seva Mining — AI Social Media Agency
-**Milestone:** v2.0 Daily Summary Feed
-**Researched:** 2026-05-05
-**Scope:** Additions and changes for v2.0 only. The existing validated stack
-(FastAPI, React 19, Vite 6, Tailwind v4, TanStack Query 5, Zustand 5, shadcn/ui,
-SQLAlchemy 2.0, Alembic 1.14, APScheduler 3.11.2, anthropic 0.86.0, feedparser 6.x,
-serpapi, Twilio 9.x, date-fns 3.x, httpx, passlib, python-jose) is **not re-documented
-here** — it is proven to work.
+**Project:** Seva Mining v2.1 Three-Tab Content Engine + UI Polish
+**Mode:** Ecosystem — Stack additions only
+**Confidence:** HIGH (all versions verified against PyPI/npm directly or via official docs)
+**Generated:** 2026-05-18
 
----
+## Stack Additions — Verdict Table
 
-## Verdict Summary
+| Package | Verdict | Where it goes | Reason |
+|---------|---------|--------------|--------|
+| `asyncpraw ~7.8` | ADD | scheduler `pyproject.toml` | Reddit ingestion for weekly_sweeper; async-native, officially maintained |
+| `shadcn Tabs` | ADD (copy-paste) | frontend, `npx shadcn@latest add tabs` | Top-level tab navigation; already on Tailwind v4 branch |
+| `@dnd-kit/core ^6.3` + `@dnd-kit/sortable ^10.0` | SKIP — use date dropdown | frontend | DnD on a weekly calendar grid is significantly more complex than it looks; single-user tool does not justify the implementation cost |
+| `@fontsource-variable/inter` | SKIP | frontend | Current font is Geist Variable (`@fontsource-variable/geist` already in `index.css`); switching to Inter requires a CSS variable replacement; not worth it unless design explicitly demands Inter |
+| Any markdown editor library | SKIP | frontend | Plain `<textarea>` + `react-markdown` render on save is sufficient; existing `react-markdown ^10.1.0` + `rehype-sanitize ^6.0.0` already covers read rendering |
+| `difflib.SequenceMatcher` | SKIP | scheduler | Python stdlib; already imported in `content_agent.py` line 31 |
+| Any posting library (tweepy write, instagram-private-api, etc.) | SKIP | — | Phase B stays dormant |
+| Any analytics SDK | SKIP | — | Out of scope |
+| Any new auth library | SKIP | — | Single-user bcrypt+JWT stays |
+| APScheduler 4.0 | SKIP | — | Prohibited in CLAUDE.md "What NOT to Use" |
 
-| Candidate | Verdict | One-line reason |
-|-----------|---------|-----------------|
-| `react-markdown` | ADD | Claude returns structured markdown; split-on-newline loses heading hierarchy |
-| `rehype-sanitize` | ADD | Pair with react-markdown to sanitise any HTML Claude might emit |
-| Ontario Newsroom RSS | SKIP new lib | Existing feedparser handles it; add the URL to the ingestion feed list |
-| Ontario Regulatory Registry RSS | SKIP new lib | Same; add ontariocanada.com registry URL to feed list |
-| StatCan WDS REST API | SKIP new HTTP lib | Public JSON REST API; existing `httpx` is sufficient |
-| New job queue (Celery, ARQ) | SKIP | Forbidden in CLAUDE.md; APScheduler handles 2 new crons trivially |
-| `zoneinfo` (Python stdlib) | SKIP install | Already available in Python 3.12; use `from zoneinfo import ZoneInfo` in new cron registrations |
-| WhatsApp chunking lib | SKIP | `build_chunks()` in `whatsapp.py` is generic and reusable as-is |
-| `remark-gfm` | SKIP for now | Claude won't emit GFM tables in summaries; add later if needed |
+## Backend: Reddit Ingestion
 
-**Net new installs: `npm install react-markdown rehype-sanitize` — that is all.**
+### asyncpraw vs praw — Recommendation: asyncpraw
 
----
+**VERDICT: ADD `asyncpraw>=7.8.1` to `scheduler/pyproject.toml`**
 
-## New Frontend Packages
+The weekly_sweeper runs inside `AsyncIOScheduler` on the asyncio event loop. Plain `praw` is sync-only — calling it directly in an async job blocks the event loop (same reason `requests` is banned per CLAUDE.md). Two options:
 
-### `react-markdown` ^10.1.0 + `rehype-sanitize` ^6.0.0
+1. `asyncpraw` — async-native, official sister package, same `praw-dev` GitHub org, same API surface with `await` added. Version 7.8.1, released 2024-12-21, Production/Stable classification, Python 3.8+. Uses `aiohttp` internally.
+2. `praw` 7.8.1 via `asyncio.to_thread()` — works but is an explicit workaround for what asyncpraw solves by design. Adding `asyncio.to_thread` calls throughout the sweeper module adds noise with no benefit.
 
-**Verdict: ADD both.**
+The PRAW docs explicitly state: "If you plan on using PRAW in an asynchronous environment, it is strongly recommended to use Async PRAW." No stability concerns — asyncpraw 7.8.1 is production-stable and tracks praw releases in lockstep.
 
-**Why react-markdown is needed:**
-Claude's summary output will be structured markdown — `### Gold News`, bullet lists
-with `*`, bold via `**`. Plain `text.split('\n').map(line => <p>)` loses heading
-hierarchy: a `###` header becomes visually identical to a paragraph. The feed card
-requires three visually-distinct sections with headers and nested bullets; that
-requires real markdown rendering.
+**asyncpraw is the right choice.** praw is not needed alongside it (asyncpraw is a drop-in replacement, not a companion package).
 
-**Why not `dangerouslySetInnerHTML` after string replace:**
-Never render LLM output as raw HTML. Even with a constrained system prompt,
-an adversarially-crafted source article could cause Claude to emit `<script>` or
-`javascript:` hrefs. The risk is low but the cost of prevention is zero.
+Sources: [asyncpraw PyPI](https://pypi.org/project/asyncpraw/) | [asyncpraw docs](https://asyncpraw.readthedocs.io/en/stable/) | [praw docs — async recommendation](https://praw.readthedocs.io/en/stable/)
 
-**Why react-markdown over alternatives:**
-- Uses an AST pipeline (remark → rehype → `React.createElement`), never
-  `dangerouslySetInnerHTML`. This is architecturally safer than `marked` or
-  `markdown-to-jsx` (the latter had CVE-2024-21535 XSS in Dec 2024).
-- Maps cleanly to Tailwind v4 utility classes via the `components` prop:
-  `h3` → `<h3 className="text-sm font-semibold ...">`, `ul` →
-  `<ul className="list-disc ml-4 ...">`. No CSS-in-JS fight.
-- Latest stable: **10.1.0** (no new release in ~12 months — stable; last published
-  ~mid-2024). React 19 compatible.
-- ESM-only since v9 — fine with the project's `"type": "module"` and Vite 6.
+**Confidence: HIGH**
 
-**Why rehype-sanitize alongside it:**
-react-markdown passes rehype plugins. `rehype-sanitize` strips any HTML nodes
-that survived remark parsing before they reach the DOM. Claude should not emit
-raw HTML, but defence-in-depth for a tool with no CSP headers is cheap.
+### Reddit API Auth — confirmed
 
-**Integration point:** `frontend/src/components/SummaryCard.tsx` — a single
-component, no page-level changes:
+Read-only public access (subreddit posts) uses the "script" app type with OAuth client credentials. No Reddit account login is required — only `client_id` + `client_secret` + `user_agent`. The user creates an app at `https://www.reddit.com/prefs/apps` (same one-time setup pattern as SerpAPI/Twilio).
 
-```tsx
-import ReactMarkdown from 'react-markdown'
-import rehypeSanitize from 'rehype-sanitize'
-
-<ReactMarkdown rehypePlugins={[rehypeSanitize]}
-  components={{
-    h3: ({ children }) => <h3 className="text-sm font-semibold mt-3 mb-1">{children}</h3>,
-    ul: ({ children }) => <ul className="list-disc ml-4 space-y-0.5">{children}</ul>,
-    li: ({ children }) => <li className="text-sm">{children}</li>,
-  }}>
-  {summary.body}
-</ReactMarkdown>
-```
-
-**Do NOT add `remark-gfm`** unless Claude actually emits GFM tables — it adds
-unnecessary parsing overhead and the summary format (headlines + bullets) does
-not use tables or strikethrough.
-
-```bash
-npm install react-markdown rehype-sanitize
-```
-
-**Confidence: HIGH** — npm versions confirmed; AST/non-innerHTML approach
-documented at remarkjs/react-markdown; rehype-sanitize v6 confirmed ESM/Node 16+.
-
----
-
-## Existing Libraries Confirmed Sufficient
-
-### feedparser — Ontario Sources
-
-**Verdict: SKIP new lib. Two new feed URLs only.**
-
-Both new Ontario ingestion sources are served as RSS — no new library needed.
-
-**Source 1 — Ontario Newsroom (`news.ontario.ca`):**
-The site has an RSS endpoint; the exact URL is not prominently documented (JS-heavy
-site). Attempt these at build-time in order:
-1. `https://news.ontario.ca/newsroom/en?format=rss`
-2. `https://news.ontario.ca/en/releases.rss`
-
-If neither resolves, fall back to SerpAPI with `site:ontario.ca "mining" legislation`.
-The Sonnet relevance filter ("is this actually a mining-favourable law?") applies
-regardless of source — noise from a broad feed is handled there.
-
-**Source 2 — Ontario Regulatory Registry (`ontariocanada.com/registry`):**
-Confirmed RSS feeds exist at `https://www.ontariocanada.com/registry/rssInfo.do`.
-The "news" feed covers new regulatory proposals including Mining Act amendments
-(e.g. Bill 5 — "Protect Ontario by Unleashing our Economy Act, 2025"). The
-direct feed URL is `https://www.ontariocanada.com/registry/rss.do?feedName=news`
-(standard Drupal registry pattern; verify at build time).
-
-**Reliability note (MEDIUM confidence):** Ontario government RSS URLs change
-without notice. If the feed goes dark, the Ontario law section shows the "no new
-data" empty state — same design as the StatCan slow-week case. No reliability
-library is needed; feedparser's existing error handling is sufficient.
-
-**feedparser maintenance:** Last release 6.0.11, Sep 2025. Actively maintained.
-Python 3.12 compatible. Source: https://pypi.org/project/feedparser/
-
----
-
-### httpx — StatCan WDS REST API
-
-**Verdict: SKIP new HTTP lib. Use existing httpx.**
-
-Statistics Canada's Web Data Service (WDS) is a public, unauthenticated JSON REST
-API. The relevant table for gold and mineral production statistics is
-**Table 16-10-0022** (gold included; annual data; covers reference years 2019+).
-
-Latest data release: **February 25, 2026** (reference years 2024 and 2025).
-
-The endpoint follows a consistent pattern:
-```
-GET https://www150.statcan.gc.ca/t1/tbl1/en/dtbl!16-10-0022-01/json
-```
-
-This is a standard unauthenticated GET returning JSON — `httpx.AsyncClient` handles
-it identically to `fetch_article()` today. No specialised client library exists
-or is needed.
-
-**Critical design implication for the roadmap:**
-StatCan mineral statistics are released **annually**, not daily. Between the Feb
-2026 release and the next (expected late 2026/early 2027), every daily_summary
-cycle will return the same static snapshot. The Ontario stats section must treat
-"no new data since {date}" as the **default state**, not an edge case. Design
-approach: the daily_summary agent fetches StatCan once on first run and stores the
-snapshot as JSONB in the `daily_summaries` table. Subsequent runs display "Latest
-available: {date}" without re-fetching.
-
-**Confidence: MEDIUM** — StatCan WDS documented at statcan.gc.ca/en/developers/wds.
-Table ID 16-10-0022 confirmed via search (Feb 2026 release referenced). Exact endpoint
-URL should be verified against the WDS User Guide before the ingestion module is built.
-
----
-
-### APScheduler 3.11.2 — DST Handling for New Crons
-
-**Verdict: SKIP upgrade. Same version; same pattern. One implementation note.**
-
-The two new `daily_summary` CronTriggers at 08:00 PT and 12:00 PT follow the same
-`cron_kwargs` dict pattern already established for `sub_quotes` etc. in worker.py:
-
+asyncpraw init pattern (read-only):
 ```python
-("daily_summary_am", run_daily_summary_am, "Daily Summary AM", 1020,
- {"hour": 8, "minute": 0, "timezone": "America/Los_Angeles"}),
-
-("daily_summary_pm", run_daily_summary_pm, "Daily Summary PM", 1021,
- {"hour": 12, "minute": 0, "timezone": "America/Los_Angeles"}),
+reddit = asyncpraw.Reddit(
+    client_id=settings.reddit_client_id,
+    client_secret=settings.reddit_client_secret,
+    user_agent=settings.reddit_user_agent,  # e.g. "script:seva-mining-sweeper:v1.0 (by u/<username>)"
+)
 ```
 
-**DST correctness:** APScheduler 3.11 documents that CronTrigger uses "wall clock"
-time. Known DST bugs (issues #606, #529, #980) involve jobs scheduled AT or near
-the 02:00 transition boundary. 08:00 and 12:00 are far from the DST boundary;
-no pathological behaviour applies.
+**New env vars:** `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT` (3 new Railway secrets, consistent with existing pattern).
 
-APScheduler 3.11 internally resolves timezone strings via `zoneinfo` (not pytz).
-The string `"America/Los_Angeles"` is the correct form. Do NOT pass a `pytz` zone
-object — that triggers a `PytzUsageWarning` and may re-introduce DST bugs that
-were fixed in the zoneinfo path (Discussion #570).
+Sources: [asyncpraw Quick Start](https://asyncpraw.readthedocs.io/en/stable/getting_started/quick_start.html) | [Reddit OAuth2 wiki](https://github.com/reddit-archive/reddit/wiki/oauth2)
 
-**Behavioural expectation:**
-- Winter (PST, UTC−8): 08:00 fires at 16:00 UTC, 12:00 fires at 20:00 UTC
-- Summer (PDT, UTC−7): 08:00 fires at 15:00 UTC, 12:00 fires at 19:00 UTC
+**Confidence: HIGH**
 
-This is correct "wall clock" behaviour — the user sees 8am and noon year-round.
+### Rate Limits
 
-**Lock IDs:** Assign 1020 (`daily_summary_am`) and 1021 (`daily_summary_pm`) from
-`JOB_LOCK_IDS` to avoid collisions with existing jobs (highest current is 1016).
+Reddit API allows 100 requests per minute for OAuth-authenticated access (the most cited figure across official docs; also reported as 60 req/min in some secondary sources — treat 60 as the conservative floor). asyncpraw respects `X-Ratelimit-*` response headers automatically and waits when under its `ratelimit_seconds` threshold (default: 5 seconds). For the weekly_sweeper: fetching `hot(limit=25)` from 5 subreddits = 5–10 API calls total, once per week. Rate limits are a non-issue at this frequency.
 
-**Confidence: HIGH** — APScheduler 3.11.2 docs confirm string timezone resolution
-via zoneinfo; 08:00/12:00 are not DST-boundary times; existing worker.py pattern
-is proven.
+Sources: [PRAW ratelimits docs](https://praw.readthedocs.io/en/stable/getting_started/ratelimits.html)
 
----
+**Confidence: HIGH**
 
-### Twilio WhatsApp — Message Length and Chunking
+### Advisory Lock for weekly_sweeper
 
-**Verdict: SKIP new lib. Reuse `build_chunks()` from `whatsapp.py` directly.**
+Currently used: 1005, 1010–1018. Next free: **1019**. Assign `"weekly_sweeper": 1019` in `JOB_LOCK_IDS`. The OPS-02 uniqueness assertion in `worker.py` will catch any future collision at import time.
 
-**Character limits (MEDIUM confidence):**
-- Twilio platform hard cap: **1600 chars** per message (confirmed via Twilio help
-  article 360033806753 and GitHub issue #329)
-- WhatsApp non-template free-form messages: potentially as low as **1024 chars**
-  in some configurations, but Twilio sandbox has historically been more permissive
-- Current `build_chunks()` enforces **1500 chars** (`max_chunk_chars=1500`) — a
-  100-char safety margin below the Twilio cap. This is the correct ceiling.
+**Confidence: HIGH** (direct grep of worker.py)
 
-**Summary length estimate (3 sections, realistic):**
-- Header: ~30 chars
-- Gold news (3–5 headlines + 1–2 bullets each): ~500–700 chars
-- Ontario law section: ~200–300 chars
-- Ontario stats section: ~150–250 chars (or "no new data" one-liner: ~50 chars)
-- **Typical total: ~900–1300 chars; heavy-news day: ~1700–1800 chars**
+## Frontend: Tabs
 
-A busy-day summary will exceed 1500 chars. Design approach:
-1. Claude's system prompt for summary generation targets ~1200 chars to fit in one
-   WhatsApp message on most days
-2. The delivery hook calls `build_chunks(agent_name="daily_summary", items=[text])`
-   which handles multi-message split automatically with `[daily_summary 1/2]` headers
-3. The WhatsApp failure-alert hook is a fixed short message (<100 chars) — no
-   chunking logic needed
+### shadcn Tabs — ADD
 
-`build_chunks()` is already a generic function with no morning-digest-specific
-coupling. It can be imported and called directly from the new delivery module.
+**VERDICT: ADD via `npx shadcn@latest add tabs`**
 
-**Confidence: MEDIUM** — 1600-char Twilio platform cap is confirmed. The 1024-char
-WhatsApp non-template limit appears in some docs but sandbox behaviour differs;
-test in sandbox before treating 1024 as a hard ceiling.
+The shadcn `Tabs` primitive is built on Radix UI's Tabs, is included in the Tailwind v4 branch, and is React 19 compatible (shadcn CLI confirmed: "all components are updated for Tailwind v4 and React 19"). It copies a `tabs.tsx` file into your components directory — no new npm dependency.
 
----
+Install: `npx shadcn@latest add tabs`
 
-### `fetch_stories()` — Reusability for Gold News Section
+This gives `<Tabs>`, `<TabsList>`, `<TabsTrigger>`, `<TabsContent>` — the exact primitives needed for the top-level 3-tab layout in `App.tsx`.
 
-**Verdict: Reuse as-is. No changes to content_agent.py.**
+Sources: [shadcn/ui Tailwind v4 docs](https://ui.shadcn.com/docs/tailwind-v4) | [shadcn Tabs component](https://ui.shadcn.com/docs/components/radix/tabs)
 
-The post-m51 `fetch_stories()` returns scored, deduplicated stories from 7 RSS feeds
-+ 17 SerpAPI keywords, with a 30-min TTL cache and the parallel-scoring coalesce
-pattern. The `daily_summary` agent:
+**Confidence: HIGH**
 
-1. Calls `fetch_stories()` — gets the cached result (no redundant fetch)
-2. Filters by `story["published"] >= window_start` where `window_start` is 04:00 PT
-   for the 08:00 run and 08:00 PT for the 12:00 run
-3. Takes the top N stories by `story["score"]`
-4. Passes them to Claude Sonnet for synthesis into headlines + bullet format
+## Frontend: Calendar Drag-and-Drop — SKIP @dnd-kit, use date dropdown
 
-The `daily_summary` agent does NOT need its own relevance scoring pass — stories are
-already scored. It does NOT need the `predicted_format` field. It does NOT need the
-compliance gate (`review()`) — summaries are read, not posted.
+**VERDICT: SKIP `@dnd-kit/core`. Use a date-dropdown edit approach in the item edit dialog.**
 
----
+The honest assessment of DnD on a weekly calendar grid:
 
-## What NOT to Add
+`@dnd-kit/core` 6.3.1 (peer deps: React >=16.8.0, compatible with React 19) is the correct modern choice if DnD is needed — 6KB core, accessible, actively maintained (2.8M weekly downloads), react-beautiful-dnd is deprecated and must not be used. `@dnd-kit/sortable` 10.0.0 also available.
 
-| Package | Why Rejected |
-|---------|-------------|
-| Celery + Redis | Explicitly forbidden in CLAUDE.md "What NOT to Use" table |
-| APScheduler 4.0 alpha | Explicitly forbidden in CLAUDE.md |
-| `marked` / `markdown-to-jsx` | `marked` uses `innerHTML`; `markdown-to-jsx` had CVE-2024-21535 XSS; react-markdown's AST approach is safer for LLM output |
-| `DOMPurify` (separate) | `rehype-sanitize` sanitises at AST level before HTML is rendered; DOMPurify would be a redundant second pass |
-| `remark-gfm` | Claude summary output (headlines + bullets) does not use GFM tables or strikethrough; add only if observed in practice |
-| Playwright / Puppeteer / Apify | Ontario Newsroom and StatCan both have RSS/JSON APIs; scraping is not needed; Apify was explicitly purged in quick-260419-lvy |
-| `fastfeedparser` | Only 4–6 feeds total; feedparser is sufficient; listed as alternative in v1 STACK.md |
-| Any new auth library | Single-user password auth is validated and shipped |
-| `pytz` | APScheduler 3.11 uses `zoneinfo` internally; passing pytz zones triggers warnings and may reintroduce DST bugs |
+However, DnD on a _calendar grid_ is a different problem from DnD on a list. A weekly grid has 7 drop targets (days), each is a `useDroppable` zone, and dragged items must snap to a new day column. The implementation requires: custom collision detection, drop zone highlight states, visual feedback on the dragged card, and optimistic mutation of the `calendar_items.day` field through TanStack Query's mutation pipeline. None of this is provided by a preset — it's all custom code.
 
----
+For a single-user planning tool where the primary need is "move this item to Tuesday," a date dropdown in the edit dialog achieves the same outcome in 20 lines: `<select>` of day names → `PATCH /calendar-items/{id}` → TanStack Query `invalidateQueries`. The UX is slightly less slick but entirely adequate for an internal tool.
 
-## Installation
+**Recommendation:** date-dropdown in the edit dialog. If the drag-and-drop feel proves frustrating in actual use, adding `@dnd-kit` as a v2.2 enhancement is low-risk given its React compatibility.
 
+**Confidence: HIGH (technical assessment); MEDIUM (UX judgment)**
+
+## Frontend: Typography — No New Font Library Needed
+
+**VERDICT: SKIP `@fontsource-variable/inter` or `@fontsource/inter`.**
+
+The current font stack is **Geist Variable** (`@fontsource-variable/geist` is in `package.json` at `^5.2.8` and imported in `index.css` as `'Geist Variable'`). The v2.1 spec says "refined Inter typography at varied weights (400/500/600/700)" — but Geist Variable is a variable font that already supports all those weights via `font-weight`. Switching to Inter requires changing the `@import`, the `--font-sans` CSS variable, and removing the Geist import. This is a one-line CSS change if desired, not a research question.
+
+Decision for roadmap: Either keep Geist (it reads at the same quality level as Inter for a dense data UI), or swap to Inter by replacing the `@fontsource-variable/geist` import with `@fontsource-variable/inter` and updating `--font-sans`. Both packages are the same size, same Fontsource organization, same install pattern. No new npm category required — it's a package swap, not a new dependency.
+
+**Confidence: HIGH (direct file read)**
+
+## Story Virality Compute — No New Library
+
+**VERDICT: SKIP any new dedup/similarity library.**
+
+`difflib.SequenceMatcher` is Python stdlib and is **already imported in `content_agent.py` line 31** (`import difflib`). The existing `deduplicate_stories()` function uses it with the 0.85 ratio threshold. The weekly_sweeper's story virality compute (count cross-references across feeds over 7 days) can reuse this exact function directly — it already takes `stories: list[dict]` with `link` and `title` keys.
+
+**Confidence: HIGH (direct code read)**
+
+## Markdown Editing for Calendar Notes — No New Library
+
+**VERDICT: SKIP markdown editor libraries (`@uiw/react-md-editor`, `react-mde`, etc.).**
+
+Calendar item notes are optional and low-frequency (personal planning surface, single user). A plain `<textarea>` in the edit dialog is sufficient for input. On save, the note string is stored as-is. On display in the weekly grid, the existing `react-markdown ^10.1.0` renders it. This is the same pattern used elsewhere in the app and requires zero new packages.
+
+**Confidence: HIGH**
+
+## Sonnet Call Pattern for Weekly Sweeper
+
+The new "3 content angles" call in the weekly_sweeper should mirror `daily_summary.py` exactly:
+
+- Model: `SONNET_MODEL = "claude-sonnet-4-6"` (line 56)
+- Timeout: `AsyncAnthropic(api_key=..., timeout=60.0)` (line 504 pattern)
+- Max tokens: Start at 800–1000 (3 short angle suggestions, less than the 1500-token bull-thesis brief). No new anthropic SDK version needed — `anthropic>=0.86.0` already in both `pyproject.toml` files.
+
+**Confidence: HIGH (direct code read)**
+
+## Migration Pattern for v2.1 Tables
+
+Two new tables: `calendar_items`, `weekly_sweeps`. Follow `0010_add_daily_summaries.py` exactly:
+
+- Hand-written only (no `--autogenerate`, per MOD-2 pitfall in that migration's docstring)
+- `op.create_table` + `op.create_index` only
+- `gen_random_uuid()` server default for UUID PKs
+- `postgresql.JSONB` for any JSON fields (e.g., `weekly_sweeps.content_angles_json`, `weekly_sweeps.raw_reddit_posts_json`)
+- Revision IDs: `0011_add_calendar_items.py`, `0012_add_weekly_sweeps.py` (chain sequentially)
+
+**Confidence: HIGH**
+
+## "What NOT to Add" Confirmation
+
+All existing CLAUDE.md prohibitions apply unchanged to v2.1:
+
+| Banned | Status in v2.1 |
+|--------|---------------|
+| APScheduler 4.0 alpha | Not added — 3.11.2 stays |
+| SQLAlchemy 1.x patterns | Not added — 2.0 async only |
+| `requests` in async routes | Not added — httpx stays |
+| Pydantic v1 patterns | Not added — v2 only |
+| Celery | Not added |
+| `create_engine()` sync | Not added |
+| Autoposting libraries | Not added — Phase B dormant |
+| Analytics SDKs | Not added |
+| New auth libraries | Not added |
+
+**Confidence: HIGH**
+
+## Complete Change Summary for Roadmap
+
+**scheduler/pyproject.toml — ADD one line:**
+```
+"asyncpraw>=7.8.1",
+```
+
+**frontend — ADD via CLI (no npm install, copy-paste only):**
 ```bash
-# Frontend only — from /frontend
-npm install react-markdown rehype-sanitize
-
-# Backend — zero new pip packages
-# zoneinfo is Python 3.9+ stdlib; no install needed
-# httpx is already installed; use for StatCan WDS GET
-# feedparser is already installed; add new feed URLs to the ingestion module
+npx shadcn@latest add tabs
 ```
 
----
+**New Railway env vars (3):**
+```
+REDDIT_CLIENT_ID
+REDDIT_CLIENT_SECRET
+REDDIT_USER_AGENT
+```
 
-## Version Compatibility
+**New advisory lock ID:**
+```
+"weekly_sweeper": 1019
+```
 
-| Package | Version | Compat | Notes |
-|---------|---------|--------|-------|
-| react-markdown | ^10.1.0 | React 19, Node 20+, Vite 6 | ESM-only — fine with `"type":"module"` |
-| rehype-sanitize | ^6.0.0 | Node 16+, React 19 | ESM-only — same |
-| zoneinfo | stdlib (3.12) | Python 3.12 | `from zoneinfo import ZoneInfo` — no install |
+**No other stack changes. Everything else the existing stack already covers.**
 
----
+## Open Questions
 
-## Sources
-
-- react-markdown npm (10.1.0 latest): https://www.npmjs.com/package/react-markdown
-- react-markdown GitHub (AST/security approach): https://github.com/remarkjs/react-markdown
-- react-markdown security guide: https://strapi.io/blog/react-markdown-complete-guide-security-styling
-- markdown-to-jsx CVE-2024-21535 XSS: https://security.snyk.io/vuln/SNYK-JS-MARKDOWNTOJSX-6258886
-- rehype-sanitize npm: https://www.npmjs.com/package/rehype-sanitize
-- APScheduler 3.11.2 CronTrigger + DST docs: https://apscheduler.readthedocs.io/en/3.x/modules/triggers/cron.html
-- APScheduler issue #606 (DST skip at midnight): https://github.com/agronholm/apscheduler/issues/606
-- APScheduler issue #980 (DST infinite loop): https://github.com/agronholm/apscheduler/issues/980
-- APScheduler pytz → zoneinfo migration (Discussion #570): https://github.com/agronholm/apscheduler/discussions/570
-- Twilio 1600-char platform cap: https://help.twilio.com/articles/360033806753
-- Twilio WhatsApp rules and limits: https://help.twilio.com/articles/360017773294
-- StatCan WDS API developer docs: https://www.statcan.gc.ca/en/developers/wds
-- StatCan WDS User Guide: https://www.statcan.gc.ca/en/developers/wds/user-guide
-- StatCan mineral production Table 16-10-0022 + Feb 2026 release: https://natural-resources.canada.ca/minerals-mining/mining-data-statistics-analysis
-- StatCan RSS feeds: https://www.statcan.gc.ca/en/sc/rss
-- Ontario Regulatory Registry RSS: https://www.ontariocanada.com/registry/rssInfo.do?action=list
-- Ontario mining Bill 5 (2025): https://www.canadianminingjournal.com/featured-article/modernizing-mining-in-ontario-recent-regulatory-shifts-with-bill-5/
-- feedparser PyPI (6.0.11, Sep 2025): https://pypi.org/project/feedparser/
+None that block the roadmap. The one judgment call (DnD vs date-dropdown) has been resolved in favor of the dropdown. If the user ever wants to revisit DnD, `@dnd-kit/core ^6.3` + `@dnd-kit/sortable ^10.0` are the packages — both React 19 compatible, both verified.

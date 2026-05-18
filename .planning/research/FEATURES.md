@@ -1,510 +1,428 @@
-# Feature Research — v2.0 Daily Summary Feed
+# v2.1 Three-Tab Content Engine — FEATURES Research
 
-**Domain:** Scheduled daily news summary feed (single-operator, gold sector, Ontario mining focus)
-**Researched:** 2026-05-05
-**Confidence:** HIGH (core summary mechanics, StatCan sources), MEDIUM (Ontario law sources — feed structure unconfirmed), LOW (OLA bill tracker RSS — no RSS feed confirmed to exist)
-
-> **Scope note:** This file supersedes the v1.0 approval-dashboard FEATURES.md for the v2.0 milestone.
-> Existing features already built (fetch_stories, Sonnet scoring, APScheduler, FastAPI auth, Twilio WhatsApp,
-> Neon Postgres) are not re-researched here. Focus is entirely on new v2.0 surface area.
+**Project:** Seva Mining v2.1 — Three-Tab Content Engine
+**Mode:** Ecosystem / Feature Research
+**Domain:** Personal intelligence + content-planning tool for a solo gold-sector operator
+**Confidence:** HIGH (praw/Reddit API), MEDIUM (subreddit subscriber counts), HIGH (virality dedup strategy), HIGH (content angle prompt structure)
+**Researched:** 2026-05-18
 
 ---
 
-## How Daily Summary Products Work in Production
+## TABLE STAKES — Must Ship in v2.1
 
-### Patterns Stolen from Morning Brew / Axios / Stratechery
-
-**Morning Brew pattern (steal this):**
-- Fixed section structure every issue — reader knows where to look for "markets" vs "tech" vs "the kicker"
-- Each section: 1-sentence headline, 2-4 bullets, source attribution at bullet level (not section level)
-- "TLDR" is implicit — bullet 1 IS the TLDR; bullets 2-4 are supporting detail
-
-**Axios Smart Brevity pattern (steal this):**
-- "What's new" + "Why it matters" as the first two micro-sections of every story
-- Paragraphs are 1-2 sentences max; white space is a feature not waste
-- Section headers are anchor links — reader can jump to Gold / Laws / Stats without scrolling
-- "Be Smart" closer: one synthesis sentence at the end of each section that the reader can quote
-
-**Stratechery pattern (steal selectively):**
-- Cross-issue continuity: "As I noted on Tuesday…" references are normal, expected, valued
-- "Building on this morning's update: gold has now broken $X" is a native pattern for that audience
-- Daily subscribers tolerate and enjoy callbacks; it signals the author is tracking a narrative arc
-
-**Recommended synthesis for v2.0:**
-Each summary card should follow this structure per section:
-
-```
-## Section Title (e.g., "Gold News")
-**Headline:** [One-sentence lead]
-- [Bullet 1 — the TLDR fact]
-- [Bullet 2 — supporting context]
-- [Bullet 3 — so-what or implication]  ← optional, omit on slow news days
-*(Source, HH:MM ET)*
-```
-
-For the 12:00 PT card, Sonnet should receive the 08:00 card's gold news section in its context
-window and be instructed to note continuity where prices have moved materially. This is more
-reliable than a stylistic tone instruction alone — it grounds the cross-reference in actual data.
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Tab navigation (3 tabs) | The entire v2.1 premise — without it there is no product | S | shadcn `Tabs` (Radix primitive), `value` controlled by URL hash so deep-linking works |
+| Calendar CRUD (create/edit/delete items) | A calendar without editable items is a read-only view | M | `calendar_items` table, REST endpoints, TanStack Query optimistic mutations |
+| Weekly Reddit ingestion (Sunday cron) | The sweeper's primary content source — without it the card is empty | M | asyncpraw read-only, 4-5 subreddits, `subreddit.top(time_filter='week', limit=10)` |
+| Story virality compute | Differentiates the sweeper from a raw Reddit dump | M | SQL + Python over `daily_summaries.raw_sources_jsonb.gold_news[]` |
+| Sonnet content-angle generation | The output that makes the sweeper actionable | M | Single call, ~1000 tokens, 3 angles |
+| Weekly sweep card UI (Tab 3) | Surface for all three sweeper outputs | M | Three sections in one card: Reddit posts, viral stories, content angles |
+| Linear-style UI redesign | The visual refresh is explicitly in scope | M | Dark + amber-500, Inter, generous whitespace, shadcn components |
 
 ---
 
-## Feature Landscape
+## DIFFERENTIATORS — Nice-to-Have in v2.1
 
-### Table Stakes (Must Ship in v2.0)
-
-| Feature | Why Expected | Complexity | Dependencies |
-|---------|--------------|------------|--------------|
-| `daily_summary` cron at 08:00 PT + 12:00 PT | Core product premise; without it nothing exists | MEDIUM | APScheduler CronTrigger (existing), `daily_summaries` table (new) |
-| Three-section card: Gold News / Ontario Laws / Ontario Stats | Defined product contract; operator expects all three | MEDIUM | New ingestion modules for laws + stats sections |
-| Gold News section via existing `fetch_stories()` | fetch_stories is already scored and deduped — reuse it | LOW | `fetch_stories()` (existing) |
-| Ontario Laws ingestion + Sonnet filter | Core product requirement; no machine-readable feed — needs custom approach | HIGH | Ontario Newsroom RSS + Sonnet relevance gate (new) |
-| Ontario Stats section with empty-state design | StatCan publishes monthly; most days have no new data | MEDIUM | StatCan "The Daily" RSS (new); empty-state copy template |
-| Web feed at `/` — vertical scroll, latest 30 days | Replace retired approval dashboard; primary reading surface | MEDIUM | `GET /summaries` endpoint (new), React feed page (new) |
-| WhatsApp delivery on each successful summary fire | Operator reads on phone; WhatsApp is the existing delivery channel | LOW | Twilio (existing), summary content formatted for WhatsApp |
-| WhatsApp failure alert when cron errors | Silent failures are invisible; operator must know | LOW | Twilio (existing), APScheduler error hook (new) |
-| 30-day auto-prune cron | Prevents unbounded DB growth; operator expectation from project spec | LOW | Neon Postgres, daily prune job (new) |
-| "No major moves since 08:00" template for 12:00 card | Slow news day at noon is normal; card must still fire | LOW | Sonnet prompt variant, prior summary in context |
-| Dedup within summary (same story from Kitco + Reuters = one bullet) | fetch_stories SequenceMatcher 0.85 threshold already handles URL+headline dedup | LOW | `deduplicate_stories()` (existing) — confirmed sufficient |
-| Source attribution per bullet — inline "(Kitco, 06:34 ET)" | Operator needs to verify claims; inline citation is the newsletter standard | LOW | Stored in story dict as `source_name` + `published` (existing) |
-
-### Differentiators (Nice-to-Have — Ship if Scope Allows)
-
-| Feature | Value Proposition | Complexity | Dependencies |
-|---------|-------------------|------------|--------------|
-| Cross-summary continuity reference (noon → morning) | "Gold has now broken $2,500 since this morning's update" — turns two separate cards into a narrative arc | MEDIUM | Pass 08:00 card's gold section into 12:00 Sonnet context; requires `daily_summaries` table with content stored as JSONB |
-| Section anchor links in web feed | Reader can jump to "Ontario Laws" without scrolling past gold news | LOW | CSS `id` anchors on section headers; no backend change |
-| "Last updated" pointer in empty-state sections | Empty stats section shows "No new data. Last release: Apr 20, 2026 (Feb 2026 data)" | LOW | Query `daily_summaries` for last non-empty stats section; render link |
-| Click-through to source URL per bullet | Operator can read full article from the feed | LOW | Store `story.link` in summary JSONB; render as hyperlink in feed |
-| WhatsApp formatting: section emoji prefixes | Gold section gets a gold-colored emoji prefix; Laws gets ⚖; Stats gets 📊 | LOW | Twilio WhatsApp message template only |
-| Statcan release detection: auto-note when new data drops | "New StatCan data released today (Feb 2026 production figures):" surfaces prominently | MEDIUM | Poll StatCan "The Daily" RSS for table 16-10-0019-01 release notices |
-
-### Anti-Features (Never Ship)
-
-| Feature | Why Requested | Why Problematic |
-|---------|---------------|-----------------|
-| User comments / reactions on feed cards | Feels like a "complete" feed product | Single-user product — comments are talking to yourself. Adds DB schema complexity for zero value. |
-| Sharing / social export of summary cards | "Share today's summary with followers" | Defeats the personal intelligence tool positioning. Adds auth/public-access complexity. Out of scope per locked decisions. |
-| Multi-user / multi-operator access | "What if I want to share with a colleague?" | Multi-tenancy is explicitly out of scope until second client exists. Password auth is single-user by design. |
-| Custom keyword configuration for summary sections | "I want to add 'platinum' to the gold section" | Operator locked decisions say no custom keywords. Keywords are hard-coded per section; SerpAPI queries are fixed. |
-| Push notifications beyond WhatsApp (email, SMS, Slack) | "Redundant delivery channels" | Twilio WhatsApp is sufficient for single-user. Adding channels adds cost and maintenance without value. |
-| Archival beyond 30 days | "I want to read summaries from 6 months ago" | 30-day retention is a locked decision. Unlimited retention compounds storage cost with no demonstrated need. |
-| "Mark as read" / read-state tracking | Feels like a proper feed app | Single-user vertical scroll; chronological order is self-evidencing. State tracking adds complexity for no functional improvement. |
-| Auto-posting summary content to social media | Scope creep from original product pivot | Core value is operator intelligence, not content broadcasting. Explicitly out of scope. |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Tag color-coding on calendar | At-a-glance content-type scanning | S | Fixed color map per tag slug (thread=blue, video=red, podcast=purple); CSS custom properties |
+| Today highlight on calendar | Orientation — user instantly knows "now" | S | Bold border + subtle `amber-500/10` background tint on current day cell |
+| Drag-and-drop reschedule | Faster than dropdowns for adjacent-day moves | L | `@dnd-kit/core` — see DnD section. Recommend deferring |
+| Day hover "+ Add" hint | Discoverability for empty cells | S | CSS `hover:` reveal on each day cell |
+| Reddit post score display | Shows why a post made the list | S | `score` field from praw `Submission.score`; render as badge |
+| Weekly sweep history | Browse past weeks' cards | M | Tab 3 shows only the latest `weekly_sweeps` row by default; add a week-picker dropdown |
 
 ---
 
-## Source Viability Assessment
+## ANTI-FEATURES — Never Ship in v2.1
 
-### Section 1: Gold News
-
-**Primary source: existing `fetch_stories()`**
-The pipeline (RSS: Kitco/Mining.com/JMN/WGC/BNN/Bloomberg/Goldseek + SerpAPI 17 keywords) already
-covers gold news comprehensively. `deduplicate_stories()` handles the Kitco-Reuters same-story problem
-via URL dedup + SequenceMatcher 0.85 headline similarity. The composite score
-(relevance×0.4 + recency×0.3 + credibility×0.3)×10 is already calibrated.
-
-**Recommended approach for summary generation:**
-Pass top 5-7 stories (score ≥ 6.0) to a Sonnet summary call. Do NOT re-score for the summary —
-reuse scores already computed by fetch_stories. Group bullets by theme if possible (price moves /
-institutional demand / macro backdrop), but do not over-engineer the grouping.
-
-**Dedup verdict:** SUFFICIENT — existing `deduplicate_stories()` covers URL + headline similarity.
-The 0.85 ratio threshold correctly collapses "Gold hits $3,200" (Kitco) and "Gold price reaches $3,200
-record" (Reuters) into one entry, keeping the higher-credibility source. No new dedup work needed.
+| Feature | Why Avoid | What to Do Instead |
+|---------|-----------|-------------------|
+| AI content drafting | v1.0 sub-agents are retired; scope creep | Calendar items are plain text notes; no AI involvement |
+| Autoposting | Hard prohibition in PROJECT.md | User copies text and posts manually |
+| WhatsApp ping for sweeper | User did not request it; adds delivery complexity for marginal value | Defer to v2.2; Option B (user visits the tab on Sunday) |
+| WhatsApp ping for calendar items | Deferred per PROJECT.md | Defer to v2.2 |
+| Live macro indicators (FRED API) | Explicitly deferred to v2.2 in PROJECT.md | The Macro Economic Stats section in Tab 1 stays as-is |
+| Mobile-responsive UI | Desktop-only constraint preserved | No change |
+| DnD for calendar (in v2.1) | High complexity-to-value ratio for a single user with low calendar density | Ship date-dropdown reschedule in v2.1; revisit DnD in v2.2 |
 
 ---
 
-### Section 2: Ontario Mining-Favourable Laws
-
-This is the hardest section. No clean machine-readable feed delivers "Ontario just passed a
-mining-favourable law." Every candidate source requires a Sonnet filter.
-
-**Source A: Ontario Newsroom RSS — `https://news.ontario.ca/en/release/feed`**
-Verdict: **VIABLE (with mandatory Sonnet filter)**
-
-Confidence: MEDIUM (URL confirmed in project spec; feed structure inferred from standard Ontario govt pattern; content verified by external search results showing active 2025 mining legislation)
-
-- The feed covers all Ontario government press releases — energy, mining, health, transit, everything
-- Mining-relevant signal rate: approximately 1-2 items/week when legislation is active; 0-1 items/week in quiet periods
-- High noise: ministerial speeches, unrelated announcements dominate
-- Requires Sonnet filter to separate "minister gives speech about supporting mining" from "Ontario passes Bill X amending Mining Act"
-- The Bill 5 / "Protect Ontario by Unleashing our Economy Act, 2025" example shows actual mining legislation does appear here — it received Royal Assent June 5, 2025
-
-**Source B: Ontario Environmental Registry (ERO) — `https://ero.ontario.ca/`**
-Verdict: **MARGINAL**
-
-Confidence: MEDIUM (ERO confirmed active; RSS availability unconfirmed)
-
-- ERO publishes proposed regulatory changes before they become law — mining notices do appear here
-- Useful for "proposed amendments to the Mining Act" coverage, but lags behind actual Royal Assent
-- No confirmed RSS feed URL; scraping ERO search results is an option but fragile
-- Make viable by: adding `ero.ontario.ca` to a SerpAPI keyword search for "Ontario Mining Act" rather than relying on direct RSS
-
-**Source C: Ontario Legislative Assembly bills tracker — `https://www.ola.org/en/legislative-business/bills/current`**
-Verdict: **MARGINAL**
-
-Confidence: LOW (no RSS feed confirmed; web interface only)
-
-- Definitive source for bill status (first reading / second reading / committee / Royal Assent)
-- No confirmed RSS feed; OLA website is HTML-only for bill listing
-- Make viable by: SerpAPI query `"Ontario bill" "Mining Act" OR "mining" site:ola.org` — low yield but catches bill-passage events
-- Alternatively: scrape the current bills page weekly, not daily
-
-**Source D: CanLII — `https://www.canlii.org/rss`**
-Verdict: **MARGINAL**
-
-Confidence: MEDIUM (CanLII RSS confirmed to exist; mining act consolidation confirmed updated to Jan 1, 2026)
-
-- CanLII publishes updated legislation consolidations; the Ontario Mining Act is tracked here
-- RSO 1990, c M.14 last amendment: 2025, c. 17, Sched. 1 (confirmed)
-- CanLII RSS covers new legislation and regulation releases across all Canadian jurisdictions
-- Noise level is high — covers all legislation, not just mining
-- Filter approach: subscribe to CanLII Ontario RSS, Sonnet-filter for Mining Act / Ontario mineral-related content
-
-**Source E: Natural Resources Canada News RSS — `https://natural-resources.canada.ca/corporate/rss-feeds`**
-Verdict: **VIABLE (supplementary)**
-
-Confidence: MEDIUM (NRCan RSS confirmed to exist; mining/minerals subset available)
-
-- NRCan publishes federal mining-related announcements, budget impacts, critical minerals policy
-- Covers federal (not Ontario-specific) regulatory changes — still relevant for "mining-favourable laws" at federal level
-- Cadence: 2-4 items/week across all NRCan topics; mining-specific subset is lower
-- Add to ingestion alongside Ontario Newsroom; Sonnet filter handles both feeds with same prompt
-
-**Source F: Mining Association of Canada (MAC) news — `https://mining.ca/resources/`**
-Verdict: **VIABLE (supplementary)**
-
-Confidence: MEDIUM (MAC website confirmed active; RSS availability not confirmed)
-
-- MAC publishes policy commentary, budget reactions, regulatory analysis — exactly the "mining-favourable" framing
-- Less noisy than government feeds because MAC already filters for mining relevance
-- No confirmed RSS feed; use SerpAPI query `"Mining Association of Canada" legislation policy 2026`
-
-**Source G: Ontario Mining Association (OMA) — `https://www.oma.on.ca/news/`**
-Verdict: **VIABLE (supplementary)**
-
-Confidence: MEDIUM (OMA website confirmed active with regular news posts; RSS availability unconfirmed)
-
-- OMA releases Ontario-specific mining industry news, regulatory commentary, annual State of Ontario Mining report
-- Published State of Mining Sector March 2025 — the type of stats-heavy content that belongs in Section 3
-- Use SerpAPI keyword `"Ontario Mining Association" site:oma.on.ca` or add OMA news feed if RSS is available at `oma.on.ca/modules/news/en`
-
-**Recommended Ontario Laws ingestion stack:**
-1. Ontario Newsroom RSS (`news.ontario.ca/en/release/feed`) — PRIMARY
-2. NRCan news RSS (`natural-resources.canada.ca/corporate/rss-feeds`) — SECONDARY
-3. SerpAPI keyword query: `"Ontario" "mining" ("bill" OR "act" OR "regulation" OR "policy") Canada` — TERTIARY
-4. Sonnet filter on ALL results (see prompt recommendation below)
-
-**Realistic frequency:** 1-3 genuinely new mining-favourable law items per week when the legislature is sitting; near-zero during summer recess (June–August) and winter break. Section will be empty 3-4 days out of 5 on average. Empty-state design is mandatory, not an edge case.
-
----
-
-### Section 3: Ontario Gold Mining Statistics
-
-**Source A: StatCan Table 16-10-0019-01 (Monthly Mineral Production, metallic minerals)**
-Verdict: **VIABLE — but monthly, ~2-month lag**
-
-Confidence: HIGH (table confirmed active; release cadence confirmed from search results)
-
-URL: `https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1610001901`
-API: `https://www150.statcan.gc.ca/t1/wds/rest/` (StatCan WDS JSON API, confirmed)
-
-Release pattern (confirmed from actual release dates):
-- April 2025 data → released June 20, 2025
-- September 2025 data → released November 20, 2025
-- February 2026 data → released April 20, 2026
-- Pattern: data for month M releases approximately the 19th–21st of month M+2
-
-Practical implication: Ontario gold production figures for January 2026 will not be available until
-approximately March 20, 2026. The summary will have genuine new StatCan data roughly once per month
-on the 19th-21st. All other days → empty state for this sub-source.
-
-StatCan WDS API access pattern:
-```
-GET https://www150.statcan.gc.ca/t1/wds/rest/getSeriesInfoFromVector/{vectorId}
-GET https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorsAndLatestNPeriods/{vectorId}/1
-```
-No API key required. JSON response. Vector IDs for Ontario gold production need to be resolved
-once at setup by querying table 16-10-0019-01 metadata for Ontario + Gold rows.
-
-**Source B: StatCan "The Daily" RSS for mineral production releases**
-Verdict: **VIABLE — the best trigger mechanism**
-
-Confidence: HIGH (The Daily confirmed to publish mineral production release notices; RSS feeds confirmed at statcan.gc.ca)
-
-"The Daily" (`https://www150.statcan.gc.ca/n1/dai-quo/index-eng.htm`) publishes a release notice
-the same day StatCan publishes new mineral production data. Subscribe to The Daily RSS and Sonnet-filter
-for "mineral production" releases — this is the trigger event for Section 3 having real content.
-
-**Source C: Natural Resources Canada — Annual Statistics of Mineral Production**
-Verdict: **VIABLE (annual, supplementary)**
-
-Confidence: HIGH (NRCan confirmed to publish annual mineral production; URL confirmed active)
-
-URL: `https://mmsd.nrcan-rncan.gc.ca/prod-prod/ann-ann-eng.aspx`
-
-Annual data for 2024 was released February 25, 2026. Useful once per year for the annual summary
-bulletin. Not a daily source.
-
-**Source D: Ontario Geological Survey (OGS) — Mineral Exploration Activity Reports**
-Verdict: **MARGINAL**
-
-Confidence: MEDIUM (OGS confirmed active; activity reports confirmed; cadence unclear)
-
-URL: `https://www.geologyontario.mndm.gov.on.ca/mines/ogs/rgp/mer_listing_e.html`
-
-- OGS publishes monthly and year-to-date mineral exploration activity reports
-- These are exploration activity counts (new claims staked, drill holes reported) — useful context but not production figures
-- No confirmed RSS feed; HTML-only listing
-- Make viable by: SerpAPI query `"Ontario Geological Survey" gold production OR exploration statistics`
-
-**Source E: OMA State of Ontario Mining report (annual)**
-Verdict: **VIABLE (annual, high-value when it drops)**
-
-Confidence: MEDIUM (2025 report confirmed published March 2025; annual cadence confirmed)
-
-The OMA State of Ontario Mining Sector report publishes in Q1 each year and contains:
-- Ontario GDP contribution from mining
-- Employment figures (~22,000 direct jobs, $150k avg salary)
-- Capital expenditures ($5.2B in 2023)
-- Mineral export values ($64B in 2023)
-
-This is exactly the type of stats that belong in Section 3 when the report drops. When it does, Section 3
-should feature it prominently even though it is technically not "new today" data.
-
-**Recommended Ontario Stats ingestion stack:**
-1. StatCan "The Daily" RSS — monitor for mineral production release notices (monthly event, ~19th-21st)
-2. StatCan WDS API call on confirmed release day to pull Ontario gold production figures
-3. SerpAPI query `"Ontario gold" production statistics site:statcan.gc.ca OR site:nrcan.gc.ca OR site:oma.on.ca`
-4. Section fires with real data approximately once/month; empty state all other days
-
----
-
-## Sonnet Filter Prompts (Recommended)
-
-### Ontario Laws Relevance Filter
-
-Minimize false positives (minister speeches, unrelated bills) while catching genuine law/policy changes.
+## FEATURE DEPENDENCIES
 
 ```
-You are a regulatory filter for an Ontario gold mining industry intelligence feed.
+Tab Navigation (shadcn Tabs)
+    └──required by──> Tab 1: News Funnel (existing content moved into tab)
+    └──required by──> Tab 2: Content Calendar
+    └──required by──> Tab 3: Weekly Viral Sweeper
 
-Evaluate this Ontario government news item and respond with a JSON object only.
+DB: calendar_items table + REST CRUD
+    └──required by──> Content Calendar UI (Tab 2)
+    └──required by──> Optimistic UI via TanStack Query
 
-Rules:
-- KEEP if: The item announces passage, Royal Assent, or coming-into-force of a law, bill, regulation, or
-  Order in Council that DIRECTLY affects mining operations, mineral exploration, mine permitting, land
-  access, environmental assessment for mines, or mineral rights in Ontario.
-- KEEP if: A federal or Ontario government policy change (budget measure, critical minerals strategy,
-  Indigenous consultation framework change) materially affects the economics or regulatory burden
-  of gold mining in Ontario.
-- REJECT if: A minister gives a speech, attends an event, or "supports" mining without announcing
-  a concrete regulatory change.
-- REJECT if: The item is about a specific company's mine (company-specific news, not sector-wide).
-- REJECT if: The regulatory change is unrelated to mining (e.g., healthcare, transit, housing).
-- REJECT if: The item is about environmental opposition to a mining project without a regulatory change.
+DB: weekly_sweeps table
+    └──required by──> Weekly Sweep Card UI (Tab 3)
+    └──required by──> Sunday cron job
 
-Respond ONLY with:
-{"keep": true|false, "reason": "one sentence", "law_name": "Bill X / Act name or null", "favour_or_neutral": "favourable|neutral|unfavourable|unclear"}
+Sunday cron (APScheduler)
+    └──requires──> asyncpraw Reddit ingestion
+    └──requires──> Story virality compute (queries daily_summaries)
+    └──requires──> Sonnet content-angle generation
+    └──all three must complete──> weekly_sweeps INSERT
 
-Title: {title}
-Summary: {summary}
-```
+Story virality compute
+    └──requires──> at least 7 days of daily_summaries rows with raw_sources_jsonb.gold_news
+    (implies: sweeper will return sparse/empty results if run before v2.0 has been live 7 days — already satisfied since v2.0 shipped 2026-05-06)
 
-Key discrimination logic: "minister announces support for mining" → REJECT; "Ontario passes Bill 5 amending Mining Act" → KEEP. The `law_name` field forces the model to name the actual legislation, which is a strong signal for false-positive detection — if it cannot name a law, the item is probably a speech.
-
-### Ontario Stats Relevance Filter (simpler — less noise in this feed)
-
-```
-You are a statistics filter for an Ontario gold mining feed.
-
-Evaluate this item and respond with JSON only.
-
-KEEP if: The item contains new statistical data about Ontario gold/mineral production, exploration
-activity, investment figures, employment numbers, or jurisdictional rankings published by StatCan,
-NRCan, Ontario Geological Survey, or Ontario Mining Association.
-REJECT if: The item is opinion, forecast, or commentary without new data.
-REJECT if: The data is about a specific company only (not sector-wide).
-
-{"keep": true|false, "data_type": "production|exploration|employment|investment|ranking|other|null", "source_org": "StatCan|NRCan|OGS|OMA|other|null"}
+Linear-style UI redesign
+    └──enhances──> Tab 1, Tab 2, Tab 3
+    └──conflicts with──> none (purely additive CSS/component layer)
 ```
 
 ---
 
-## Empty-State Copy (Recommended Defaults)
+## REDDIT INGESTION — Detailed Findings
 
-### Gold News — slow day (12:00 summary, nothing material since 08:00)
+### Auth Pattern (HIGH confidence)
 
-> **No major moves since the 08:00 summary.** Gold is holding near {last_price}. Next scheduled update: 08:00 PT tomorrow.
+Read-only script application: provide only `client_id`, `client_secret`, `user_agent`. PRAW defaults to read-only mode when no `username`/`password` is given.
 
-Note: pass `last_price` from a spot price API call (Kitco or metals-api.com) at summary generation time — a static "no news" message without current price is less useful than one grounding the user.
+```python
+import asyncpraw
 
-### Ontario Laws — no new items today
-
-> **No new Ontario mining-related laws or regulatory changes today.** Last update: {date of last non-empty laws section} — {law_name with link if stored}.
-
-Do NOT say "check back later" — it feels like a broken app. The pointer to the last real item is more useful than a blank state.
-
-### Ontario Stats — between monthly StatCan releases
-
-> **No new production statistics released today.** StatCan's next Monthly Mineral Production Survey release is expected around {next_release_estimate}. Last data: {month/year of last StatCan release} — Ontario gold production: {last_known_figure} oz.
-
-Storing `last_known_figure` in the DB as part of the summary JSONB means the agent can always fill this in without re-querying StatCan. Update it each time a real StatCan release is processed.
-
----
-
-## Deduplication Strategy (Confirmed Sufficient)
-
-`fetch_stories()` runs `deduplicate_stories()` before scoring. Two-step process:
-1. URL exact match — first occurrence wins
-2. SequenceMatcher headline similarity ≥ 0.85 — higher-credibility source wins on tie
-
-For v2.0 summary generation, the gold news bullets are generated from the top-N already-deduped stories.
-No additional dedup layer is needed. The existing approach correctly handles the Kitco/Reuters case.
-
-**One gap:** Cross-session dedup (same story appearing in both 08:00 and 12:00 summaries). The 30-min
-cache refreshes between summary fires. A story published at 07:30 will appear in both the 08:00 and
-potentially the 12:00 summary if it is still the top-scoring item.
-
-**Recommendation:** In the Sonnet 12:00 prompt, pass the 08:00 summary's bullet list and instruct
-Sonnet to omit any story already covered there unless there is material new development. This is the
-same mechanism as the cross-summary continuity differentiator — solving both problems with one prompt
-addition.
-
----
-
-## Feature Dependencies
-
-```
-[daily_summary cron fires at 08:00 PT]
-    └──requires──> [APScheduler CronTrigger America/Los_Angeles (existing)]
-    └──requires──> [daily_summaries table (new)]
-    └──requires──> [Gold News ingestion: fetch_stories() (existing)]
-    └──requires──> [Ontario Laws ingestion module (new)]
-    └──requires──> [Ontario Stats ingestion module (new)]
-    └──requires──> [Sonnet summary generation call (new)]
-    └──triggers──> [WhatsApp delivery on success (Twilio existing)]
-    └──triggers──> [WhatsApp failure alert on cron error (new hook)]
-
-[daily_summary cron fires at 12:00 PT]
-    └──requires──> [Same as 08:00 above]
-    └──enhances-with──> [08:00 summary JSONB from daily_summaries (differentiator)]
-
-[Web feed at /]
-    └──requires──> [GET /summaries API endpoint (new)]
-    └──requires──> [daily_summaries table with content JSONB (new)]
-    └──requires──> [React feed page replacing /queue (new)]
-
-[30-day prune cron]
-    └──requires──> [daily_summaries table (new)]
-    └──independent-of──> [summary generation — runs on separate schedule]
-
-[Ontario Laws section — real content]
-    └──requires──> [Ontario Newsroom RSS ingestion (new)]
-    └──requires──> [NRCan news RSS ingestion (new)]
-    └──requires──> [Sonnet laws relevance filter (new)]
-
-[Ontario Stats section — real content]
-    └──requires──> [StatCan "The Daily" RSS monitor (new)]
-    └──requires──> [StatCan WDS API call on release day (new)]
-
-[Empty-state copy for Laws + Stats]
-    └──requires──> [daily_summaries table queryable for last non-empty section (new)]
-
-[Cross-summary continuity — differentiator]
-    └──requires──> [08:00 daily_summaries row committed before 12:00 cron fires]
-    └──requires──> [JSONB structure storing section content separately (new schema decision)]
-
-[Source attribution per bullet]
-    └──requires──> [story.source_name + story.published stored in summary JSONB alongside each bullet (new schema field)]
-    └──independent-of──> [dedup — attribution happens after dedup, not before]
+reddit = asyncpraw.Reddit(
+    client_id=settings.reddit_client_id,
+    client_secret=settings.reddit_client_secret,
+    user_agent=settings.reddit_user_agent,  # e.g. "SevaMiningSweeper/1.0 by seva_mining"
+)
+reddit.read_only = True  # defensive assertion
 ```
 
-### Dependency Notes
+Three env vars needed: `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`. Setup: reddit.com/prefs/apps → "create app" → type "script" → redirect URI `http://localhost:8080` (unused).
 
-- **Ontario Laws ingestion is the only net-new pipeline complexity** — all other sections reuse existing
-  infrastructure (fetch_stories for Gold, StatCan API for Stats which is a simple HTTP call).
-- **30-day prune is independent** — does not need to coordinate with summary generation; safe to ship
-  in a separate phase and run from day one.
-- **Cross-summary continuity requires JSONB schema design** — the `daily_summaries` table must store
-  gold news bullets as a structured field, not just a rendered string, for the 12:00 Sonnet call to
-  reference them. This is a schema decision to lock early.
-- **WhatsApp failure alert requires APScheduler error hook** — APScheduler v3 supports `add_listener`
-  with `EVENT_JOB_ERROR`; this is a small addition to the scheduler worker, not a new service.
+### API Call Pattern (HIGH confidence — praw stable docs)
+
+```python
+async for submission in reddit.subreddit("gold").top(time_filter="week", limit=10):
+    post = {
+        "title": submission.title,
+        "score": submission.score,  # net upvotes (ups - downs)
+        "url": submission.url,
+        "permalink": f"https://reddit.com{submission.permalink}",
+        "subreddit": submission.subreddit.display_name,
+        "num_comments": submission.num_comments,
+        "is_self": submission.is_self,  # True = text post
+    }
+```
+
+`time_filter='week'` is the correct parameter name. Valid values: `"hour"`, `"day"`, `"week"`, `"month"`, `"year"`, `"all"`. Use `"week"` — aligns exactly with the Sunday sweep window.
+
+**Sort order recommendation:** `top(time_filter='week')` over `hot()`. Hot ranks by a decay-weighted score that heavily favors recent posts — a post from Tuesday may outrank a more-engaged post from Monday. `top(time_filter='week')` uses net score as the ranking signal with no time decay, so it surfaces the most-voted content from the past 7 days regardless of day.
+
+**Engagement metric recommendation:** Use `submission.score` directly. Do not use `num_comments` as primary ranking; it inflates controversial posts. Secondary signal: `score / max(num_comments, 1)` as a quality filter to exclude low-score high-comment flamewars, but don't rank by it.
+
+**Post type:** Ingest both text posts (`is_self=True`) and link posts.
+
+**Comments:** Do NOT ingest top comments in v2.1.
+
+### Rate limits (HIGH confidence)
+
+Free tier: 100 authenticated requests per minute. A Sunday sweep calling 5 subreddits × 10 posts each = 5 API calls plus ~5 for auth/metadata = well under 100 QPM. Zero rate-limit risk.
+
+### Subreddit Viability Assessment
+
+| Subreddit | Est. Subscribers | Activity Profile | Verdict | Notes |
+|-----------|-----------------|-----------------|---------|-------|
+| r/gold | ~50K–80K | Moderate posting, mix of prices/charts/news | **VIABLE** | Primary macro-gold community; quality signal |
+| r/Wallstreetsilver | ~160K | High posting volume; silver-heavy; anti-establishment framing | **VIABLE** | Largest precious metals sub; silver overlaps with gold narrative |
+| r/silverbugs | ~50K | Collector-hobbyist tone; lower virality for strategic content | **MARGINAL** | Drops easily if limit forces a cut; physical stacking focus |
+| r/Gold_and_Silver | ~15K–30K | Low volume; combined PMs focus | **MARGINAL** | Smaller community; likely redundant with r/gold + r/Wallstreetsilver |
+| r/Gold_Silver_Crypto | ~5K–15K | Very low activity | **NOT VIABLE** | Too small; crypto framing dilutes gold-specific signal |
+| r/wallstreetbets (filtered) | ~15M | Massive but gold/mining mentions are rare (<1% of posts) | **NOT VIABLE AS A SUBREDDIT** | Flair filtering in WSB is unreliable; gold tickers ($GLD, $GDX) appear in comments not titles; too noisy for a weekly sweep at `limit=10` |
+| r/investing | ~2M | Broad investing; gold mentioned sporadically | **MARGINAL** | Would need keyword post-filter to surface gold content; not worth the complexity |
+
+**Recommended subreddit list (4 subreddits):**
+
+```python
+SWEEP_SUBREDDITS = ["gold", "Wallstreetsilver", "silverbugs", "Gold_and_Silver"]
+```
+
+Keep r/silverbugs and r/Gold_and_Silver despite MARGINAL rating because the sweep fetches `limit=10` per sub and the total API cost is 4 calls. Drop r/Gold_Silver_Crypto entirely (too small) and skip r/wallstreetbets (noise-to-signal ratio unacceptable).
 
 ---
 
-## MVP Definition for v2.0
+## STORY VIRALITY COMPUTE — Detailed Findings
 
-### Must Ship
+### Data Source
 
-- [ ] `daily_summaries` table with `id`, `fired_at`, `summary_type` (08:00/12:00), `content` (JSONB), `whatsapp_sent` bool
-- [ ] `daily_summary` APScheduler job: 08:00 PT + 12:00 PT CronTrigger
-- [ ] Gold News section: pass top-5 stories from fetch_stories() to Sonnet; return headline + 3 bullets + source attribution
-- [ ] Ontario Laws ingestion: Ontario Newsroom RSS + NRCan RSS + SerpAPI query; Sonnet relevance filter
-- [ ] Ontario Stats ingestion: StatCan "The Daily" RSS monitor; StatCan WDS API call on release day
-- [ ] Empty-state copy for all three sections (strings, not magic — just correct copy in the prompt)
-- [ ] "No major moves since 08:00" template for 12:00 gold section on slow days
-- [ ] `GET /summaries` — returns latest 30 days of summary cards, paginated
-- [ ] React feed page at `/` — vertical scroll, one card per summary, three sections rendered
-- [ ] WhatsApp delivery: send formatted summary on successful fire
-- [ ] WhatsApp failure alert: send alert on APScheduler `EVENT_JOB_ERROR` for daily_summary job
-- [ ] 30-day prune cron: delete `daily_summaries` rows where `fired_at < now() - interval '30 days'`
+`daily_summaries.raw_sources_jsonb.gold_news` is an array of objects, each with shape:
+```python
+{"title": str, "link": str, "source_name": str, "score": float, "published_at": str}
+```
+This is confirmed from `_build_gold_news_section()` in `daily_summary.py` lines 203–217. The `link` field is the canonical story URL.
 
-### Ship After Core is Validated
+### Query Strategy (HIGH confidence — directly from codebase)
 
-- [ ] Cross-summary continuity: pass 08:00 gold bullets into 12:00 Sonnet context
-- [ ] Section anchor links in web feed (`#gold-news`, `#ontario-laws`, `#ontario-stats`)
-- [ ] "Last updated" pointer in empty-state sections (query for last non-empty section row)
-- [ ] Click-through source URLs per bullet in web feed
+Pull `raw_sources_jsonb` from all `daily_summaries` rows in the past 7 days, flatten the `gold_news` arrays, then group and count.
 
-### Never Ship (v2.0 and beyond)
+```python
+# Pseudo-SQL
+SELECT raw_sources_jsonb->'gold_news' AS stories
+FROM daily_summaries
+WHERE generated_at >= NOW() - INTERVAL '7 days'
+  AND status IN ('completed', 'partial')
+```
 
-- [ ] User comments, sharing, public access to feed
-- [ ] Multi-user / multi-operator support
-- [ ] Custom keyword configuration per section
-- [ ] Notification channels beyond WhatsApp
-- [ ] Archival beyond 30 days
-- [ ] Auto-posting summaries to social media
+In Python: unnest the JSONB arrays, extract `link` and `title` per story, then group.
+
+### Dedup Strategy Recommendation (HIGH confidence)
+
+**Use URL canonicalization, not SequenceMatcher on URLs.** Reason: URL SequenceMatcher at 0.85 would conflate `kitco.com/2026/01/article.html` with `kitco.com/2026/02/article.html` if they share 87% of URL characters — a false positive. URL strings are structured identifiers, not prose. The right dedup for URLs is canonical normalization:
+
+```python
+from urllib.parse import urlparse, urlunparse, parse_qs
+
+def canonical_url(url: str) -> str:
+    """Strip tracking params, lowercase hostname, remove trailing slash."""
+    parsed = urlparse(url.lower().strip())
+    STRIP_PARAMS = {"utm_source","utm_medium","utm_campaign","utm_content",
+                    "utm_term","fbclid","gclid","ref","source","_ga"}
+    qs = {k: v for k, v in parse_qs(parsed.query).items() if k not in STRIP_PARAMS}
+    clean = parsed._replace(
+        query="&".join(f"{k}={v[0]}" for k, v in sorted(qs.items())),
+        fragment=""
+    )
+    path = clean.path.rstrip("/") or "/"
+    return urlunparse(clean._replace(path=path))
+```
+
+After canonicalization, group by canonical URL. For stories that share a canonical URL across multiple daily_summaries rows, count distinct `daily_summaries` rows (not total occurrences). A story appearing in 2 fires per day × 7 days = 14 occurrences should count as 7 distinct days, not 14.
+
+**Cross-source virality vs. frequency:** Use **distinct source_name count** as the primary virality signal. A story covered by bloomberg.com + northernminer.com + goldswitzerland.com = 3 distinct sources = highly viral. A story that appeared only on fxstreet.com 7 times in 7 fires = 1 distinct source = not viral. Formula:
+
+```python
+virality_score = len(set(story["source_name"] for story in story_group))
+```
+
+Output shape: list of `(canonical_title, canonical_url, distinct_source_count, latest_seen_at)`, sorted by `distinct_source_count` descending, top 5.
 
 ---
 
-## Phase Sequencing Recommendation
+## SONNET CONTENT-ANGLE GENERATION — Recommended Prompt
 
-**Phase 1 (foundation):** `daily_summaries` table + `daily_summary` cron stub + Gold News section + WhatsApp delivery + failure alert + 30-day prune. The cron fires, produces a Gold News card, delivers to WhatsApp. Ontario sections are placeholders ("Coming soon").
+**Model:** `claude-sonnet-4-6` (consistent with `SONNET_MODEL` in daily_summary.py)
+**Max tokens:** 1000 (3 angles × ~300 tokens each)
+**Timeout:** 60.0 seconds (consistent with post-ii6 pattern)
 
-**Phase 2 (complete the card):** Ontario Laws ingestion + Sonnet filter + Ontario Stats ingestion + empty-state copy for all sections. Now the full three-section card works.
+### System Prompt
 
-**Phase 3 (web feed):** `GET /summaries` endpoint + React feed page replacing /queue. Now the operator has a reading surface beyond WhatsApp.
+```
+You are a tactical content strategist for a gold-sector social media account. Your reader is a solo operator who monitors the gold market and publishes 4-5 times per week. You receive two signals: top Reddit posts from gold/silver communities this week, and the most cross-referenced news stories from the past 7 days.
 
-**Phase 4 (polish):** Cross-summary continuity, anchor links, click-through URLs, "last updated" pointers.
+Your job: identify 3 specific content angles the operator should consider this week.
 
-**Rationale:** Phase 1 delivers the highest-value piece (gold news on WhatsApp) immediately. Phase 2 completes the card. Phase 3 adds the web surface. Phase 4 adds differentiators. The dependency chain is linear — each phase is independently shippable.
+Each angle must:
+- Connect a Reddit signal (what investors are actually discussing) with a mainstream/institutional signal (what the news is covering)
+- Identify the gap or narrative tension between them — that gap is where the interesting content lives
+- Suggest a concrete framing or hook, not a generic topic
+- Stay within the operator's voice: senior analyst, data-driven, cites specifics, Bloomberg commodities desk energy
+- Never mention Seva Mining. Never give financial advice (no buy/sell signals).
+
+Output format:
+**Angle 1: [Short title]**
+Reddit signal: [what the community is talking about and why it's getting traction]
+Mainstream signal: [what the news coverage is saying]
+Your angle: [specific framing or hook the operator could use]
+
+**Angle 2: [Short title]**
+[same structure]
+
+**Angle 3: [Short title]**
+[same structure]
+
+No preamble. No postamble. Three angles only.
+```
+
+### User Prompt Template
+
+```python
+def build_sweeper_user_prompt(
+    reddit_posts: list[dict],
+    viral_stories: list[dict],
+) -> str:
+    reddit_block = "\n".join(
+        f"- [{p['subreddit']}] {p['title']} (score: {p['score']})"
+        for p in reddit_posts[:10]
+    )
+    viral_block = "\n".join(
+        f"- {s['title']} (covered by {s['source_count']} sources: {', '.join(s['sources'][:3])})"
+        for s in viral_stories[:5]
+    )
+    return (
+        f"TOP REDDIT POSTS THIS WEEK (gold/silver communities):\n{reddit_block}\n\n"
+        f"MOST CROSS-REFERENCED NEWS STORIES (past 7 days):\n{viral_block}\n\n"
+        "Generate 3 content angles."
+    )
+```
+
+**Rationale:** Mirrors the `GOLD_NEWS_SYSTEM_PROMPT` bull-thesis framing philosophy (every output must connect to a concrete insight) but reframed as "tactical content strategy." The "gap between Reddit and mainstream" instruction is the key differentiator — it forces Sonnet to produce angles based on narrative tension rather than restating the top headline.
+
+---
+
+## CONTENT CALENDAR UX — Detailed Findings
+
+### Week start: Monday (ISO/EU convention)
+
+Recommendation: **Mon–Sun**. Rationale: content planning for a professional operator aligns naturally with the ISO business week (Mon = start of work cycle). Most professional content tools (Notion calendar, Linear) default to Mon start.
+
+### Today highlighting
+
+Both a bold border (`ring-2 ring-amber-500`) and a subtle background tint (`bg-amber-500/5`) on the current day cell.
+
+### Items per day
+
+No hard cap in DB, but visually clip at 3 items with a "+N more" overflow badge. Handle overflow in the render layer only.
+
+### Tag color-coding
+
+Fixed color map per tag slug. Recommended initial set:
+
+```typescript
+const TAG_COLORS: Record<string, string> = {
+  thread:   "bg-blue-500/20 text-blue-300",
+  video:    "bg-red-500/20 text-red-300",
+  podcast:  "bg-purple-500/20 text-purple-300",
+  image:    "bg-green-500/20 text-green-300",
+  article:  "bg-amber-500/20 text-amber-300",
+  idea:     "bg-zinc-500/20 text-zinc-300",
+};
+const DEFAULT_TAG_COLOR = "bg-zinc-700/40 text-zinc-400";
+```
+
+### Empty cells
+
+Show a "+ Add" hint button on hover only (`opacity-0 group-hover:opacity-100 transition-opacity`).
+
+### Drag-and-drop vs. date dropdown
+
+**Recommendation: Ship date-dropdown reschedule in v2.1. Defer DnD to v2.2.**
+
+`@dnd-kit/core` for a calendar grid requires implementing custom `DragOverlay`, collision detection across a 7-column grid with overflow handling, touch vs. mouse event differences, and keyboard accessibility. ~300–500 lines of plumbing for a single-user tool where the user rarely reschedules more than 1–2 items per session. A date `<select>` dropdown on the edit modal achieves the same reschedule outcome in ~20 lines.
+
+If DnD is added in v2.2, `@dnd-kit/core` is the correct library.
+
+### Click-to-edit
+
+Click any calendar item → open an inline popover or slide-over panel with: title (text input), date (date picker), tag (dropdown), markdown notes (textarea with basic MD preview toggle). Do not use a full-page modal.
+
+---
+
+## SUNDAY CRON DESIGN — Recommendation
+
+**Recommendation: Separate cron at 08:00 PT Sunday.**
+
+Rationale:
+- 08:00 PT — gives Reddit a full week of posts to accumulate through Saturday.
+- Do NOT tie the sweeper to the 08:00 daily summary as a side-effect. Coupling them means a sweeper timeout could delay the daily summary, and a failed daily summary would suppress the sweeper output. Separate cron jobs = independent failure domains.
+
+APScheduler registration:
+
+```python
+scheduler.add_job(
+    run_weekly_sweep,
+    CronTrigger(day_of_week="sun", hour=8, minute=0, timezone="America/Los_Angeles"),
+    id="weekly_sweep",
+    max_instances=1,
+    misfire_grace_time=1800,
+)
+```
+
+This mirrors the `_make_daily_summary_job` pattern in `worker.py`. The sweep should have its own idempotency check (60-minute window pattern) to guard against misfire double-fires.
+
+---
+
+## WHATSAPP FOR SWEEPER
+
+**Recommendation: No WhatsApp for the sweeper in v2.1.**
+
+The user did not mention WhatsApp for the sweeper. The sweeper is a Sunday morning read, not a real-time alert. The web feed is the primary surface. Defer to v2.2 if the user requests it after using v2.1.
+
+---
+
+## FEATURE PRIORITIZATION MATRIX
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Tab navigation | HIGH | LOW | P1 |
+| Calendar CRUD + DB | HIGH | MEDIUM | P1 |
+| Reddit ingestion (asyncpraw) | HIGH | MEDIUM | P1 |
+| Story virality compute | HIGH | MEDIUM | P1 |
+| Sonnet content-angle generation | HIGH | LOW | P1 |
+| Weekly sweep card UI | HIGH | MEDIUM | P1 |
+| Linear UI redesign | HIGH | MEDIUM | P1 |
+| Tag color-coding | MEDIUM | LOW | P2 |
+| Today highlight | MEDIUM | LOW | P2 |
+| Day hover "+ Add" hint | MEDIUM | LOW | P2 |
+| Reddit post score badge | MEDIUM | LOW | P2 |
+| Week history picker (Tab 3) | MEDIUM | MEDIUM | P2 |
+| Drag-and-drop calendar | MEDIUM | HIGH | P3 (v2.2) |
+| WhatsApp sweeper delivery | LOW | LOW | P3 (v2.2) |
+
+---
+
+## DEPENDENCY SEQUENCING FOR ROADMAP
+
+The roadmapper should sequence phases as follows based on dependencies:
+
+**Phase 1: DB foundation + tab shell**
+- `weekly_sweeps` table (Alembic migration)
+- `calendar_items` table (Alembic migration)
+- shadcn `Tabs` shell in App.tsx (Tab 1 = existing feed, Tab 2 = placeholder, Tab 3 = placeholder)
+- All existing v2.0 routes preserved; Tab 1 wraps existing `SummaryFeedPage` component
+
+**Phase 2: Content Calendar (Tab 2)**
+- REST CRUD endpoints for `calendar_items`
+- Weekly grid view component (Mon–Sun, today highlight, tag colors, hover hints)
+- Click-to-edit panel with date dropdown reschedule
+- TanStack Query optimistic mutations
+
+**Phase 3: Weekly Viral Sweeper (Tab 3)**
+- asyncpraw integration (Reddit ingestion function, Sunday cron registration)
+- Story virality compute (SQL query + URL canonicalization + distinct-source count)
+- Sonnet content-angle call
+- `weekly_sweeps` INSERT with idempotency check
+- Sweep card UI component
+
+**Phase 4: UI polish**
+- Linear-style redesign applied globally (dark + amber-500, Inter, whitespace tokens)
+- shadcn component audit — replace any ad-hoc form elements
+
+This sequencing works because: Phase 1 provides the structural shell needed by Phases 2 and 3 independently; Phase 2 and 3 can be developed in parallel if bandwidth allows; Phase 4 is a pure CSS/component layer that does not affect logic.
+
+---
+
+## OPEN QUESTIONS / GAPS
+
+1. **r/Gold subscriber count:** Confirm actual subscriber count by visiting reddit.com/r/gold before finalizing the subreddit list.
+
+2. **`REDDIT_USER_AGENT` string format:** Reddit requires a descriptive user agent. Convention: `"<platform>:<app_id>:<version> (by /u/<reddit_username>)"`. For non-commercial read-only use: `"SevaMiningSweeper/1.0 by sevabot"` is sufficient.
+
+3. **`r/wallstreetbets` gold-tagged posts:** If the user wants WSB exposure in v2.2, a keyword post-filter (`"gold" in submission.title.lower()`) after fetching `limit=100` from r/investing or r/stocks would be a cleaner approach than targeting WSB directly.
+
+4. **`weekly_sweeps` idempotency key:** Should be `week_start` (the Sunday of the swept week), not `generated_at`. The idempotency check is: "does a `weekly_sweeps` row already exist with `week_start = this_sunday`?"
 
 ---
 
 ## Sources
 
-- [StatCan Table 16-10-0019-01 — Monthly Mineral Production, metallic minerals](https://www150.statcan.gc.ca/t1/tbl1/en/tv.action?pid=1610001901)
-- [StatCan WDS API documentation](https://www.statcan.gc.ca/en/developers/wds/user-guide)
-- [StatCan "The Daily" — Monthly Mineral Production, February 2026 (released Apr 20, 2026)](https://www150.statcan.gc.ca/n1/daily-quotidien/260420/dq260420c-eng.htm)
-- [StatCan Annual Mineral Production Survey 2024 (released Feb 25, 2026)](https://www150.statcan.gc.ca/n1/daily-quotidien/260225/dq260225f-eng.htm)
-- [NRCan Annual Statistics of Mineral Production](https://mmsd.nrcan-rncan.gc.ca/prod-prod/ann-ann-eng.aspx)
-- [NRCan RSS Feeds](https://natural-resources.canada.ca/corporate/rss-feeds)
-- [Ontario Newsroom](https://news.ontario.ca/releases/en)
-- [Ontario Legislative Assembly — Current Bills](https://www.ola.org/en/legislative-business/bills/current)
-- [CanLII RSS Feeds](https://www.canlii.org/rss)
-- [CanLII — Ontario Mining Act RSO 1990 c M.14 (latest amendment: 2025, c. 17, Sched. 1)](https://www.canlii.org/en/on/laws/stat/rso-1990-c-m14/latest/rso-1990-c-m14.html)
-- [Ontario Mining Association News](https://www.oma.on.ca/news/)
-- [OMA State of Ontario Mining Sector Report 2025](https://www.oma.on.ca/media/jy3f0tgd/oma-economic-published-march-2025-final.pdf)
-- [Mining Association of Canada Resources](https://mining.ca/resources/)
-- [Ontario ERO — Mining Act Notice](https://ero.ontario.ca/notice/025-0409)
-- [Bill 5 analysis — DLA Piper](https://www.dlapiper.com/en-us/insights/publications/2025/06/what-foreign-mining-investors-should-know-about-ontario-bill-5)
-- [Axios Smart Brevity format description](https://help.axios.com/hc/en-us/articles/36222626161435-What-is-the-Axios-Smart-Brevity-style)
-- [OGS Mineral Exploration Activity Reports](https://www.geologyontario.mndm.gov.on.ca/mines/ogs/rgp/mer_listing_e.html)
-- [NRCan Mining Data, Statistics and Analysis](https://natural-resources.canada.ca/minerals-mining/mining-data-statistics-analysis)
-
----
-
-*Feature research for: v2.0 Daily Summary Feed — Seva Mining*
-*Researched: 2026-05-05*
+- PRAW stable documentation — authentication: https://praw.readthedocs.io/en/stable/getting_started/authentication.html (HIGH confidence)
+- PRAW quick start — subreddit listing methods: https://praw.readthedocs.io/en/stable/getting_started/quick_start.html (HIGH confidence)
+- Reddit API free tier rate limits 2026: https://octolens.com/blog/reddit-api-pricing (MEDIUM confidence)
+- Reddit API app creation guide 2026: https://redaccs.com/reddit-api-guide/ (MEDIUM confidence)
+- URL deduplication / canonicalization best practices: https://potentpages.com/web-crawler-development/web-crawlers-and-hedge-funds/deduplication-canonicalization-preventing-double-counts-and-phantom-signals (MEDIUM confidence)
+- shadcn Tabs component: https://ui.shadcn.com/docs/components/radix/tabs (HIGH confidence)
+- shadcn dark mode + amber theme: https://ui.shadcn.com/docs/theming and https://www.shadcn.io/theme/amber-minimal (HIGH confidence)
+- dnd-kit React drag-and-drop complexity: https://www.blog.brightcoding.dev/2025/08/21/the-ultimate-drag-and-drop-toolkit-for-react-a-deep-dive-into-dnd-kit/ (MEDIUM confidence)
+- r/WallStreetSilver ~160K subscribers: https://subredditstats.com/r/Wallstreetsilver (MEDIUM confidence)
+- Silver Gold Bull precious metals Reddit communities: https://silvergoldbull.com/education/5-best-precious-metals-communities-on-reddit/ (MEDIUM confidence)
