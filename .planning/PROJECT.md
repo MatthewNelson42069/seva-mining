@@ -57,6 +57,10 @@ Every piece of intelligence the digest surfaces must be genuinely useful to a se
 - ✓ Ontario Stats section with StatCan WDS direct poll (STAT-01..05) — v2.0 Phase 3
 - ✓ 30-day prune cron + lock-id uniqueness assertion + retirement audit (OPS-01..04) — v2.0 Phase 4
 
+**v2.1 Three-Tab Content Engine — Foundation (shipped 2026-05-18):**
+- ✓ Three-tab dashboard shell + route restructure with auth-gate preservation (TAB-01..05) — v2.1 Phase 5
+- ✓ `calendar_items` + `weekly_sweeps` tables (Alembic 0011/0012) with dual-model SQLAlchemy parity and auth-gated stub routers (DB-01..05) — v2.1 Phase 5
+
 **v1.0.1 Approval Dashboard (deprecated by v2.0 pivot, source retained as dead code):**
 - ✓ Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
 - ✓ Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
