@@ -70,7 +70,12 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 4. The v2.0 routes `/queue → /`, `/agents/:slug → /`, `/digest`, `/settings` continue to work correctly; tabs do NOT appear on `/digest` or `/settings`
 5. The OPS-02 uniqueness assertion passes on scheduler boot (no import error after adding lock 1019)
 
-**Plans:** TBD
+**Plans:** 5 plans
+- [ ] 05-01-PLAN.md — Reserve weekly_sweeper advisory lock ID 1019 in scheduler/worker.py JOB_LOCK_IDS (Phase 7 pre-req)
+- [ ] 05-02-PLAN.md — Hand-write Alembic migrations 0011 (calendar_items) + 0012 (weekly_sweeps) with round-trip verification (DB-01, DB-02, DB-05)
+- [ ] 05-03-PLAN.md — Create 4 dual-parity SQLAlchemy models + parity test (DB-03)
+- [ ] 05-04-PLAN.md — Backend stub routers calendar.py + weekly_sweeps.py + main.py wiring + smoke tests (DB-04)
+- [ ] 05-05-PLAN.md — Frontend tab shell: TabbedDashboard, TabNav (NavLink isActive), stub pages, App.tsx restructure (TAB-01..05)
 
 **UI hint**: yes
 
@@ -298,7 +303,7 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 | 2. Ontario Law Ingestion | v2.0 | 1/1 | Complete | 2026-05-06 |
 | 3. Ontario Stats Ingestion | v2.0 | 1/1 | Complete | 2026-05-06 |
 | 4. Prune Cron + Ops Hardening | v2.0 | 1/1 | Complete | 2026-05-06 |
-| 5. Foundation — Tabs + DB + Backend Stubs | v2.1 | 0/? | Not started | - |
+| 5. Foundation — Tabs + DB + Backend Stubs | v2.1 | 0/5 | Planned | - |
 | 6. Content Calendar | v2.1 | 0/? | Not started | - |
 | 7. Weekly Viral Sweeper | v2.1 | 0/? | Not started | - |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 0/? | Not started | - |
