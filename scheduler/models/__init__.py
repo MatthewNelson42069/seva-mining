@@ -7,6 +7,8 @@ from models.keyword import Keyword
 from models.config import Config
 from models.content_bundle import ContentBundle
 from models.market_snapshot import MarketSnapshot
+from models.calendar_item import CalendarItem
+from models.weekly_sweep import WeeklySweep
 
 __all__ = [
     "Base",
@@ -18,4 +20,6 @@ __all__ = [
     "Config",
     "ContentBundle",
     "MarketSnapshot",
+    "CalendarItem",
+    "WeeklySweep",
 ]
