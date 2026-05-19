@@ -16,6 +16,13 @@ Pitfall defenses:
     does NOT expose updated_at.
   - D-02 single-row-per-date: enforced by UNIQUE(date) from migration 0013.
     POST raises IntegrityError -> 409 with descriptive detail.
+
+Serialization note:
+  All response-returning routes set `response_model_by_alias=False` so that
+  `CalendarItemResponse.body` is emitted as `body` in JSON (its field name)
+  rather than `notes_md` (its alias). The alias exists so Pydantic can
+  read from the ORM column `notes_md` via `populate_by_name=True`, but the
+  API contract surfaces it as `body` — the user-facing field name.
 """
 import uuid
 from datetime import date as date_type
@@ -43,7 +50,7 @@ router = APIRouter(
 )
 
 
-@router.get("", response_model=CalendarRangeResponse)
+@router.get("", response_model=CalendarRangeResponse, response_model_by_alias=False)
 async def list_calendar_items(
     start: date_type = Query(..., description="Inclusive start date (YYYY-MM-DD)"),
     end: date_type = Query(..., description="Inclusive end date (YYYY-MM-DD)"),
@@ -62,7 +69,12 @@ async def list_calendar_items(
     return CalendarRangeResponse(items=items, total=len(items))
 
 
-@router.post("", response_model=CalendarItemResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=CalendarItemResponse,
+    status_code=status.HTTP_201_CREATED,
+    response_model_by_alias=False,
+)
 async def create_calendar_item(
     payload: CalendarItemCreate,
     db: AsyncSession = Depends(get_db),
@@ -90,7 +102,11 @@ async def create_calendar_item(
     return CalendarItemResponse.model_validate(item)
 
 
-@router.patch("/{item_id}", response_model=CalendarItemResponse)
+@router.patch(
+    "/{item_id}",
+    response_model=CalendarItemResponse,
+    response_model_by_alias=False,
+)
 async def update_calendar_item(
     item_id: uuid.UUID,
     payload: CalendarItemUpdate,
