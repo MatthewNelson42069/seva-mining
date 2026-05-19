@@ -41,7 +41,7 @@ const SEED: CalendarRangeResponse = {
 }
 
 function mockFetchSuccess(body: unknown, status = 200) {
-  vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
     new Response(JSON.stringify(body), {
       status,
       headers: { 'Content-Type': 'application/json' },
@@ -50,7 +50,7 @@ function mockFetchSuccess(body: unknown, status = 200) {
 }
 
 function mockFetch500() {
-  vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
     new Response('Internal error', { status: 500 }),
   )
 }
@@ -138,7 +138,7 @@ describe('useDeleteCalendarItem', () => {
     const qc = makeQueryClient()
     qc.setQueryData(QK, SEED)
     // DELETE returns 204 with no body
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(null, { status: 204 }),
     )
 
