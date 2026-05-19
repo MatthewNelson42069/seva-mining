@@ -64,6 +64,9 @@ Every piece of intelligence the digest surfaces must be genuinely useful to a se
 **v2.1 Content Calendar — Paper-Planner Model (shipped 2026-05-19):**
 - ✓ Weekly Mon-Sun grid where each day is a direct-edit textarea with auto-save on blur; full CRUD over `calendar_items` with optimistic mutations + rollback; 1 row per date enforced via Alembic 0013 (title nullable + UNIQUE(date)); plain text only, no tags/dialogs/chips per user simplification (CAL-01..10) — v2.1 Phase 6
 
+**v2.1 Weekly Viral Sweeper — X-API pivot (shipped 2026-05-19):**
+- ✓ Sunday 08:00 PT APScheduler cron ingests top gold-sector tweets via tweepy `recent_search` (reused $100/mo Basic tier — Reddit dropped), computes story virality over past 7 days of `daily_summaries.raw_sources_jsonb.gold_news[]` (URL canonicalize + cross-reference rank), calls Sonnet 4.6 for 3 content angles, persists a `weekly_sweeps` row with status mapping (completed/partial/failed), and Tab 3 renders the latest sweep card with empty-state copy for the first deploy. SWEEP-01/02 dropped per X-API pivot (Reddit replaced); SWEEP-03..14 complete (SWEEP-13/14 carryover human-verify items deferred to first cron fire, tracked in 07-HUMAN-UAT.md) — v2.1 Phase 7
+
 **v1.0.1 Approval Dashboard (deprecated by v2.0 pivot, source retained as dead code):**
 - ✓ Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
 - ✓ Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
@@ -186,4 +189,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-18 — Milestone v2.1 (Three-Tab Content Engine + UI Polish) initiated. Expands v2.0 single-feed into a 3-tab product surface with Reddit-powered viral sweeper and Linear-style UI redesign.*
+*Last updated: 2026-05-19 — Phase 7 (Weekly Viral Sweeper) shipped with X-API pivot (Reddit dropped, tweepy reused). v2.1 progress: 3/4 phases complete (5, 6, 7); Phase 8 UI Polish + Dead-Code Strip remains.*
