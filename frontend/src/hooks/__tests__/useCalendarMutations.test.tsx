@@ -24,8 +24,8 @@ function makeQueryClient(): QueryClient {
   })
 }
 
-const WEEK = { start: '2026-05-18', end: '2026-05-24' }
-const QK = ['calendar', WEEK.start, WEEK.end] as const
+const WEEK = { companyId: 'seva' as const, start: '2026-05-18', end: '2026-05-24' }
+const QK = ['calendar', WEEK.companyId, WEEK.start, WEEK.end] as const
 
 const SEED: CalendarRangeResponse = {
   items: [

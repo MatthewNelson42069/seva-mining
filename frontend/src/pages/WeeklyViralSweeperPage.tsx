@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { addDays, format, parseISO, startOfWeek } from 'date-fns'
+import { useParams } from 'react-router-dom'
 
 import { useWeeklySweeps } from '@/api/weeklySweeps'
+import type { CompanyId } from '@/api/queryKeys'
 import { SweeperCard } from '@/components/viral/SweeperCard'
 
 /**
@@ -34,7 +36,9 @@ function nextSundayLabel(now: Date = new Date()): string {
  *   "Sweeper has not run yet — first fire scheduled for Sunday {next_sunday} 08:00 PT."
  */
 export default function WeeklyViralSweeperPage() {
-  const { data, isLoading, error } = useWeeklySweeps(12)
+  const { company } = useParams<{ company: string }>()
+  const companyId = company as CompanyId  // narrowed by CompanyScopedRoute
+  const { data, isLoading, error } = useWeeklySweeps(companyId, 12)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   if (isLoading) {

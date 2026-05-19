@@ -19,20 +19,20 @@ function makeWrapper() {
 describe('getSummaries', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('calls /summaries?limit=60 by default', async () => {
+  it('calls /api/seva/summaries?limit=60 by default for seva tenant', async () => {
     const spy = vi.spyOn(client, 'apiFetch').mockResolvedValue({
       summaries: [], total: 0,
     })
-    await getSummaries()
-    expect(spy).toHaveBeenCalledWith('/summaries?limit=60')
+    await getSummaries('seva')
+    expect(spy).toHaveBeenCalledWith('/api/seva/summaries?limit=60')
   })
 
-  it('calls /summaries?limit=30 when limit=30', async () => {
+  it('calls /api/juno/summaries?limit=30 when companyId=juno and limit=30', async () => {
     const spy = vi.spyOn(client, 'apiFetch').mockResolvedValue({
       summaries: [], total: 0,
     })
-    await getSummaries(30)
-    expect(spy).toHaveBeenCalledWith('/summaries?limit=30')
+    await getSummaries('juno', 30)
+    expect(spy).toHaveBeenCalledWith('/api/juno/summaries?limit=30')
   })
 })
 
@@ -48,7 +48,7 @@ describe('useSummaries', () => {
       }],
       total: 1,
     })
-    const { result } = renderHook(() => useSummaries(), { wrapper: makeWrapper() })
+    const { result } = renderHook(() => useSummaries('seva'), { wrapper: makeWrapper() })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.data?.summaries.length).toBe(1)
   })

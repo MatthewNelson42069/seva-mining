@@ -2,10 +2,10 @@
 /**
  * Zustand companySlice — lastVisitedCompany + persist (TENANT-07).
  *
- * Phase 9 Wave 0 RED — production code lands in Wave 3 (09-04-PLAN.md).
- * Slice expected at: frontend/src/stores/slices/companySlice.ts
- * Wired into useAppStore via persist middleware (D-08) under the existing
- * localStorage key `seva-mining-app-state-v3`.
+ * GREEN as of Wave 3 (09-04 Task 1). Slice lives at
+ * frontend/src/stores/slices/companySlice.ts and is wired into useAppStore
+ * via persist middleware (D-08) under the existing localStorage key
+ * `seva-mining-app-state-v3`.
  *
  * Contract:
  *   - setLastVisitedCompany('juno') updates state to 'juno'.
@@ -14,8 +14,6 @@
  *      `{ state: { lastVisitedCompany: 'juno' }, version: ... }`).
  *   - partialize EXCLUDES queueUi + auth state from persistence — ONLY
  *     lastVisitedCompany is persisted.
- *
- * Vitest skip idiom: per-test `it.skip()`. Wave 3 removes each `.skip`.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -30,18 +28,23 @@ const PERSIST_KEY = 'seva-mining-app-state-v3'
 const storesModulePath = '@/stores'
 
 describe('companySlice (TENANT-07)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear()
+    // Reset in-memory Zustand state — the store is a module-level singleton
+    // shared across tests; without this the previous test's set() leaks.
+    const { useAppStore } = await import(/* @vite-ignore */ storesModulePath)
+    useAppStore.setState({ lastVisitedCompany: null })
   })
 
-  it.skip('setLastVisitedCompany updates state to juno', async () => {
-    // Wave 3 (09-04-PLAN.md) — companySlice not yet wired into useAppStore.
+  it('setLastVisitedCompany updates state to juno', async () => {
+    // GREEN as of Wave 3.
     const { useAppStore } = await import(/* @vite-ignore */ storesModulePath)
     useAppStore.getState().setLastVisitedCompany('juno')
     expect(useAppStore.getState().lastVisitedCompany).toBe('juno')
   })
 
-  it.skip('persists lastVisitedCompany to localStorage under seva-mining-app-state-v3 key', async () => {
+  it('persists lastVisitedCompany to localStorage under seva-mining-app-state-v3 key', async () => {
+    // GREEN as of Wave 3.
     const { useAppStore } = await import(/* @vite-ignore */ storesModulePath)
     useAppStore.getState().setLastVisitedCompany('juno')
     const raw = localStorage.getItem(PERSIST_KEY)
@@ -50,7 +53,8 @@ describe('companySlice (TENANT-07)', () => {
     expect(parsed.state.lastVisitedCompany).toBe('juno')
   })
 
-  it.skip('partialize excludes queueUi and auth state from persistence', async () => {
+  it('partialize excludes queueUi and auth state from persistence', async () => {
+    // GREEN as of Wave 3.
     const { useAppStore } = await import(/* @vite-ignore */ storesModulePath)
     useAppStore.getState().setLastVisitedCompany('juno')
     const raw = localStorage.getItem(PERSIST_KEY)
@@ -61,13 +65,12 @@ describe('companySlice (TENANT-07)', () => {
     expect(persistedKeys).toEqual(['lastVisitedCompany'])
   })
 
-  it.skip('default lastVisitedCompany is null until a switch occurs (D-05)', async () => {
+  it('default lastVisitedCompany is null until a switch occurs (D-05)', async () => {
     // D-05: bare `/` redirects to `/seva/` (hardcoded, NOT last-visited in v3.0).
+    // GREEN as of Wave 3.
     const { useAppStore } = await import(/* @vite-ignore */ storesModulePath)
     expect(useAppStore.getState().lastVisitedCompany).toBeNull()
   })
 })
 
-// Once Wave 3 ships frontend/src/stores/slices/companySlice.ts + wires it into
-// useAppStore via persist middleware, REMOVE the `.skip` on each it.skip(...)
-// above and the suite should pass GREEN.
+// Wave 3 ships frontend/src/stores/slices/companySlice.ts and the suite is GREEN.

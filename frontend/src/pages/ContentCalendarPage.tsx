@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react'
 import { addDays } from 'date-fns'
+import { useParams } from 'react-router-dom'
 import { WeekNav } from '@/components/calendar/WeekNav'
 import { WeeklyGrid } from '@/components/calendar/WeeklyGrid'
+import type { CompanyId } from '@/api/queryKeys'
 
 /**
  * v2.1 Phase 6 — Content Calendar page (CAL-05).
@@ -21,6 +23,8 @@ import { WeeklyGrid } from '@/components/calendar/WeeklyGrid'
  * WeeklyGrid recomputes its Mon-Sun window from whatever anchor it gets.
  */
 export default function ContentCalendarPage() {
+  const { company } = useParams<{ company: string }>()
+  const companyId = company as CompanyId  // narrowed by CompanyScopedRoute
   const [weekAnchor, setWeekAnchor] = useState<Date>(() => new Date())
 
   const handlePrev = useCallback(() => {
@@ -43,7 +47,7 @@ export default function ContentCalendarPage() {
         onNext={handleNext}
         onToday={handleToday}
       />
-      <WeeklyGrid weekAnchor={weekAnchor} />
+      <WeeklyGrid companyId={companyId} weekAnchor={weekAnchor} />
     </div>
   )
 }

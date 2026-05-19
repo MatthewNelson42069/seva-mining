@@ -3,8 +3,11 @@ import { isSameDay } from 'date-fns'
 import { DayCell } from './DayCell'
 import { formatDateISO, getWeekDays, getWeekEnd, getWeekStart } from '@/lib/week'
 import { useCalendar } from '@/hooks/useCalendar'
+import type { CompanyId } from '@/api/queryKeys'
 
 interface WeeklyGridProps {
+  /** Tenant slot (TENANT-09) — threaded into useCalendar + mutation hooks. */
+  companyId: CompanyId
   /** Any date within the week to render. The grid computes Mon-Sun from this. */
   weekAnchor: Date
 }
@@ -25,7 +28,7 @@ interface WeeklyGridProps {
  *     useCalendarMutations. We deliberately do NOT also toast query errors
  *     here — the inline message is enough and avoids double-surfacing.
  */
-export function WeeklyGrid({ weekAnchor }: WeeklyGridProps) {
+export function WeeklyGrid({ companyId, weekAnchor }: WeeklyGridProps) {
   // `today` is captured once per render of this component instance.
   // Page-level reloads / week navigation will re-mount or re-evaluate
   // naturally; we don't need ticking precision here (the today highlight
@@ -43,6 +46,7 @@ export function WeeklyGrid({ weekAnchor }: WeeklyGridProps) {
   const days = useMemo(() => getWeekDays(weekAnchor), [weekAnchor])
 
   const { data, isLoading, isError, error } = useCalendar(
+    companyId,
     weekRange.start,
     weekRange.end,
   )
@@ -70,6 +74,7 @@ export function WeeklyGrid({ weekAnchor }: WeeklyGridProps) {
         return (
           <DayCell
             key={iso}
+            companyId={companyId}
             date={d}
             item={item}
             weekRange={weekRange}

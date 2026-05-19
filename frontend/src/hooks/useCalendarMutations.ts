@@ -9,35 +9,39 @@ import {
   type CalendarItemUpdate,
   type CalendarRangeResponse,
 } from '@/api/calendar'
+import { queryKeys, type CompanyId } from '@/api/queryKeys'
 
 /**
- * v2.1 Phase 6 — Optimistic mutation hooks for the Content Calendar (CAL-09).
+ * v2.1 Phase 6 / v3.0 Phase 9 — Optimistic mutation hooks for the Content
+ * Calendar (CAL-09, TENANT-09).
  *
  * Pitfall P2 defense: every mutation follows the 3-step pattern:
  *   1. onMutate — cancel in-flight queries, snapshot cache, apply optimistic write
  *   2. onError  — restore the snapshot (NOT just invalidate — restoring is the point)
- *   3. onSettled — invalidate ['calendar', start, end] so the next refetch is authoritative
+ *   3. onSettled — invalidate ['calendar', companyId, start, end] so the next refetch
+ *      is authoritative
  *
  * Failure feedback: sonner toast on any mutation error. Success is silent —
  * the optimistic write IS the feedback.
  *
- * queryKey contract: ['calendar', start, end] — must match useCalendar.
+ * queryKey contract: queryKeys.calendar(companyId, start, end) — must match
+ * useCalendar.
  */
 
-type CalendarQueryKey = ['calendar', string, string]
-
 interface MutationOptions {
-  start: string  // 'YYYY-MM-DD' — the current week's Monday
-  end: string    // 'YYYY-MM-DD' — the current week's Sunday
+  companyId: CompanyId  // tenant slot (TENANT-09)
+  start: string         // 'YYYY-MM-DD' — the current week's Monday
+  end: string           // 'YYYY-MM-DD' — the current week's Sunday
 }
 
-/** useCreateCalendarItem — POST /calendar with optimistic insert. */
-export function useCreateCalendarItem({ start, end }: MutationOptions) {
+/** useCreateCalendarItem — POST /api/{company}/calendar with optimistic insert. */
+export function useCreateCalendarItem({ companyId, start, end }: MutationOptions) {
   const queryClient = useQueryClient()
-  const queryKey: CalendarQueryKey = ['calendar', start, end]
+  const queryKey = queryKeys.calendar(companyId, start, end)
 
   return useMutation({
-    mutationFn: (payload: CalendarItemCreate) => createCalendarItem(payload),
+    mutationFn: (payload: CalendarItemCreate) =>
+      createCalendarItem(companyId, payload),
     onMutate: async (payload: CalendarItemCreate) => {
       await queryClient.cancelQueries({ queryKey })
       const previous = queryClient.getQueryData<CalendarRangeResponse>(queryKey)
@@ -72,14 +76,14 @@ export function useCreateCalendarItem({ start, end }: MutationOptions) {
   })
 }
 
-/** useUpdateCalendarItem — PATCH /calendar/{id} with optimistic body swap. */
-export function useUpdateCalendarItem({ start, end }: MutationOptions) {
+/** useUpdateCalendarItem — PATCH /api/{company}/calendar/{id} with optimistic body swap. */
+export function useUpdateCalendarItem({ companyId, start, end }: MutationOptions) {
   const queryClient = useQueryClient()
-  const queryKey: CalendarQueryKey = ['calendar', start, end]
+  const queryKey = queryKeys.calendar(companyId, start, end)
 
   return useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: CalendarItemUpdate }) =>
-      updateCalendarItem(id, payload),
+      updateCalendarItem(companyId, id, payload),
     onMutate: async ({ id, payload }) => {
       await queryClient.cancelQueries({ queryKey })
       const previous = queryClient.getQueryData<CalendarRangeResponse>(queryKey)
@@ -104,13 +108,13 @@ export function useUpdateCalendarItem({ start, end }: MutationOptions) {
   })
 }
 
-/** useDeleteCalendarItem — DELETE /calendar/{id} with optimistic remove. */
-export function useDeleteCalendarItem({ start, end }: MutationOptions) {
+/** useDeleteCalendarItem — DELETE /api/{company}/calendar/{id} with optimistic remove. */
+export function useDeleteCalendarItem({ companyId, start, end }: MutationOptions) {
   const queryClient = useQueryClient()
-  const queryKey: CalendarQueryKey = ['calendar', start, end]
+  const queryKey = queryKeys.calendar(companyId, start, end)
 
   return useMutation({
-    mutationFn: (id: string) => deleteCalendarItem(id),
+    mutationFn: (id: string) => deleteCalendarItem(companyId, id),
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey })
       const previous = queryClient.getQueryData<CalendarRangeResponse>(queryKey)

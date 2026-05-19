@@ -1,4 +1,6 @@
+import { useParams } from 'react-router-dom'
 import { useSummaries } from '@/api/summaries'
+import type { CompanyId } from '@/api/queryKeys'
 import { SummaryCard } from '@/components/summary/SummaryCard'
 
 /**
@@ -35,7 +37,9 @@ function nextCronFireLabelPT(now: Date = new Date()): string {
  * Error state: simple message; no retry UI in v2.0.
  */
 export function SummaryFeedPage() {
-  const { data, isLoading, error } = useSummaries(60)
+  const { company } = useParams<{ company: string }>()
+  const companyId = company as CompanyId  // narrowed by CompanyScopedRoute
+  const { data, isLoading, error } = useSummaries(companyId, 60)
 
   if (isLoading) {
     return (

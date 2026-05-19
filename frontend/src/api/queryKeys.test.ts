@@ -2,8 +2,8 @@
 /**
  * queryKeys factory shape (TENANT-09).
  *
- * Phase 9 Wave 0 RED — production code lands in Wave 3 (09-04-PLAN.md).
- * Factory expected at: frontend/src/api/queryKeys.ts
+ * GREEN as of Wave 3 (09-04 Task 1) — production code lives at
+ * frontend/src/api/queryKeys.ts.
  *
  * Contract:
  *   queryKeys.summaries('seva', 60)       -> ['summaries', 'seva', 60] as const
@@ -13,31 +13,25 @@
  * Every key MUST include companyId as the SECOND tuple element so
  * queryClient.clear() at tenant switch (D-08) + invalidation on per-company
  * mutations work uniformly.
- *
- * Vitest does NOT support module-level skip equivalent to pytest's
- * `pytest.skip(..., allow_module_level=True)`. Per-test `it.skip()` is the
- * canonical Vitest pattern; Wave 3 removes each `.skip` (already enforced
- * by plan 09-04 Task 2 step 5 grep verification).
  */
 import { describe, expect, it } from 'vitest'
 
-// Indirect-path pattern: assigning the module path to a variable prevents
-// vite:import-analysis from attempting to statically resolve the missing
-// `@/api/queryKeys` module at transform time. Without this indirection, the
-// test file fails to TRANSFORM (not just fails the assertion) — defeating
-// the purpose of `it.skip()`. Wave 3 lands `@/api/queryKeys` at which point
-// the indirection is harmless (vite still resolves the same module).
+// Indirect-path pattern: assigning the module path to a variable historically
+// prevented vite:import-analysis from failing the whole file at transform time
+// when @/api/queryKeys did not yet exist. The module now ships under Wave 3,
+// but the indirection is harmless — vite still resolves the same module.
 const queryKeysModulePath = '@/api/queryKeys'
 
 describe('queryKeys factory (TENANT-09)', () => {
-  it.skip('summaries factory returns tuple with companyId and limit', async () => {
-    // Wave 3 (09-04-PLAN.md) — queryKeys.ts not yet created.
+  it('summaries factory returns tuple with companyId and limit', async () => {
+    // GREEN as of Wave 3.
     const { queryKeys } = await import(/* @vite-ignore */ queryKeysModulePath)
     expect(queryKeys.summaries('seva', 60)).toEqual(['summaries', 'seva', 60])
     expect(queryKeys.summaries('juno', 30)).toEqual(['summaries', 'juno', 30])
   })
 
-  it.skip('calendar factory returns tuple with companyId, start, end', async () => {
+  it('calendar factory returns tuple with companyId, start, end', async () => {
+    // GREEN as of Wave 3.
     const { queryKeys } = await import(/* @vite-ignore */ queryKeysModulePath)
     expect(queryKeys.calendar('juno', '2026-01-01', '2026-12-31')).toEqual([
       'calendar',
@@ -47,7 +41,8 @@ describe('queryKeys factory (TENANT-09)', () => {
     ])
   })
 
-  it.skip('weeklySweeps factory returns tuple', async () => {
+  it('weeklySweeps factory returns tuple', async () => {
+    // GREEN as of Wave 3.
     const { queryKeys } = await import(/* @vite-ignore */ queryKeysModulePath)
     expect(queryKeys.weeklySweeps('seva', 12)).toEqual([
       'weekly-sweeps',
@@ -56,9 +51,10 @@ describe('queryKeys factory (TENANT-09)', () => {
     ])
   })
 
-  it.skip('seva and juno produce different cache keys', async () => {
+  it('seva and juno produce different cache keys', async () => {
     // Defence-in-depth: switching tenants must NOT collide with cached results
     // for the other tenant. Each factory MUST distinguish on companyId.
+    // GREEN as of Wave 3.
     const { queryKeys } = await import(/* @vite-ignore */ queryKeysModulePath)
     expect(queryKeys.summaries('seva', 60)).not.toEqual(
       queryKeys.summaries('juno', 60),
@@ -66,5 +62,4 @@ describe('queryKeys factory (TENANT-09)', () => {
   })
 })
 
-// Once Wave 3 ships frontend/src/api/queryKeys.ts, REMOVE the `.skip` on each
-// `it.skip(...)` above and the suite should pass GREEN.
+// Wave 3 ships frontend/src/api/queryKeys.ts and the suite is GREEN.

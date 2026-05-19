@@ -57,7 +57,7 @@ beforeEach(() => {
 
 describe('DayCell auto-save branches', () => {
   it('noop: empty textarea + no row -> no mutation fired', () => {
-    renderCell({ date: TUE, item: null, weekRange: WEEK, isToday: false })
+    renderCell({ companyId: 'seva', date: TUE, item: null, weekRange: WEEK, isToday: false })
     const ta = screen.getByLabelText(/Plan for 2026-05-19/i) as HTMLTextAreaElement
     ta.focus()
     ta.blur()
@@ -68,7 +68,7 @@ describe('DayCell auto-save branches', () => {
 
   it('POST: text typed + no row -> create fires with {date, body}', async () => {
     const user = userEvent.setup()
-    renderCell({ date: TUE, item: null, weekRange: WEEK, isToday: false })
+    renderCell({ companyId: 'seva', date: TUE, item: null, weekRange: WEEK, isToday: false })
     const ta = screen.getByLabelText(/Plan for 2026-05-19/i) as HTMLTextAreaElement
     await user.click(ta)
     await user.type(ta, 'new plan')
@@ -87,7 +87,7 @@ describe('DayCell auto-save branches', () => {
       created_at: 'x',
       updated_at: 'x',
     }
-    renderCell({ date: TUE, item, weekRange: WEEK, isToday: false })
+    renderCell({ companyId: 'seva', date: TUE, item, weekRange: WEEK, isToday: false })
     const ta = screen.getByLabelText(/Plan for 2026-05-19/i) as HTMLTextAreaElement
     await user.clear(ta)
     await user.type(ta, 'new')
@@ -106,7 +106,7 @@ describe('DayCell auto-save branches', () => {
       created_at: 'x',
       updated_at: 'x',
     }
-    renderCell({ date: TUE, item, weekRange: WEEK, isToday: false })
+    renderCell({ companyId: 'seva', date: TUE, item, weekRange: WEEK, isToday: false })
     const ta = screen.getByLabelText(/Plan for 2026-05-19/i) as HTMLTextAreaElement
     await user.clear(ta)
     fireEvent.blur(ta)
@@ -123,7 +123,7 @@ describe('DayCell auto-save branches', () => {
       created_at: 'x',
       updated_at: 'x',
     }
-    renderCell({ date: TUE, item, weekRange: WEEK, isToday: false })
+    renderCell({ companyId: 'seva', date: TUE, item, weekRange: WEEK, isToday: false })
     const ta = screen.getByLabelText(/Plan for 2026-05-19/i) as HTMLTextAreaElement
     ta.focus()
     fireEvent.blur(ta) // no edit between focus and blur
@@ -133,14 +133,14 @@ describe('DayCell auto-save branches', () => {
   })
 
   it('today highlight: isToday=true adds ring-amber-500', () => {
-    renderCell({ date: TUE, item: null, weekRange: WEEK, isToday: true })
+    renderCell({ companyId: 'seva', date: TUE, item: null, weekRange: WEEK, isToday: true })
     const cell = screen.getByTestId('day-cell-2026-05-19')
     expect(cell.className).toContain('ring-amber-500')
     expect(cell.className).toContain('bg-amber-500/5')
   })
 
   it('today highlight: isToday=false does NOT add ring-amber-500', () => {
-    renderCell({ date: TUE, item: null, weekRange: WEEK, isToday: false })
+    renderCell({ companyId: 'seva', date: TUE, item: null, weekRange: WEEK, isToday: false })
     const cell = screen.getByTestId('day-cell-2026-05-19')
     expect(cell.className).not.toContain('ring-amber-500')
   })

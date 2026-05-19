@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { formatDateISO } from '@/lib/week'
 import type { CalendarItem } from '@/api/calendar'
+import type { CompanyId } from '@/api/queryKeys'
 import {
   useCreateCalendarItem,
   useDeleteCalendarItem,
@@ -10,6 +11,7 @@ import {
 } from '@/hooks/useCalendarMutations'
 
 interface DayCellProps {
+  companyId: CompanyId
   date: Date
   item: CalendarItem | null
   weekRange: { start: string; end: string }
@@ -37,13 +39,14 @@ interface DayCellProps {
  * works against a real DOM textarea ref. Inlining the textarea here keeps
  * the focus contract obvious and avoids reaching into the shadcn primitive.
  */
-export function DayCell({ date, item, weekRange, isToday }: DayCellProps) {
+export function DayCell({ companyId, date, item, weekRange, isToday }: DayCellProps) {
   const [current, setCurrent] = useState<string>(item?.body ?? '')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const createMutation = useCreateCalendarItem(weekRange)
-  const updateMutation = useUpdateCalendarItem(weekRange)
-  const deleteMutation = useDeleteCalendarItem(weekRange)
+  const mutationOpts = { companyId, ...weekRange }
+  const createMutation = useCreateCalendarItem(mutationOpts)
+  const updateMutation = useUpdateCalendarItem(mutationOpts)
+  const deleteMutation = useDeleteCalendarItem(mutationOpts)
 
   // Reconcile local state when the persisted item changes (e.g. after
   // optimistic invalidation refetch, week navigation, or another tab's edit).
