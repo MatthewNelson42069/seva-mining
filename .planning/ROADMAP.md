@@ -31,7 +31,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 
 - [ ] **Phase 5: Foundation — Tabs + DB + Backend Stubs** — DB migrations, dual-model parity, backend router stubs, frontend tab shell with route restructure
 - [x] **Phase 6: Content Calendar** — Full CRUD over `calendar_items`: backend routes, Pydantic schemas, weekly grid UI, optimistic mutations (completed 2026-05-19)
-- [ ] **Phase 7: Weekly Viral Sweeper** — Scheduler + Reddit ingestion + virality compute + Sonnet call + sweep card UI
+- [x] **Phase 7: Weekly Viral Sweeper** — Scheduler + X API ingestion (pivoted from Reddit per 07-CONTEXT.md D-03) + virality compute + Sonnet call + sweep card UI (completed 2026-05-19)
 - [ ] **Phase 8: UI Polish + Dead-Code Strip** — Linear dark/amber-500 pass across all 3 tabs, WCAG audit, v1.0 dead-code removal
 
 ---
@@ -210,7 +210,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 - [x] 07-03-PLAN.md — Wave 2: `backend/app/routers/weekly_sweeps.py` — replace Phase 5 stub with full `GET /weekly-sweeps?limit=12` (ge=1 le=52, generated_at DESC, auth-gated) + pytest coverage (SWEEP-12)
 - [x] 07-04-PLAN.md — Wave 3: `scheduler/agents/weekly_sweeper.py` — `run_weekly_sweeper()` orchestrator with `_compute_virality` (P3 NULL guard + P10 URL canonicalization + P9 per-row dedup), Sonnet call (P6/P7/P8/P14 defenses), P15 insufficient-signal fallback, SWEEP-11 status mapping, P13 `__main__` escape hatch + pytest coverage of 8+ branches (SWEEP-06/07/08/10/11)
 - [x] 07-05-PLAN.md — Wave 4: `scheduler/worker.py` — `_make_weekly_sweeper_job(engine)` factory + `scheduler.add_job` registration with `CronTrigger(day_of_week='sun', hour=8, minute=0, timezone='America/Los_Angeles')` (consumes lock 1019 already reserved in Phase 5) + smoke test (SWEEP-03/09)
-- [ ] 07-06-PLAN.md — Wave 5: Frontend — `api/weeklySweeps.ts` + `hooks/useWeeklySweeps.ts` + `components/viral/SweeperCard.tsx` (3 react-markdown sections + status banner) + `pages/WeeklyViralSweeperPage.tsx` replacing Phase 5 stub (empty state, week-picker, live data) + Vitest coverage + human-verify checkpoint (SWEEP-13/14)
+- [x] 07-06-PLAN.md — Wave 5: Frontend — `api/weeklySweeps.ts` + `hooks/useWeeklySweeps.ts` + `components/viral/SweeperCard.tsx` (3 react-markdown sections + status banner) + `pages/WeeklyViralSweeperPage.tsx` replacing Phase 5 stub (empty state, week-picker, live data) + Vitest coverage + human-verify checkpoint (SWEEP-13/14)
 
 **UI hint**: yes
 
@@ -318,7 +318,7 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 | 4. Prune Cron + Ops Hardening | v2.0 | 1/1 | Complete | 2026-05-06 |
 | 5. Foundation — Tabs + DB + Backend Stubs | v2.1 | 0/5 | Planned | - |
 | 6. Content Calendar | v2.1 | 5/5 | Complete   | 2026-05-19 |
-| 7. Weekly Viral Sweeper | v2.1 | 0/6 | Planned | - |
+| 7. Weekly Viral Sweeper | v2.1 | 6/6 | Complete | 2026-05-19 |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 0/? | Not started | - |
 
 ---

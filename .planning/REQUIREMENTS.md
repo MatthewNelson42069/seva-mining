@@ -59,7 +59,7 @@ Sunday 08:00 PT cron, advisory lock 1019. X-post ingestion via `tweepy.asynchron
 - [x] **SWEEP-11**: System sets `weekly_sweeps.status` to `'completed'` when Reddit + virality + Sonnet all succeed, `'partial'` when at least one of (Reddit, virality, Sonnet) fails but the row can still render with empty-state copy in the failed section, `'failed'` only when Reddit ingestion crashes before any output can be assembled; per-section errors written into `agent_runs.errors` list (post-jny pattern)
 - [x] **SWEEP-12**: System exposes `GET /weekly-sweeps?limit=12` returning `{sweeps: WeeklySweepCard[], total: int}` ordered by `generated_at DESC`; query param `limit` clamped to `ge=1, le=52`
 - [x] **SWEEP-13**: System renders `WeeklyViralSweeperPage.tsx` showing the latest sweep card by default and a history-week-picker dropdown for browsing prior weeks; sweep card renders three stacked sections via react-markdown in order: "Top X Posts This Week", "Most Cross-Referenced Stories", "3 Content Angles". Mirrors the SummaryFeedPage `max-w-[720px]` content width.
-- [ ] **SWEEP-14**: System renders empty-state copy "Sweeper has not run yet — first fire scheduled for Sunday {next_sunday} 08:00 PT." when `GET /weekly-sweeps` returns `total: 0`; renders status-specific banner copy (failed: "Sweeper failed last run — see telemetry", partial: "Sweeper had partial output — some sections may be empty") on cards with non-completed status
+- [x] **SWEEP-14**: System renders empty-state copy "Sweeper has not run yet — first fire scheduled for Sunday {next_sunday} 08:00 PT." when `GET /weekly-sweeps` returns `total: 0`; renders status-specific banner copy (failed: "Sweeper failed last run — see telemetry", partial: "Sweeper had partial output — some sections may be empty") on cards with non-completed status
 
 ### UI Polish (UI)
 
@@ -145,7 +145,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SWEEP-11 | Phase 7 | Complete |
 | SWEEP-12 | Phase 7 | Complete |
 | SWEEP-13 | Phase 7 | Complete |
-| SWEEP-14 | Phase 7 | Pending |
+| SWEEP-14 | Phase 7 | Complete |
 | UI-01 | Phase 8 | Pending |
 | UI-02 | Phase 8 | Pending |
 | UI-03 | Phase 8 | Pending |
