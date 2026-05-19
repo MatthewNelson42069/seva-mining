@@ -32,7 +32,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 - [ ] **Phase 5: Foundation — Tabs + DB + Backend Stubs** — DB migrations, dual-model parity, backend router stubs, frontend tab shell with route restructure
 - [x] **Phase 6: Content Calendar** — Full CRUD over `calendar_items`: backend routes, Pydantic schemas, weekly grid UI, optimistic mutations (completed 2026-05-19)
 - [x] **Phase 7: Weekly Viral Sweeper** — Scheduler + X API ingestion (pivoted from Reddit per 07-CONTEXT.md D-03) + virality compute + Sonnet call + sweep card UI (completed 2026-05-19)
-- [ ] **Phase 8: UI Polish + Dead-Code Strip** — Linear dark/amber-500 pass across all 3 tabs, WCAG audit, v1.0 dead-code removal
+- [x] **Phase 8: UI Polish + Dead-Code Strip** — Linear dark/amber-500 pass across all 3 tabs, WCAG audit, v1.0 dead-code removal (completed 2026-05-19)
 
 ---
 
@@ -323,7 +323,7 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 | 5. Foundation — Tabs + DB + Backend Stubs | v2.1 | 0/5 | Planned | - |
 | 6. Content Calendar | v2.1 | 5/5 | Complete   | 2026-05-19 |
 | 7. Weekly Viral Sweeper | v2.1 | 6/6 | Complete | 2026-05-19 |
-| 8. UI Polish + Dead-Code Strip | v2.1 | 3/4 | In Progress | - |
+| 8. UI Polish + Dead-Code Strip | v2.1 | 4/4 | Complete | 2026-05-19 |
 
 ---
 
