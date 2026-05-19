@@ -1,7 +1,7 @@
-# Requirements: Seva Mining v2.1 — Three-Tab Content Engine + UI Polish
+# Requirements: Seva Mining v2.1 + v3.0
 
-**Defined:** 2026-05-18
-**Core Value:** Every piece of content the system produces or surfaces must be genuinely valuable to the gold conversation it enters — a data point, an insight, a connection no one else made. For v2.1 this expands beyond the v2.0 News Funnel into two new surfaces: a personal Content Calendar for planning what to publish, and a Weekly Viral Sweeper that surfaces what's getting traction in Reddit gold/silver communities plus the most cross-referenced news stories of the past 7 days — giving the operator a tactical content-strategy lens, not just an intelligence digest.
+**Defined:** 2026-05-18 (v2.1) / extended 2026-05-19 (v3.0)
+**Core Value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno. For v3.0 the product pivots from a single-tenant Seva dashboard to a multi-tenant platform, with Juno Industries (defence tech, Canada) as the second tenant, starting with the News Funnel surface.
 
 ## v2.1 Requirements
 
@@ -73,9 +73,60 @@ Linear-style dark theme with amber-500 accents applied across all 3 tabs. Existi
 - [x] **UI-06**: System strips v1.0 dead-code content sub-agent source files (`scheduler/agents/content/*.py` for retired formats + dead-code lock-ID dict entries 1010-1016 + comments referencing them) once Phases 5-7 are merged and verifier confirms no surviving callers; runs as the final task of Phase 8
 - [x] **UI-07**: System completes a visual QA pass across all 3 tabs at desktop resolution (1440x900 minimum) — confirms no layout regressions, no dark-mode contrast failures (WCAG AA on text), and no broken shadcn primitive interactions; intentionally skips mobile-responsive (out of scope per single-user desktop constraint)
 
-## v2.2+ Requirements
+## v3.0 Requirements
 
-Deferred to future release. Tracked but NOT in v2.1 roadmap.
+Multi-tenant pivot (Seva + Juno toggle) + Juno Defence News Funnel onboarding. Each requirement maps to exactly one phase in the v3.0 roadmap. Requirements split across two categories aligned with research SUMMARY.md's two-phase build order: TENANT-* (Phase 9 — Multi-Tenant Foundation, single atomic deploy) and DEF-* (Phase 10 — Juno Defence News Funnel, config-only after foundation).
+
+### Multi-Tenant Foundation (TENANT)
+
+The plumbing that makes the existing single-tenant Seva dashboard multi-tenant. Ships as one atomic deploy — partial multi-tenancy is worse than none.
+
+- [ ] **TENANT-01**: System adds `company_id VARCHAR(20)` column to `daily_summaries`, `calendar_items`, `weekly_sweeps` tables via single Alembic migration 0014, backfilled to `'seva'` for all existing rows in the same transaction; expand/contract pattern (DEFAULT 'seva' in this deploy; drop DEFAULT in a v3.0.1 follow-up after callers updated)
+- [ ] **TENANT-02**: System adds CHECK constraint `company_id IN ('seva', 'juno')` and composite indexes `(company_id, <existing-sort-column>)` on the three multi-tenant tables for query performance
+- [ ] **TENANT-03**: System introduces `backend/app/queries/scoped.py` exposing `scoped_summaries(company_id)`, `scoped_calendar(company_id)`, `scoped_weekly_sweeps(company_id)` helper functions taking `company_id` as an explicit parameter (NOT ambient ContextVar); CI grep gate blocks raw `select(DailySummary|CalendarItem|WeeklySweep)` outside the helpers
+- [ ] **TENANT-04**: System changes all multi-tenant backend routers to require company from URL path (`/api/{company}/summaries`, `/api/{company}/calendar`, `/api/{company}/weekly-sweeps`) with a `get_current_company()` FastAPI dependency that validates `company in ('seva', 'juno')` and returns 404 otherwise
+- [ ] **TENANT-05**: System adds frontend path-prefix routing — `<Route path=":company">` wrapper around `<TabbedDashboard>` so URLs become `/seva/`, `/juno/`, `/seva/calendar`, `/juno/calendar`, etc.; `useParams<{company: string}>()` is the source of truth for active tenant at render time
+- [ ] **TENANT-06**: System redirects bare `/` to `/seva` (default) or last-visited tenant from Zustand persist; preserves grace redirects for all existing v2.x bookmarks (`/queue`, `/agents/:slug`, `/digest`, `/settings`, `/login`) targeting the Seva tenant when ambiguous; existing bookmarks must not break
+- [ ] **TENANT-07**: System renders a `CompanySwitcher` component (segmented control or dropdown — placement decision: AppHeader edit vs sibling `CompanyBar` deferred to discuss-phase) that lets the operator toggle between Seva and Juno; switch updates URL via React Router navigate (URL canonical), clears TanStack Query cache as defence-in-depth, and persists "last visited" via Zustand
+- [ ] **TENANT-08**: System scopes the daily_summary cron per-company so each scheduler fire writes one Seva daily_summary row AND one Juno daily_summary row; topology decision (single-cron-fanout vs per-company-jobs vs 100-ID-blocks) deferred to discuss-phase; OPS-02 advisory-lock uniqueness assertion preserved
+- [ ] **TENANT-09**: System updates TanStack Query keys to include `company_id` (`['summaries', companyId, limit]`, `['calendar', companyId, start, end]`, etc.) so cache doesn't leak across tenant switches; centralized key factory at `frontend/src/api/queryKeys.ts`
+- [ ] **TENANT-10**: System adds tenant-isolation regression test (`backend/tests/test_multitenant_isolation.py`) that creates rows for both tenants, asserts each tenant's API returns ONLY its own rows under all read endpoints, and fails the build on any cross-tenant leakage
+
+### Juno Defence News Funnel (DEF)
+
+Juno's Tab 1 daily summary card with three sections (Defence News + Canadian Procurement + World Events Relevant to Defence). Config-only after Phase 9 — no new infrastructure, just `scheduler/companies/juno/` content + a relevance classifier.
+
+- [ ] **DEF-01**: System adds `scheduler/companies/juno/feeds.py` listing Tier-1 defence RSS feeds (Defense News × 8 sub-feeds + Breaking Defense + DefenseScoop + RUSI Commentary + RUSI Publications + SIPRI Combined — all directly HTTP-validated 2026-05-19) with per-feed `bozo`/`entries=[]` health-check that compares fetch counts against recent-history and surfaces a partial-status row when a feed silently dies
+- [ ] **DEF-02**: System adds `scheduler/companies/juno/serpapi.py` with `engine=google_news` `site:`-restricted queries for paywalled sources (Janes, IISS, Reuters defence, Bloomberg defence) inside existing $50/mo SerpAPI budget; adds Canadian-procurement queries (`site:canada.ca defence`, `site:canadiandefencereview.com`) since DND/PSPC have no clean RSS
+- [ ] **DEF-03**: System adds `scheduler/companies/juno/prompts.py` with a defence-industry Sonnet 4.6 system prompt **designed from scratch — explicitly NOT cloned from Seva's gold prompt**: senior defence analyst voice (Janes/CSIS desk energy), anti-tactical framing (market/industry commentary only — never operational/targeting), dual-use exclusion list (consumer tech, sports, generic finance unless directly defence-adjacent), regional balance heuristic (US + Canada + Europe + Indo-Pacific quota)
+- [ ] **DEF-04**: System renders the Juno daily summary's Defence News section by ingesting Tier-1 RSS + SerpAPI fallback feeds, deduplicating by canonical URL (existing v2.0 SequenceMatcher 0.85 threshold), ranking by distinct source diversity, and synthesizing 3-7 bulleted items via Sonnet 4.6 with the Juno system prompt
+- [ ] **DEF-05**: System renders the Juno daily summary's Canadian Procurement section using SerpAPI-heavier ingestion (DND/PSPC RSS gap accepted as v3.0 trade-off) with editorial sources (Lagassé Substack, Atlantic Council, Canadian Defence Review); 3-5 bulleted items with contract values extracted where present
+- [ ] **DEF-06**: System renders the Juno daily summary's World Events Relevant to Defence section via a Haiku 4.5 structured-output relevance classifier returning `{is_relevant, category, confidence, reasoning}` against generic world news (Reuters World, AP World); only `is_relevant=true AND confidence >= 0.7` items flow to Sonnet 4.6 synthesis; 9 named inclusion categories (active conflict, alignment shifts, spending policy, sanctions/export controls, energy/critical-minerals, semiconductors, space, hypersonic/AI/autonomy, treaty events) vs explicit exclusion categories
+- [ ] **DEF-07**: System wraps the Juno Sonnet daily-summary call in a refusal-detector that inspects the response for content-policy refusal patterns (Anthropic-Pentagon dispute precedent); on refusal detection, retries once with a framing nudge ("Analyze as defence-industry market commentary, not tactical intelligence"), then falls back to a `status='partial'` row with the refused section blanked (precedent: v2.1 `partial` status pattern in `daily_summary.py`)
+- [ ] **DEF-08**: System renders the existing `SummaryCard.tsx` component for Juno by tolerating missing-or-renamed section markdown fields — Juno's row has `defence_news_md`, `canadian_procurement_md`, `world_events_md` instead of Seva's `gold_news_md`, `ontario_law_md`, `ontario_stats_md`; a single component handles both tenants via per-company section configuration (no per-tenant `SummaryCard` fork)
+- [ ] **DEF-09**: System renders an empty-state on Juno's Tab 2 (Content Calendar) and Tab 3 (Weekly Viral Sweeper) reading "Coming in v3.1 — Juno Calendar/Sweeper not yet enabled" so the operator sees clearly what's deferred; Tab 1 (News Funnel) is the only Juno tab with live functionality in v3.0
+- [ ] **DEF-10**: System runs a voice-calibration UAT during Phase 10 implementation — 5-10 hand-curated defence stories produce daily summaries the operator approves on tone, depth, signal-to-noise, and dual-use boundary BEFORE the Juno cron is enabled in production; UAT artifact persisted in phase directory
+
+## v3.1+ Requirements
+
+Deferred to future v3.x release. Tracked but NOT in v3.0 roadmap.
+
+### Per-Tenant UX Polish
+- **TENANT-BRAND-v31**: Per-company branding (logos, color palettes) — Juno keeps amber/zinc in v3.0
+- **TENANT-N-v32**: Support for arbitrary N>2 companies (move from hardcoded `('seva', 'juno')` CHECK constraint to a `companies` DB table)
+- **TENANT-RBAC-v32**: Per-company user permissions (single-operator model continues in v3.0)
+
+### Juno Calendar + Sweeper
+- **JUNO-CAL-v31**: Juno Content Calendar (Tab 2) — same paper-planner UI as Seva, scoped to Juno's calendar_items rows
+- **JUNO-SWEEP-v31**: Juno Weekly Viral Sweeper (Tab 3) — defence-sector X API queries + virality compute over Juno's daily_summaries; week-to-week themes
+
+### Operational Hardening
+- **DEF-MOBILE-v32**: Mobile-responsive Juno dashboard (single-user desktop constraint preserved in v3.0)
+- **DEF-CROSS-v32**: Cross-company unified overview (explicitly out-of-scope in v3.0 — strict per-tenant isolation)
+
+## v2.2+ Requirements (carry-forward from v2.1, still deferred)
+
+Deferred to future release. Tracked but NOT in v2.1 or v3.0 roadmap.
 
 ### Calendar Enhancements
 
@@ -92,8 +143,9 @@ Deferred to future release. Tracked but NOT in v2.1 roadmap.
 
 ## Out of Scope
 
-Explicitly excluded from v2.1. Documented to prevent scope creep.
+Explicitly excluded from v2.1 + v3.0. Documented to prevent scope creep.
 
+### v2.1 Exclusions (still apply)
 | Feature | Reason |
 |---------|--------|
 | AI content drafting (sub-agent revival) | v1.0 sub-agents retired and stay retired; v2.1 Calendar is plain-text personal planning |
@@ -105,6 +157,21 @@ Explicitly excluded from v2.1. Documented to prevent scope creep.
 | `r/wallstreetbets` direct subreddit ingestion | Signal-to-noise unacceptable at `limit=10` per FEATURES.md viability table |
 | Drag-and-drop calendar reschedule | High complexity-to-value for single-user; date dropdown is functionally equivalent |
 | Custom Tailwind color palette overhaul | Existing zinc + amber palette is the locked direction; no broader theming work |
+
+### v3.0 Additional Exclusions
+| Feature | Reason |
+|---------|--------|
+| Per-company branding/colors (Juno gets own palette) | Defer to v3.1+; Juno keeps amber/zinc baseline in v3.0 to ship fast |
+| Third+ tenant beyond Seva + Juno | v3.0 proves the pattern with N=2; N tenants is v3.2+ (requires `companies` DB table) |
+| Cross-company analytics / unified dashboards | Strict per-tenant isolation; cross-cutting views are an explicit v3.0 anti-feature |
+| Subdomain routing per tenant (seva.app.com / juno.app.com) | Path-prefix `/seva/* /juno/*` chosen over subdomain to avoid Vercel + DNS overhead |
+| Per-tenant Anthropic API key | Single shared key in v3.0; deferred to v3.1+ unless Anthropic content-policy review surfaces a need |
+| `companies` DB table | Hardcoded `('seva', 'juno')` CHECK constraint accepted as v3.0 tech debt; close by v3.2+ |
+| Equity/financial signals on defence primes (LMT, RTX, GD) | Out of scope — Juno is industry intelligence, not investment commentary |
+| Operational/tactical intelligence (force posture, OOB, capability gaps) | Hard exclusion — Anthropic content-policy boundary; Juno is market/industry analysis only |
+| Live conflict map / OSINT geospatial | Out of scope; defence News Funnel is text intelligence only |
+| Defence-stats third section (mirroring Seva's Ontario Stats) | Replaced by World Events Relevant to Defence — defence has no clean structured-data daily analog |
+| Juno Content Calendar (Tab 2) + Juno Weekly Viral Sweeper (Tab 3) | Deferred to v3.1+ per user's "section by section" framing — v3.0 ships News Funnel only |
 
 ## Traceability
 
@@ -153,12 +220,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-05 | Phase 8 | Complete (2026-05-19, plan 08-03) |
 | UI-06 | Phase 8 | Complete |
 | UI-07 | Phase 8 | Complete (2026-05-19, plan 08-03) |
+| TENANT-01 | Phase 9 | Pending |
+| TENANT-02 | Phase 9 | Pending |
+| TENANT-03 | Phase 9 | Pending |
+| TENANT-04 | Phase 9 | Pending |
+| TENANT-05 | Phase 9 | Pending |
+| TENANT-06 | Phase 9 | Pending |
+| TENANT-07 | Phase 9 | Pending |
+| TENANT-08 | Phase 9 | Pending |
+| TENANT-09 | Phase 9 | Pending |
+| TENANT-10 | Phase 9 | Pending |
+| DEF-01 | Phase 10 | Pending |
+| DEF-02 | Phase 10 | Pending |
+| DEF-03 | Phase 10 | Pending |
+| DEF-04 | Phase 10 | Pending |
+| DEF-05 | Phase 10 | Pending |
+| DEF-06 | Phase 10 | Pending |
+| DEF-07 | Phase 10 | Pending |
+| DEF-08 | Phase 10 | Pending |
+| DEF-09 | Phase 10 | Pending |
+| DEF-10 | Phase 10 | Pending |
 
 **Coverage:**
-- v2.1 requirements: 41 total (5 TAB + 5 DB + 10 CAL + 14 SWEEP + 7 UI)
-- Mapped to phases: 41
-- Unmapped: 0 ✓
+- v2.1 requirements: 41 total (5 TAB + 5 DB + 10 CAL + 14 SWEEP + 7 UI) — all mapped, all complete (or dropped per X-API pivot)
+- v3.0 requirements: 20 total (10 TENANT + 10 DEF) — all mapped to Phases 9 and 10, all pending
+- v2.1 + v3.0 combined: 61 total / 61 mapped / 0 unmapped ✓
 
 ---
-*Requirements defined: 2026-05-18*
-*Last updated: 2026-05-18 — traceability updated with v2.1 phase numbering (Phases 5-8)*
+*Requirements defined: 2026-05-18 (v2.1) / extended 2026-05-19 (v3.0)*
+*Last updated: 2026-05-19 — v3.0 multi-tenant + Juno Defence News Funnel requirements added (TENANT-01..10, DEF-01..10) mapped to Phases 9-10*
