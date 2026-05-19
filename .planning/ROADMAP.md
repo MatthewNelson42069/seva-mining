@@ -170,7 +170,9 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 
 ### Phase 7: Weekly Viral Sweeper
 
-**Goal:** Every Sunday at 08:00 PT a cron job ingests the top Reddit posts from 4 gold/silver subreddits, computes story virality across the past 7 days of `daily_summaries`, calls Sonnet for 3 content angles, persists a `weekly_sweeps` row, and the frontend's Tab 3 renders the latest sweep card with all three sections plus an empty state for the first deploy.
+**Goal:** Every Sunday at 08:00 PT a cron job ingests the top X (Twitter) posts via the X API recent-search endpoint (combined keyword + cashtag + hashtag query for gold-sector chatter), computes story virality across the past 7 days of `daily_summaries`, calls Sonnet for 3 content angles, persists a `weekly_sweeps` row, and the frontend's Tab 3 renders the latest sweep card with all three sections plus an empty state for the first deploy.
+
+**Pivot note (2026-05-19, per `phases/07-weekly-viral-sweeper/07-CONTEXT.md` D-03):** Reddit ingestion was replaced with X API recent-search ingestion. The X API Basic tier ($100/mo) is already wired for the Content Agent's `video_clip` pipeline; reusing it avoids a new vendor + 3 env vars + asyncpraw dependency. SWEEP-01 and SWEEP-02 are Dropped; SWEEP-04 and SWEEP-05 are reworded to reference X API + tweepy; SWEEP-08 and SWEEP-13 rephrase "Reddit posts" → "X posts".
 
 **Depends on:** Phase 5 (migrations run, `weekly_sweeps` table exists, `JOB_LOCK_IDS["weekly_sweeper"] = 1019` confirmed, `/viral` route renders a page)
 
@@ -202,7 +204,13 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 5. A second call to `run_weekly_sweeper()` within 60 minutes of the first logs `idempotency_skip` and does NOT insert a duplicate `weekly_sweeps` row
 6. If one of the 4 subreddits returns 403, the sweeper completes with the remaining subreddits' posts and writes the subreddit error into `agent_runs.errors`; `status` is `partial`, not `failed`
 
-**Plans:** TBD
+**Plans:** 6 plans
+- [ ] 07-01-PLAN.md — Wave 1: REQUIREMENTS.md X-API rescoping (drop SWEEP-01/02; replace SWEEP-04/05; rephrase SWEEP-08/13) + Pydantic schemas `WeeklySweepCard` + `WeeklySweepFeedResponse`
+- [ ] 07-02-PLAN.md — Wave 2: `scheduler/agents/x_ingest.py` — `fetch_top_x_posts(query, max_results=100)` via tweepy AsyncClient + quota gate (twitter_monthly_tweet_count, 500 safety margin) + engagement re-rank, with pytest coverage of 7+ branches (SWEEP-04/05)
+- [ ] 07-03-PLAN.md — Wave 2: `backend/app/routers/weekly_sweeps.py` — replace Phase 5 stub with full `GET /weekly-sweeps?limit=12` (ge=1 le=52, generated_at DESC, auth-gated) + pytest coverage (SWEEP-12)
+- [ ] 07-04-PLAN.md — Wave 3: `scheduler/agents/weekly_sweeper.py` — `run_weekly_sweeper()` orchestrator with `_compute_virality` (P3 NULL guard + P10 URL canonicalization + P9 per-row dedup), Sonnet call (P6/P7/P8/P14 defenses), P15 insufficient-signal fallback, SWEEP-11 status mapping, P13 `__main__` escape hatch + pytest coverage of 8+ branches (SWEEP-06/07/08/10/11)
+- [ ] 07-05-PLAN.md — Wave 4: `scheduler/worker.py` — `_make_weekly_sweeper_job(engine)` factory + `scheduler.add_job` registration with `CronTrigger(day_of_week='sun', hour=8, minute=0, timezone='America/Los_Angeles')` (consumes lock 1019 already reserved in Phase 5) + smoke test (SWEEP-03/09)
+- [ ] 07-06-PLAN.md — Wave 5: Frontend — `api/weeklySweeps.ts` + `hooks/useWeeklySweeps.ts` + `components/viral/SweeperCard.tsx` (3 react-markdown sections + status banner) + `pages/WeeklyViralSweeperPage.tsx` replacing Phase 5 stub (empty state, week-picker, live data) + Vitest coverage + human-verify checkpoint (SWEEP-13/14)
 
 **UI hint**: yes
 
@@ -310,7 +318,7 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 | 4. Prune Cron + Ops Hardening | v2.0 | 1/1 | Complete | 2026-05-06 |
 | 5. Foundation — Tabs + DB + Backend Stubs | v2.1 | 0/5 | Planned | - |
 | 6. Content Calendar | v2.1 | 5/5 | Complete   | 2026-05-19 |
-| 7. Weekly Viral Sweeper | v2.1 | 0/? | Not started | - |
+| 7. Weekly Viral Sweeper | v2.1 | 0/6 | Planned | - |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 0/? | Not started | - |
 
 ---
