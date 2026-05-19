@@ -15,11 +15,19 @@
 // turns GREEN after Wave 1 adds them. This is the entire point of the Wave 0
 // scaffolding contract: provide a real automated target for the executor of
 // Plan 08-02 to verify against.
+/// <reference types="node" />
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
-import { resolve } from 'path'
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
 
 describe('index.css — Phase 8 semantic amber tokens (UI-01 / D-05)', () => {
+  // ESM-friendly __dirname replacement (Vitest runs ESM by default).
+  // Phase 8 Wave 1 (08-02) fix: original Wave 0 stub assumed CommonJS __dirname
+  // which broke `tsc -b` under the `tsconfig.app.json` `types: ["vite/client"]`
+  // restriction. The triple-slash above unlocks Node types for this single file.
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = dirname(__filename)
   const cssPath = resolve(__dirname, '../../index.css')
   const css = readFileSync(cssPath, 'utf-8')
 

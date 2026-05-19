@@ -46,6 +46,11 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    /* Phase 8 — semantic amber tokens (D-05). Namespace `brand-` to avoid clobbering
+       shadcn's --color-accent (muted-neutral hover surface). */
+    --color-brand-accent: var(--brand-accent);
+    --color-brand-accent-hover: var(--brand-accent-hover);
+    --color-brand-accent-subtle: var(--brand-accent-subtle);
 }
 
 :root {
@@ -115,6 +120,10 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    /* Phase 8 — semantic amber values (only under .dark; light theme deferred to v2.2). */
+    --brand-accent: oklch(0.769 0.188 70.08);
+    --brand-accent-hover: oklch(0.828 0.189 84.429);
+    --brand-accent-subtle: oklch(0.769 0.188 70.08 / 0.05);
 }
 
 @layer base {
