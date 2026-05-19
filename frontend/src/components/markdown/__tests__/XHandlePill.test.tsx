@@ -1,4 +1,3 @@
-// REDLINE: switch describe.skip -> describe in Wave 2 once XHandlePill.tsx exists.
 // Phase 8 — Plan 08-01 (Wave 0) RED-tests-first scaffolding for UI-05 / D-01..D-04.
 //
 // These tests describe the canonical X-handle pill rendering contract:
@@ -26,7 +25,7 @@ type XHandlePillModule = { XHandlePill: (props: { href: string; children?: any }
 // this resolution never runs at collection time.
 const XHANDLEPILL_MODULE_PATH = '../XHandlePill'
 
-describe.skip('XHandlePill', () => {
+describe('XHandlePill', () => {
   it('renders an <a> with href="https://x.com/{handle}" when given a handle URL', async () => {
     const { XHandlePill } = (await import(/* @vite-ignore */ XHANDLEPILL_MODULE_PATH)) as XHandlePillModule
     const { getByRole } = render(

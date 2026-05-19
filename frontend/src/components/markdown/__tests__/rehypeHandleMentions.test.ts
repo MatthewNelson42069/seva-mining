@@ -1,4 +1,3 @@
-// REDLINE: switch describe.skip -> describe in Wave 2 once rehypeHandleMentions.ts exists.
 // Phase 8 — Plan 08-01 (Wave 0) RED-tests-first scaffolding for the rehype plugin.
 //
 // These tests drive the plugin against synthetic hast trees directly, NOT
@@ -35,7 +34,7 @@ async function run(tree: Root): Promise<Root> {
   return (result as Root | undefined) ?? tree
 }
 
-describe.skip('rehypeHandleMentions', () => {
+describe('rehypeHandleMentions', () => {
   it('wraps a bare @handle text node into an <a href="https://x.com/{handle}">', async () => {
     const tree: Root = {
       type: 'root',

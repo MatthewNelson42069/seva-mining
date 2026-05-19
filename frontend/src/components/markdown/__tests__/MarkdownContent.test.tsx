@@ -1,4 +1,3 @@
-// REDLINE: switch describe.skip -> describe in Wave 2 once MarkdownContent.tsx exists.
 // Phase 8 — Plan 08-01 (Wave 0) RED-tests-first scaffolding for UI-05 pipeline.
 //
 // These tests describe the end-to-end markdown rendering pipeline:
@@ -29,7 +28,7 @@ type MarkdownContentModule = { MarkdownContent: (props: { content: string }) => 
 // this resolution never runs at collection time.
 const MARKDOWN_CONTENT_MODULE_PATH = '../MarkdownContent'
 
-describe.skip('MarkdownContent', () => {
+describe('MarkdownContent', () => {
   it('renders [@handle](https://x.com/jpow) as an XHandlePill', async () => {
     const { MarkdownContent } = (await import(/* @vite-ignore */ MARKDOWN_CONTENT_MODULE_PATH)) as MarkdownContentModule
     const md = 'Hat tip to [@jpow](https://x.com/jpow) for the call.'
