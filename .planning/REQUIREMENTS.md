@@ -39,8 +39,8 @@ Pure CRUD over `calendar_items`. Weekly grid UI (Mon-Sun) with click-to-edit. Da
 - [x] **CAL-06**: System renders the per-day text body inside its day cell as plain text with `whitespace-pre-wrap` so line breaks are preserved; NO markdown rendering, NO react-markdown, NO tag color chips. Each day cell shows at most one text blob (single-row-per-date enforced via DB UNIQUE(date) constraint from migration 0013).
 - [x] **CAL-07**: System makes every day cell click-to-focus — clicking anywhere inside the cell focuses its `<textarea>` so the operator can immediately start typing. No "+ Add" hover button, no separate create UI; the textarea IS the editing surface.
 - [x] **CAL-08**: System auto-saves on textarea blur — on `onBlur`, if text differs from last-saved value: POST to `/calendar` if no row exists for that date, PATCH `/calendar/{item_id}` if a row exists, or DELETE the row if text is empty (`text.trim() === ""`) AND a row exists. No Save button. No shadcn Dialog. Success is silent; a sonner error toast surfaces only on failure.
-- [ ] **CAL-09**: System mutates calendar items via TanStack Query mutations with optimistic updates: `onMutate` snapshots query cache, applies optimistic write; `onError` restores the snapshot; `onSettled` invalidates `['calendar', start, end]` so the next refetch is authoritative
-- [ ] **CAL-10**: System uses `staleTime: 0` + `refetchOnWindowFocus: false` on `useCalendar()` — calendar items are user-mutated, no stale tolerance, but no auto-refetch on tab switching either
+- [x] **CAL-09**: System mutates calendar items via TanStack Query mutations with optimistic updates: `onMutate` snapshots query cache, applies optimistic write; `onError` restores the snapshot; `onSettled` invalidates `['calendar', start, end]` so the next refetch is authoritative
+- [x] **CAL-10**: System uses `staleTime: 0` + `refetchOnWindowFocus: false` on `useCalendar()` — calendar items are user-mutated, no stale tolerance, but no auto-refetch on tab switching either
 
 ### Weekly Viral Sweeper (SWEEP)
 
@@ -130,8 +130,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAL-06 | Phase 6 | Complete |
 | CAL-07 | Phase 6 | Complete |
 | CAL-08 | Phase 6 | Complete |
-| CAL-09 | Phase 6 | Pending |
-| CAL-10 | Phase 6 | Pending |
+| CAL-09 | Phase 6 | Complete |
+| CAL-10 | Phase 6 | Complete |
 | SWEEP-01 | Phase 7 | Pending |
 | SWEEP-02 | Phase 7 | Pending |
 | SWEEP-03 | Phase 7 | Pending |
