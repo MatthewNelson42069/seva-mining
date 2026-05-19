@@ -67,6 +67,9 @@ Every piece of intelligence the digest surfaces must be genuinely useful to a se
 **v2.1 Weekly Viral Sweeper — X-API pivot (shipped 2026-05-19):**
 - ✓ Sunday 08:00 PT APScheduler cron ingests top gold-sector tweets via tweepy `recent_search` (reused $100/mo Basic tier — Reddit dropped), computes story virality over past 7 days of `daily_summaries.raw_sources_jsonb.gold_news[]` (URL canonicalize + cross-reference rank), calls Sonnet 4.6 for 3 content angles, persists a `weekly_sweeps` row with status mapping (completed/partial/failed), and Tab 3 renders the latest sweep card with empty-state copy for the first deploy. SWEEP-01/02 dropped per X-API pivot (Reddit replaced); SWEEP-03..14 complete (SWEEP-13/14 carryover human-verify items deferred to first cron fire, tracked in 07-HUMAN-UAT.md) — v2.1 Phase 7
 
+**v2.1 UI Polish + Dead-Code Strip (shipped 2026-05-19):**
+- ✓ Linear-style dark/amber-500 design applied consistently across all 3 tabs via 3 semantic CSS tokens (`--color-brand-accent[-hover/-subtle]`) added to `index.css` `@theme inline`; UI-04 `border-zinc-800` baseline + `hover:border-zinc-700 transition-colors` unified across `SummaryCard`/`SweeperCard`/`SectionBlock`/`DayCell`; Geist Variable weights 400/500/600 enforced via grep script (UI-01..04). UI-05 reframed for X-API pivot — `@handle` monospace pills (replacing the original Reddit `r/gold` spec) implemented via `XHandlePill` + `rehypeHandleMentions` rehype plugin + `MarkdownContent` wrapper, applied everywhere `@\w+` appears in react-markdown content with `[rehypeRaw, rehypeSanitize, rehypeHandleMentions]` pipeline (sanitize first as security boundary). UI-06 dead-code strip removed `scheduler/agents/content/` directory entirely (15 files, ~5100 lines); `JOB_LOCK_IDS` shrunk to 4 keys; OPS-02 assertion still passes; DB rows preserved per `260420-sn9`/`260423-k8n` precedent. UI-07 visual QA at 1440×900 PASSED by operator across all 3 tabs (UI-01..07) — v2.1 Phase 8
+
 **v1.0.1 Approval Dashboard (deprecated by v2.0 pivot, source retained as dead code):**
 - ✓ Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
 - ✓ Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
@@ -189,4 +192,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 — Phase 7 (Weekly Viral Sweeper) shipped with X-API pivot (Reddit dropped, tweepy reused). v2.1 progress: 3/4 phases complete (5, 6, 7); Phase 8 UI Polish + Dead-Code Strip remains.*
+*Last updated: 2026-05-19 — v2.1 milestone COMPLETE. All 4 phases shipped (5 Foundation, 6 Content Calendar, 7 Weekly Viral Sweeper with X-API pivot, 8 UI Polish + Dead-Code Strip). 3-tab content engine live with Linear-style amber/zinc design; v1.0 sub-agent dead-code removed.*
