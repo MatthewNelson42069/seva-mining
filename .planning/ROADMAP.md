@@ -140,7 +140,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 - [x] 06-01-PLAN.md — Requirements rephrase + Migration 0013 (title nullable + UNIQUE(date)) + Pydantic schemas (Wave 1)
 - [x] 06-02-PLAN.md — Full CRUD router replace + pytest coverage including P1/P4 defenses (Wave 2, depends on 06-01)
 - [x] 06-03-PLAN.md — Frontend API module + useCalendar hook + 3 optimistic mutation hooks with rollback (Wave 2, depends on 06-01)
-- [ ] 06-04-PLAN.md — ISO week helpers + DayCell (textarea + auto-save 4-way branch) + WeeklyGrid (Wave 3, depends on 06-02 + 06-03)
+- [x] 06-04-PLAN.md — ISO week helpers + DayCell (textarea + auto-save 4-way branch) + WeeklyGrid (Wave 3, depends on 06-02 + 06-03)
 - [ ] 06-05-PLAN.md — WeekNav + live ContentCalendarPage + human-verify checkpoint (Wave 4, depends on 06-04)
 
 **UI hint**: yes

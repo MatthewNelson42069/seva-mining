@@ -35,7 +35,7 @@ Pure CRUD over `calendar_items`. Weekly grid UI (Mon-Sun) with click-to-edit. Da
 - [x] **CAL-02**: System exposes `POST /calendar` accepting `{date, body}` and returning `201 + CalendarItemResponse`; `body` is a non-empty `str` stored in `notes_md`; backend writes `created_at = updated_at = datetime.utcnow()` explicitly. No `tag`, no `title` in request body (server may write a synthetic title or leave null per migration 0013).
 - [x] **CAL-03**: System exposes `PATCH /calendar/{item_id}` accepting `{body}` (only) and returning `200 + CalendarItemResponse`; handler MUST set `updated_at = datetime.utcnow()` explicitly (not via DB trigger; `updated_at` is NOT exposed in the `CalendarItemUpdate` Pydantic schema). No `tag`, no `date` rescheduling in this rescoped model.
 - [x] **CAL-04**: System exposes `DELETE /calendar/{item_id}` returning `204 No Content`; hard delete (no soft-delete column); `404` if not found
-- [ ] **CAL-05**: System renders `ContentCalendarPage.tsx` with a 7-column weekly grid (Mon-Sun ISO week start) showing the current week by default, prev/next-week arrow navigation, and a "today" jump button; today cell highlighted via `ring-2 ring-amber-500 bg-amber-500/5`
+- [x] **CAL-05**: System renders `ContentCalendarPage.tsx` with a 7-column weekly grid (Mon-Sun ISO week start) showing the current week by default, prev/next-week arrow navigation, and a "today" jump button; today cell highlighted via `ring-2 ring-amber-500 bg-amber-500/5`
 - [x] **CAL-06**: System renders the per-day text body inside its day cell as plain text with `whitespace-pre-wrap` so line breaks are preserved; NO markdown rendering, NO react-markdown, NO tag color chips. Each day cell shows at most one text blob (single-row-per-date enforced via DB UNIQUE(date) constraint from migration 0013).
 - [x] **CAL-07**: System makes every day cell click-to-focus — clicking anywhere inside the cell focuses its `<textarea>` so the operator can immediately start typing. No "+ Add" hover button, no separate create UI; the textarea IS the editing surface.
 - [x] **CAL-08**: System auto-saves on textarea blur — on `onBlur`, if text differs from last-saved value: POST to `/calendar` if no row exists for that date, PATCH `/calendar/{item_id}` if a row exists, or DELETE the row if text is empty (`text.trim() === ""`) AND a row exists. No Save button. No shadcn Dialog. Success is silent; a sonner error toast surfaces only on failure.
@@ -126,7 +126,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAL-02 | Phase 6 | Complete |
 | CAL-03 | Phase 6 | Complete |
 | CAL-04 | Phase 6 | Complete |
-| CAL-05 | Phase 6 | Pending |
+| CAL-05 | Phase 6 | Complete |
 | CAL-06 | Phase 6 | Complete |
 | CAL-07 | Phase 6 | Complete |
 | CAL-08 | Phase 6 | Complete |
