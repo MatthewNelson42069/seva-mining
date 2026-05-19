@@ -1,6 +1,4 @@
-import ReactMarkdown from 'react-markdown'
-import rehypeSanitize from 'rehype-sanitize'
-
+import { MarkdownContent } from '@/components/markdown/MarkdownContent'
 import { cn } from '@/lib/utils'
 
 export interface SectionBlockProps {
@@ -16,11 +14,14 @@ export interface SectionBlockProps {
 /**
  * One labeled section inside a SummaryCard.
  *
- * Renders markdown via react-markdown + rehype-sanitize default schema. The
- * sanitizer strips script/iframe/style/form/event-handlers/javascript: at the
- * AST level BEFORE the DOM is touched — defence-in-depth for LLM output.
+ * Renders markdown via the shared MarkdownContent wrapper which pipelines
+ * rehype-raw -> rehype-sanitize -> rehypeHandleMentions and routes X/Twitter
+ * anchors through the XHandlePill component. The sanitizer strips
+ * script/iframe/style/form/event-handlers/javascript: at the AST level BEFORE
+ * the DOM is touched — defence-in-depth for LLM output.
  *
- * Phase 1, Plan 06.
+ * Phase 1, Plan 06 (initial); Phase 8, Plan 03 (consolidated through
+ * MarkdownContent for UI-05 X-handle pill consistency).
  */
 export function SectionBlock({ title, content, emptyFallback, className }: SectionBlockProps) {
   const hasContent = content !== null && content.trim().length > 0
@@ -30,7 +31,7 @@ export function SectionBlock({ title, content, emptyFallback, className }: Secti
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       {hasContent ? (
         <div className="prose prose-sm max-w-none text-foreground [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5">
-          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content as string}</ReactMarkdown>
+          <MarkdownContent content={content as string} />
         </div>
       ) : (
         <p className="text-sm italic text-muted-foreground">{emptyFallback}</p>

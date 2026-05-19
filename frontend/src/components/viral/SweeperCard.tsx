@@ -1,8 +1,7 @@
 import { format, parseISO } from 'date-fns'
-import ReactMarkdown from 'react-markdown'
-import rehypeSanitize from 'rehype-sanitize'
 
 import type { WeeklySweepCard as WeeklySweepCardData } from '@/api/weeklySweeps'
+import { MarkdownContent } from '@/components/markdown/MarkdownContent'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
@@ -91,27 +90,21 @@ export function SweeperCard({ sweep, className }: SweeperCardProps) {
           {/* Section 1: Top X Posts This Week (column: reddit_top_md) */}
           {sweep.reddit_top_md && (
             <section className="prose prose-sm max-w-none text-foreground [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5">
-              <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-                {sweep.reddit_top_md}
-              </ReactMarkdown>
+              <MarkdownContent content={sweep.reddit_top_md} />
             </section>
           )}
 
           {/* Section 2: Most Cross-Referenced Stories */}
           {sweep.story_virality_md && (
             <section className="prose prose-sm max-w-none text-foreground [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5">
-              <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-                {sweep.story_virality_md}
-              </ReactMarkdown>
+              <MarkdownContent content={sweep.story_virality_md} />
             </section>
           )}
 
           {/* Section 3: 3 Content Angles */}
           {sweep.content_angles_md && (
             <section className="prose prose-sm max-w-none text-foreground [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5">
-              <ReactMarkdown rehypePlugins={[rehypeSanitize]}>
-                {sweep.content_angles_md}
-              </ReactMarkdown>
+              <MarkdownContent content={sweep.content_angles_md} />
             </section>
           )}
         </div>
