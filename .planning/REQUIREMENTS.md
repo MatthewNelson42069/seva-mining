@@ -220,16 +220,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-05 | Phase 8 | Complete (2026-05-19, plan 08-03) |
 | UI-06 | Phase 8 | Complete |
 | UI-07 | Phase 8 | Complete (2026-05-19, plan 08-03) |
-| TENANT-01 | Phase 9 | Pending |
-| TENANT-02 | Phase 9 | Pending |
-| TENANT-03 | Phase 9 | Pending |
-| TENANT-04 | Phase 9 | Pending |
-| TENANT-05 | Phase 9 | Pending |
-| TENANT-06 | Phase 9 | Pending |
-| TENANT-07 | Phase 9 | Pending |
-| TENANT-08 | Phase 9 | Pending |
-| TENANT-09 | Phase 9 | Pending |
-| TENANT-10 | Phase 9 | Pending |
+| TENANT-01 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-02 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-03 | Phase 9 | Pending (Wave 0 RED test + grep gate landed 09-01) |
+| TENANT-04 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-05 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-06 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-07 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-08 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-09 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-10 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
 | DEF-01 | Phase 10 | Pending |
 | DEF-02 | Phase 10 | Pending |
 | DEF-03 | Phase 10 | Pending |

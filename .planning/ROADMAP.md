@@ -373,7 +373,7 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 **Plans:** 5 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Wave 0 RED-tests-first scaffolding (12 Wave 0 test files + CI grep gate `scripts/verify-tenant-isolation.sh` per VALIDATION.md)
+- [x] 09-01-PLAN.md — Wave 0 RED-tests-first scaffolding (12 Wave 0 test files + CI grep gate `scripts/verify-tenant-isolation.sh` per VALIDATION.md)
 - [ ] 09-02-PLAN.md — Wave 1 DB foundation (Alembic 0014 with `server_default='seva'` + dual-model parity + `backend/app/queries/scoped.py` helpers + `get_current_company` FastAPI dep)
 - [ ] 09-03-PLAN.md — Wave 2 backend routers + scheduler (3 routers under `/api/{company}` + per-company cron with `juno_daily_summary=1020` lock ID + `juno_weekly_sweeper=1021` slot reserved + `run_juno_daily_summary` stub writes `status='partial'` row)
 - [ ] 09-04-PLAN.md — Wave 3 frontend routing + switcher + queryKeys (`<Route path=':company'>` wrapper + bookmark grace redirects + `CompanySwitcher` segmented control inside formally freeze-lifted AppHeader + Zustand persist for `lastVisitedCompany` + centralized TanStack key factory + per-page Juno empty-state short-circuits)
