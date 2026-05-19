@@ -2,32 +2,43 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: — Multi-Tenant Dashboards (Juno Industries Onboarding)
-status: Defining requirements
-stopped_at: Milestone v3.0 started — PROJECT.md updated, gathering requirements
-last_updated: "2026-05-19T19:00:00.000Z"
+status: Roadmap drafted — Phase 9 next
+stopped_at: Roadmap created for v3.0 — Phases 9-10 defined; 20/20 v3.0 requirements mapped; awaiting discuss-phase 9
+last_updated: "2026-05-19T20:00:00.000Z"
 last_activity: 2026-05-19
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 10
+  completed_phases: 8
+  total_plans: 28
+  completed_plans: 28
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-19)
+See: .planning/PROJECT.md (updated 2026-05-19) + .planning/ROADMAP.md (extended 2026-05-19 with v3.0 Phases 9-10)
 
-**Core value:** Every piece of intelligence the digest surfaces must be genuinely useful to the senior analyst for that company (gold for Seva, defence for Juno) — a data point, an insight, a connection no one else made.
-**Current focus:** Milestone v3.0 — defining requirements (multi-tenancy + Juno News Funnel)
+**Core value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno.
+**Current focus:** Milestone v3.0 — Phase 9 Multi-Tenant Foundation (atomic deploy: row-level `company_id`, `/api/{company}` routing, `/:company/` frontend routing, AppHeader/CompanyBar switcher, per-company cron fan-out)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 9 — Multi-Tenant Foundation (NOT STARTED — awaiting discuss-phase to resolve 3 architectural decisions)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-19 — Milestone v3.0 started (PROJECT.md updated for multi-tenant pivot)
+Status: Roadmap drafted; discuss-phase 9 required next
+Last activity: 2026-05-19 — v3.0 roadmap created (Phases 9-10 appended to ROADMAP.md); all 20 v3.0 requirements mapped; 3 inter-research disagreements surfaced as discuss-phase decisions
+
+### v3.0 Roadmap Summary
+
+- **Phase 9: Multi-Tenant Foundation** (TENANT-01..10) — single atomic deploy; partial multi-tenancy worse than none; depends on v2.1 Phase 8
+- **Phase 10: Juno Defence News Funnel** (DEF-01..10) — config-only after Phase 9; depends on Phase 9 merged + verified
+
+### Discuss-phase 9 agenda (3 operator decisions BEFORE plan-phase)
+
+1. **Scheduler topology** — single-cron-fanout (D-02 Option 1, zero new lock IDs) vs explicit per-company jobs (STACK, +2 IDs at 1020/1021) vs per-tenant 100-ID blocks (PITFALLS §3.4, Juno 1100-1199)
+2. **AppHeader freeze treatment** — Path A formal lift with re-baselined visual QA (ARCHITECTURE D-04) vs Path B sibling `CompanyBar.tsx` component (PITFALLS §5, lower-risk launch)
+3. **`companies` DB table vs hardcoded CHECK** — STACK creates table with FK; ARCHITECTURE D-05 keeps config in Python only; PITFALLS accepts hardcoded `('seva', 'juno')` CHECK as v3.0 tech debt
 
 ## Performance Metrics
 
