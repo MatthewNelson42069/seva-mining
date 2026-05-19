@@ -65,10 +65,10 @@ Sunday 08:00 PT cron, advisory lock 1019. X-post ingestion via `tweepy.asynchron
 
 Linear-style dark theme with amber-500 accents applied across all 3 tabs. Existing Geist font stays. Dead-code v1.0 strip happens here.
 
-- [ ] **UI-01**: System applies the amber-gold accent (`amber-500` / `amber-400`) to: active tab indicator in TabNav, primary CTA buttons, status badges on summary cards, today-cell highlight in calendar, accent borders on hover states; preserves dark theme baseline (zinc-950/zinc-900/zinc-800 hierarchy)
-- [ ] **UI-02**: System refines spacing tokens — generous whitespace inside cards (`p-6` minimum), `gap-6` between card sections, `space-y-4` between section bullets in markdown rendering; matches the Linear/Vercel dashboard density target
-- [ ] **UI-03**: System refines typography weights using existing Geist Variable font — headings 600, sub-headings 500, body 400, monospace numerics for upvote counts (Reddit posts) and source counts (virality stories); NO font swap to Inter
-- [ ] **UI-04**: System refines subtle borders + hover states on all cards using `border border-zinc-800` baseline + `hover:border-zinc-700` transition; consistent across summary cards, calendar items, sweep card sections
+- [x] **UI-01**: System applies the amber-gold accent (`amber-500` / `amber-400`) to: active tab indicator in TabNav, primary CTA buttons, status badges on summary cards, today-cell highlight in calendar, accent borders on hover states; preserves dark theme baseline (zinc-950/zinc-900/zinc-800 hierarchy)
+- [x] **UI-02**: System refines spacing tokens — generous whitespace inside cards (`p-6` minimum), `gap-6` between card sections, `space-y-4` between section bullets in markdown rendering; matches the Linear/Vercel dashboard density target
+- [x] **UI-03**: System refines typography weights using existing Geist Variable font — headings 600, sub-headings 500, body 400, monospace numerics for upvote counts (Reddit posts) and source counts (virality stories); NO font swap to Inter
+- [x] **UI-04**: System refines subtle borders + hover states on all cards using `border border-zinc-800` baseline + `hover:border-zinc-700` transition; consistent across summary cards, calendar items, sweep card sections
 - [ ] **UI-05**: System renders subreddit attribution on Reddit posts as monospace-styled pills (e.g., `r/gold` in `font-mono text-xs bg-zinc-800/60 px-2 py-0.5 rounded`)
 - [ ] **UI-06**: System strips v1.0 dead-code content sub-agent source files (`scheduler/agents/content/*.py` for retired formats + dead-code lock-ID dict entries 1010-1016 + comments referencing them) once Phases 5-7 are merged and verifier confirms no surviving callers; runs as the final task of Phase 8
 - [ ] **UI-07**: System completes a visual QA pass across all 3 tabs at desktop resolution (1440x900 minimum) — confirms no layout regressions, no dark-mode contrast failures (WCAG AA on text), and no broken shadcn primitive interactions; intentionally skips mobile-responsive (out of scope per single-user desktop constraint)
@@ -146,10 +146,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SWEEP-12 | Phase 7 | Complete |
 | SWEEP-13 | Phase 7 | Complete |
 | SWEEP-14 | Phase 7 | Complete |
-| UI-01 | Phase 8 | Pending |
-| UI-02 | Phase 8 | Pending |
-| UI-03 | Phase 8 | Pending |
-| UI-04 | Phase 8 | Pending |
+| UI-01 | Phase 8 | Complete |
+| UI-02 | Phase 8 | Complete |
+| UI-03 | Phase 8 | Complete |
+| UI-04 | Phase 8 | Complete |
 | UI-05 | Phase 8 | Pending |
 | UI-06 | Phase 8 | Pending |
 | UI-07 | Phase 8 | Pending |
