@@ -2,11 +2,14 @@
 APScheduler worker process for Seva Mining AI agents.
 
 This module is the entry point for Railway service 2 (scheduler worker).
-Phase 4 Plan 01: starts AsyncIOScheduler with 8 jobs:
+Phase 4 Plan 01: starts AsyncIOScheduler with 9 jobs:
 
 - daily_summary (Phase 1 Plan 05): cron at 08:00 + 12:00 America/Los_Angeles
 - daily_summary_prune (Phase 4 OPS-01): cron at 03:00 America/Los_Angeles — deletes
   daily_summaries rows older than 30 days under advisory lock 1018
+- weekly_sweeper (Phase 7 Plan 05): cron Sun 08:00 America/Los_Angeles — viral
+  sweep over X API recent search + cross-referenced news stories under advisory
+  lock 1019
 - 6 cron sub-agents (post-m49 — ALL on CronTrigger; no more IntervalTrigger):
   - sub_breaking_news every hour at HH:00 UTC
   - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, 09:17, 12:17, 15:17, 18:17, 21:17)
@@ -280,6 +283,30 @@ def _make_daily_summary_prune_job(engine):
     return job
 
 
+def _make_weekly_sweeper_job(engine):
+    """Create the weekly_sweeper job callback (advisory-lock wrapped).
+
+    v2.1 — Phase 7, Plan 05 (SWEEP-09). Mirrors _make_daily_summary_job
+    exactly. Lock ID 1019 was reserved in Phase 5, Plan 05-01 (already in
+    JOB_LOCK_IDS dict; OPS-02 uniqueness assertion guards against collision).
+
+    run_weekly_sweeper is imported lazily so worker.py module import does
+    not pay the weekly_sweeper module's import cost on Railway boot.
+    """
+
+    async def job():
+        async with engine.connect() as conn:
+            from agents.weekly_sweeper import run_weekly_sweeper  # lazy
+            await with_advisory_lock(
+                conn,
+                JOB_LOCK_IDS["weekly_sweeper"],
+                "weekly_sweeper",
+                run_weekly_sweeper,
+            )
+
+    return job
+
+
 def _make_sub_agent_job(job_id: str, lock_id: int, run_fn, engine):
     """Create a content sub-agent job callback (advisory-lock wrapped).
 
@@ -340,10 +367,11 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 
 
 async def build_scheduler(engine) -> AsyncIOScheduler:
-    """Build the APScheduler instance with 8 jobs registered.
+    """Build the APScheduler instance with 9 jobs registered.
 
     - daily_summary: cron at 08:00 + 12:00 America/Los_Angeles (Phase 1 Plan 05).
     - daily_summary_prune: cron at 03:00 America/Los_Angeles (Phase 4 OPS-01).
+    - weekly_sweeper: cron Sun 08:00 America/Los_Angeles (Phase 7 Plan 05).
     - 6 cron sub-agents (post-m49 — all CronTrigger):
       - sub_breaking_news every hour at HH:00 UTC
       - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, ..., 21:17)
@@ -407,6 +435,24 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         trigger=CronTrigger(hour=3, minute=0, timezone="America/Los_Angeles"),
         id="daily_summary_prune",
         name="Daily Summary Prune — 03:00 America/Los_Angeles",
+    )
+
+    # weekly_sweeper — fires Sunday 08:00 PT (SWEEP-09).
+    # day_of_week='sun' uses APScheduler's named-day shorthand. 08:00 PT is
+    # outside the DST-ambiguous 01:00-02:00 window (MOD-1 — safe). Lock 1019
+    # is reserved in JOB_LOCK_IDS from Phase 5, Plan 05-01. misfire_grace_time
+    # at the AsyncIOScheduler job_defaults level (1800s = 30 min) covers the
+    # weekly sweeper's expected ~25s runtime (P12 — no override needed).
+    scheduler.add_job(
+        _make_weekly_sweeper_job(engine),
+        trigger=CronTrigger(
+            day_of_week='sun',
+            hour=8,
+            minute=0,
+            timezone='America/Los_Angeles',
+        ),
+        id="weekly_sweeper",
+        name="Weekly Viral Sweeper — Sun 08:00 America/Los_Angeles",
     )
 
     for job_id, run_fn, name, lock_id, cron_kwargs in CONTENT_CRON_AGENTS:
