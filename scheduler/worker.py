@@ -10,11 +10,6 @@ Phase 4 Plan 01: starts AsyncIOScheduler with 9 jobs:
 - weekly_sweeper (Phase 7 Plan 05): cron Sun 08:00 America/Los_Angeles — viral
   sweep over X API recent search + cross-referenced news stories under advisory
   lock 1019
-- 6 cron sub-agents (post-m49 — ALL on CronTrigger; no more IntervalTrigger):
-  - sub_breaking_news every hour at HH:00 UTC
-  - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, 09:17, 12:17, 15:17, 18:17, 21:17)
-  - sub_quotes / sub_infographics / sub_gold_media — daily 12:00 America/Los_Angeles
-  - sub_gold_history every other day (``day='*/2'``) at 12:00 America/Los_Angeles
 
 PostgreSQL advisory locks prevent duplicate execution during Railway
 zero-downtime deploys.
@@ -24,28 +19,18 @@ Decisions: D-12 (APScheduler 3.11.2), D-13 (advisory lock), D-14 (placeholder jo
 Phase 5 (SENR): morning_digest job wired to SeniorAgent; expiry_sweep removed in
 Phase 10; dedup/alerts/queue-cap/engagement surfaces removed in quick-260420-sn9.
 quick-260421-eoe: Content Agent cron + gold_history_agent cron retired; replaced
-by 7 independent sub-agent crons under agents.content.*.
-quick-260421-mos: sub_quotes moved from IntervalTrigger(2h) to
-CronTrigger(12:00 America/Los_Angeles); other 6 sub-agents unchanged.
-quick-260422-vxg: cadence rebalance — BN reverts 1h→2h, Threads+Long-form 2h→4h,
-Infographics/Gold Media/Gold History moved off interval onto cron (daily noon PT,
-except Gold History every-other-day noon PT via ``day='*/2'``).
-CONTENT_CRON_AGENTS tuple shape changed to (job_id, run_fn, name, lock_id,
-cron_kwargs: dict).
+by 7 independent sub-agent crons (later reduced to 6 by 260423-k8n's sub_long_form
+purge, and fully retired by 260519 Phase 8 UI-06 — see notes below).
 quick-260424-i8b: morning_digest → midday_digest (job id), retimed 07:00→12:30 PT,
 digest scope filter added (DIGEST_EXCLUDED_CONTENT_TYPES excludes breaking_news +
-thread content types already covered by the per-run firehose in content/__init__.py).
-quick-260424-j5i: sub_threads cadence 4h→3h (D9).
-quick-260424-kqa: sub_breaking_news cadence 2h→1h.
-quick-260427-m49: ALL sub-agents now use CronTrigger. The previous IntervalTrigger
-shape for sub_breaking_news + sub_threads fired the job ~10s after every
-scheduler restart (because start_date was set to ``now + offset + 10s``). Under
-Railway's zero-downtime redeploy churn, this caused breaking_news to fire
-multiple times per hour, looking like an "every few minutes" cadence to the
-user. Switching to CronTrigger makes runs clock-aligned and restart-immune:
-breaking_news at HH:00 UTC, threads at HH:17 UTC every 3h. CONTENT_INTERVAL_AGENTS
-retired entirely; both jobs moved into CONTENT_CRON_AGENTS with the same
-(job_id, run_fn, name, lock_id, cron_kwargs) tuple shape used by the other 4.
+thread content types already covered by the per-run firehose).
+Phase 8 UI-06 (260519): All v1.0 content sub-agents (sub_breaking_news,
+sub_threads, sub_quotes, sub_infographics, sub_gold_media, sub_gold_history)
+fully retired — source files + tests + lock IDs (1010-1016) stripped.
+Historical cron lineage (quick-260421-mos, quick-260422-vxg, quick-260424-j5i,
+quick-260424-kqa, quick-260427-m49) preserved in CLAUDE.md historical notes
+and git history; the precedent matches the 260420-sn9 + 260423-k8n purges
+(source code stripped, DB rows preserved). See CLAUDE.md for full lineage.
 """
 
 import asyncio
@@ -64,8 +49,7 @@ from database import (
 from models.agent_run import AgentRun
 from models.config import Config
 # agents.content.* imports removed in Phase 4 Task 4 — CONTENT_CRON_AGENTS emptied.
-# Source files (agents/content/breaking_news.py etc.) remain on disk as dead code.
-# Strip v2.1+ once 30-day post-deploy stability is confirmed.
+# Phase 8 UI-06 (260519): source files + tests fully stripped — see CLAUDE.md.
 from agents.senior_agent import SeniorAgent, seed_senior_config
 
 logging.basicConfig(
@@ -78,10 +62,13 @@ logger = logging.getLogger(__name__)
 # Initialized to None; set to the running AsyncIOScheduler instance in main().
 _scheduler: AsyncIOScheduler | None = None
 
-# Digest scope filter — quick-260424-i8b: breaking_news + threads are covered by the
-# per-run WhatsApp firehose in scheduler/agents/content/__init__.py. They MUST be
-# excluded from the 12:30 PT midday digest to avoid duplicate notifications.
-# Matches ContentBundle.content_type values verbatim (singular: "thread" not "threads").
+# Digest scope filter — quick-260424-i8b: historically excluded breaking_news +
+# threads from the 12:30 PT midday digest because they were covered by the per-run
+# WhatsApp firehose in agents/content/__init__.py. Phase 8 UI-06 (260519) stripped
+# both that firehose AND the midday_digest registration (Phase 1 CRIT-1) — the
+# constant is preserved as harmless dead code consumed by the midday_digest factory
+# (also preserved as dead code per D-07). Matches ContentBundle.content_type values
+# verbatim (singular: "thread" not "threads").
 DIGEST_EXCLUDED_CONTENT_TYPES: frozenset[str] = frozenset({"breaking_news", "thread"})
 
 
@@ -98,52 +85,41 @@ def get_scheduler() -> AsyncIOScheduler:
 # Stable integer lock IDs per job.
 # NEVER reuse an ID across different jobs — advisory locks are process-global.
 # These IDs are stable for the lifetime of the project.
-# quick-260421-eoe: retired content_agent(1003) + gold_history_agent(1009);
-# added sub_*(1010-1016) for the 7 content sub-agents.
+# Phase 8 UI-06 (260519): v1.0 sub_* entries (1010-1016) stripped — those IDs
+# MUST NEVER be reused for new jobs (see CLAUDE.md historical notes for the
+# 260519 strip rationale; precedent: 260420-sn9 + 260423-k8n).
 JOB_LOCK_IDS: dict[str, int] = {
-    "midday_digest": 1005,  # retained as dead code per Phase 1 plan (registration removed below; factory + dict entry left as dead code per CONTEXT — strip in v2.1+)
-    "sub_breaking_news": 1010,
-    "sub_threads": 1011,
-    "sub_quotes": 1013,
-    "sub_infographics": 1014,
-    "sub_gold_media": 1015,
-    "sub_gold_history": 1016,
-    # v2.0 daily_summary feed (Phase 1, Plan 05). Lock IDs 1017/1018 confirmed
-    # next-free by architecture-researcher direct grep (research/ARCHITECTURE.md
-    # rejects PITFALLS.md proposal of 1020/1021).
+    # midday_digest retained as dead code per Phase 1 Plan 05 (CRIT-1).
+    # Registration removed from build_scheduler; factory + dict entry preserved.
+    "midday_digest": 1005,
+
+    # v2.0 daily_summary feed (Phase 1, Plan 05).
     "daily_summary": 1017,
     "daily_summary_prune": 1018,
-    # v2.1 Phase 5: weekly_sweeper advisory lock reserved (used by Phase 7 cron).
-    # ID 1019 is the next-free integer above 1018 (1010-1016 are dead-code reserved).
+
+    # v2.1 Phase 7 weekly_sweeper cron (lock reserved Phase 5 Plan 01).
     "weekly_sweeper": 1019,
 }
 
 # OPS-02 — startup uniqueness assertion. Costs nothing and catches future
 # collisions immediately (CRIT-2 mitigation). Runs at module import time so
-# the worker process refuses to start if someone duplicates an ID.
+# the worker process refuses to start if someone duplicates an ID. v1.0 sub_*
+# entries (1010-1016) were stripped in Phase 8 UI-06 — those IDs MUST NEVER
+# be reused for new jobs (see CLAUDE.md historical notes for the 260519 strip
+# rationale).
 assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS), (
     f"JOB_LOCK_IDS has duplicate values: {JOB_LOCK_IDS}"
 )
 
 
-# Cron-scheduled sub-agents (post-m49 unified registration table).
-# Tuple shape: (job_id, run_fn, name, lock_id, cron_kwargs: dict). `cron_kwargs`
-# is unpacked directly into `CronTrigger(**cron_kwargs)` at registration time
-# so heterogeneous patterns coexist without extra tuple columns.
-#
-# Phase 4, Plan 01, Task 4 — user-approved deregistration (2026-04-27):
-# All 6 v1.0 sub-agent crons are DEREGISTERED by setting this list to [].
-# The registration loop in build_scheduler() is a no-op when the list is empty.
-# SOURCE FILES are preserved on disk (dead-code-only retirement — strip in v2.1+):
-#   - scheduler/agents/content/breaking_news.py   (sub_breaking_news, lock 1010)
-#   - scheduler/agents/content/threads.py         (sub_threads, lock 1011)
-#   - scheduler/agents/content/quotes.py          (sub_quotes, lock 1013)
-#   - scheduler/agents/content/infographics.py    (sub_infographics, lock 1014)
-#   - scheduler/agents/content/gold_media.py      (sub_gold_media, lock 1015)
-#   - scheduler/agents/content/gold_history.py    (sub_gold_history, lock 1016)
-# JOB_LOCK_IDS entries (1010-1016) preserved as dead code — mirrors how
-# midday_digest=1005 was preserved in Phase 1. NEVER reuse these IDs.
-# _make_sub_agent_job factory preserved as dead code (no callers when list empty).
+# Cron-scheduled sub-agents — empty list since Phase 4 Task 4 deregistration
+# (2026-04-27) and Phase 8 UI-06 source-file strip (260519). Retained as a
+# typed list so the registration loop in build_scheduler() remains a no-op
+# (and so any future revival can re-populate without refactor). Tuple shape
+# was (job_id, run_fn, name, lock_id, cron_kwargs: dict). _make_sub_agent_job
+# factory below is preserved as dead code (no callers when list is empty).
+# v1.0 lock IDs 1010-1016 are now FREE of dict membership but MUST NEVER be
+# reused — see JOB_LOCK_IDS comment above and CLAUDE.md historical notes.
 CONTENT_CRON_AGENTS: list[tuple[str, object, str, int, dict]] = []
 
 
@@ -333,8 +309,8 @@ async def _read_schedule_config(engine) -> dict[str, str]:
     Falls back to hardcoded defaults if DB is unreachable or keys are missing.
 
     quick-260421-eoe: the old content_agent and gold_history interval/cron
-    config keys are no longer read — sub-agents run on a fixed 2h cadence
-    with static offsets.
+    config keys are no longer read (the 6 sub-agent crons that replaced them
+    were themselves retired in Phase 8 UI-06 — 260519).
     """
     defaults = {
         # Hour is interpreted in America/Los_Angeles local time, NOT UTC.
@@ -367,31 +343,29 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 
 
 async def build_scheduler(engine) -> AsyncIOScheduler:
-    """Build the APScheduler instance with 9 jobs registered.
+    """Build the APScheduler instance with 3 jobs registered.
 
     - daily_summary: cron at 08:00 + 12:00 America/Los_Angeles (Phase 1 Plan 05).
     - daily_summary_prune: cron at 03:00 America/Los_Angeles (Phase 4 OPS-01).
     - weekly_sweeper: cron Sun 08:00 America/Los_Angeles (Phase 7 Plan 05).
-    - 6 cron sub-agents (post-m49 — all CronTrigger):
-      - sub_breaking_news every hour at HH:00 UTC
-      - sub_threads every 3h at HH:17 UTC (00:17, 03:17, 06:17, ..., 21:17)
-      - sub_quotes / sub_infographics / sub_gold_media daily at 12:00 PT
-      - sub_gold_history every other day at 12:00 PT
 
-    quick-260423-k8n: sub_long_form removed; 8 jobs → 7 jobs.
+    Phase 8 UI-06 (260519): all v1.0 content sub-agent crons fully retired
+    (source files + tests + lock IDs 1010-1016 stripped). Historical lineage:
+    quick-260423-k8n removed sub_long_form (8→7 jobs); Phase 4 Task 4 emptied
+    CONTENT_CRON_AGENTS (260427); Phase 8 UI-06 deleted the source files.
+    See CLAUDE.md historical notes for the full cron lineage timeline.
+
     quick-260424-i8b: morning_digest → midday_digest (job id), retimed 07:00→12:30 PT.
-    The digest CronTrigger now uses hardcoded hour=12, minute=30 literals; _read_schedule_config
-    is still called but its morning_digest_schedule_hour value is no longer consumed
-    (midday digest time is not DB-configurable — quick-260424-i8b locked it at 12:30 PT).
-    quick-260427-m49: sub_breaking_news + sub_threads moved off IntervalTrigger
-    onto CronTrigger so Railway redeploys can no longer trigger spurious runs
-    (the previous start_date=now+10s pattern fired the job ~10s after each
-    process start, producing visible cadence drift under deploy churn).
+    Phase 1 Plan 05 (CRIT-1): midday_digest registration removed; daily_summary
+    replaces it. _read_schedule_config is still called for its side effect (DB
+    seed parity) but morning_digest_schedule_hour is no longer consumed.
     """
     await _read_schedule_config(engine)  # reads DB config; morning_digest_schedule_hour no longer used
 
     logger.info(
-        "Schedule config: digest=cron(12:30 America/Los_Angeles), cron_sub_agents=%d jobs (BN every hour HH:00 UTC + Threads every 3h HH:17 UTC + 3× daily 12:00 America/Los_Angeles + 1× every-other-day 12:00 America/Los_Angeles via day='*/2')",
+        "Schedule config: 3 cron jobs (daily_summary 08:00+12:00 PT, "
+        "daily_summary_prune 03:00 PT, weekly_sweeper Sun 08:00 PT). "
+        "cron_sub_agents=%d (CONTENT_CRON_AGENTS empty post-Phase-8 UI-06 strip).",
         len(CONTENT_CRON_AGENTS),
     )
 
@@ -406,9 +380,8 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
 
     # midday_digest registration removed in Phase 1, Plan 05 (CRIT-1 / SUM-06).
     # The _make_midday_digest_job factory and JOB_LOCK_IDS["midday_digest"]=1005
-    # entry are intentionally left in place as dead code per the CONTEXT
-    # decision "dead-code-only retirement: do NOT delete v1.0 sub-agent source
-    # files". Strip in v2.1+ once 30-day stability is confirmed.
+    # entry are intentionally left in place as dead code per D-07 (Phase 8 UI-06
+    # strip retained midday_digest; v1.0 sub_* lock IDs 1010-1016 were removed).
 
     # daily_summary — fires at 08:00 PT and 12:00 PT (SUM-01).
     # CronTrigger(hour="8,12") fires the same advisory-lock ID twice daily; the
@@ -472,9 +445,9 @@ async def upsert_agent_config() -> None:
     Unlike seed_senior_config (insert-only), this OVERWRITES existing values so
     code-level config changes take effect without manual DB edits.
 
-    quick-260421-eoe: removed the old content_agent interval override —
-    sub-agents run on fixed cadences (sub_breaking_news=1h, others=2h). The
-    DB row may remain for manual cleanup but is no longer authoritative.
+    quick-260421-eoe: removed the old content_agent interval override (the
+    sub-agents that replaced it were later retired in Phase 8 UI-06 — 260519).
+    The DB row may remain for manual cleanup but is no longer authoritative.
 
     quick-260421-k9z: removed the content_agent_max_stories_per_run and
     content_agent_breaking_window_hours overrides — both were writes-only
