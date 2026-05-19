@@ -10,39 +10,37 @@ A 2x-daily AI gold-intelligence digest. Twice a day (08:00 PT + 12:00 PT) a cron
 
 Every piece of intelligence the digest surfaces must be genuinely useful to a senior gold analyst — a data point, an insight, a connection no one else made. If a bullet wouldn't make that analyst stop scrolling, it shouldn't be in the summary.
 
-## Current Milestone: v2.1 Three-Tab Content Engine + UI Polish
+## Current Milestone: v3.0 Multi-Tenant Dashboards — Juno Industries Onboarding
 
-**Goal:** Expand the v2.0 daily summary feed (a single-page product surface) into a 3-tab content engine: (1) News Funnel — the existing feed, becomes Tab 1 unchanged; (2) Content Calendar — a simple personal planning surface for content ideas; (3) Weekly Viral Sweeper — surfaces what's getting traction in the gold/mining sector via Reddit + story virality. Layer in a Linear-style UI redesign with amber-gold accents.
+**Goal:** Transform the single-tenant Seva Mining dashboard (shipped through v2.1) into a multi-tenant platform supporting per-company dashboards under one UI, with a company switcher in the header. Onboard **Juno Industries** (defence tech, Canada) as the second tenant, starting with the News Funnel — ingesting defence-industry news plus world events that relate to defence (geopolitical shifts, conflicts, military spending, defence tech announcements).
 
 **Target features:**
-- **Tab 1 — News Funnel:** Existing daily summary feed becomes the first tab in the new navigation. Content unchanged. Label: "News Funnel".
-- **Tab 2 — Content Calendar:** Weekly grid view, plan items with title + optional markdown notes + tag/category. Click-to-edit, drag-or-dropdown reschedule. New `calendar_items` DB table + REST CRUD endpoints. Optimistic UI via TanStack Query. **NO AI drafting, NO autoposting, NO scheduled cron triggers** — pure personal planning surface.
-- **Tab 3 — Weekly Viral Sweeper:** Sunday-morning cron (08:00 PT) ingests top Reddit posts (r/gold, r/Wallstreetsilver, r/silverbugs, etc. via `praw`) AND computes story virality from the existing news pipeline (count cross-references across feeds over past 7 days). Produces a weekly card with three sections: top Reddit posts, top viral stories, and 3 Sonnet-authored content angle suggestions. New `weekly_sweeps` DB table.
-- **UI redesign:** Linear-style modern SaaS aesthetic. Dark theme preserved, amber-gold accents (Tailwind `amber-500`), top tab navigation via shadcn `Tabs` primitive, refined Inter typography, generous whitespace, subtle borders + hover states.
+- **Multi-tenancy foundation** — `companies` table (or equivalent), per-company data isolation (row-level `company_id` vs schema-per-company — TBD in discuss-phase), company-switcher UX in `AppHeader` (frozen Phase 5 baseline gets a surgical addition), URL routing pattern (path prefix `/seva/` `/juno/` vs query param vs subdomain — TBD)
+- **Juno News Funnel (Tab 1 of Juno dashboard)** — defence-sector RSS ingestion (Janes, Defense News, Breaking Defense, RCAF, NATO, etc.); SerpAPI defence-news queries; world-events-relevant-to-defence heuristic via Sonnet filter (e.g. geopolitical/conflict/military-spending stories); Juno-scoped `daily_summary` cron writing to a Juno-isolated table/scope; Tab 1 renders the live feed with the same Linear-style amber/zinc design from v2.1
+- **Cross-tenant data integrity** — existing Seva data stays intact through the migration; defence ingestion doesn't bleed into gold-sector summaries and vice versa; OPS-02 advisory-lock uniqueness preserved if per-company schedulers are introduced
 
-**Budget:** $0 incremental — Reddit API is free (praw + read-only public access via OAuth client credentials), no X API revival, no new paid integrations. Total monthly cost stays ~$200.
+**Budget:** Incremental — defence-sector RSS feeds are free; SerpAPI defence-news queries add a small ($5-15/mo) overhead inside existing $50/mo SerpAPI budget; Sonnet calls for Juno daily summary add ~$5-10/mo. Total monthly cost target: ~$210-225/month (within original v1.0 envelope).
 
-**Stack additions:**
-- `praw` ~7.x (Python Reddit API Wrapper) — backend
-- `shadcn Tabs` component (Radix UI Tabs primitive on Tailwind v4 branch) — frontend
-- `@dnd-kit/core` for drag-and-drop OR date-dropdown fallback (research-determined)
-- 3 new env vars: `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`
+**Stack additions (suspected — will be confirmed during research):**
+- `feedparser` already present from v2.0; new defence-sector RSS feed URLs only
+- New env vars: `JUNO_*` namespace for any Juno-specific config (TBD — most config likely shared)
+- Possibly Alembic migration to add `company_id` column to `daily_summaries` (or new `juno_daily_summaries` table — strategy TBD)
 
 **Hard parts the roadmap addresses:**
-1. **Reddit API auth.** User creates a Reddit app at reddit.com/prefs/apps; stores client_id/secret in Railway env. Same setup pattern as SerpAPI/Twilio.
-2. **Drag-and-drop complexity.** Real DnD in a calendar grid is more code than it looks. Research evaluates `@dnd-kit/core` vs date-dropdown fallback — let the planner decide based on risk.
-3. **Story virality compute.** URL-similarity dedup (SequenceMatcher 0.85 threshold per existing content_agent pattern) over `daily_summaries.raw_sources_jsonb.gold_news[].link` for the past 7 days. Heaviest piece of sweeper logic.
-4. **Sonnet "3 content angles" generation.** Single weekly Sonnet call combining Reddit + virality inputs.
-5. **UI migration.** Restructure App.tsx routes: `/` becomes the tabbed layout; legacy redirects from v2.0 must be preserved.
+1. **Multi-tenancy data isolation strategy.** Row-level `company_id` (single table, simpler queries) vs schema-per-company (cleaner isolation, harder migrations) vs separate tables (`juno_daily_summaries`). Decision affects every downstream piece.
+2. **Company switcher UX without breaking Phase 5's frozen `AppHeader.tsx`.** Surgical addition: a dropdown or segmented control next to the brand mark, with state in URL (path-prefix routing) so deep links and browser back/forward work cleanly.
+3. **Defence-sector news heuristic.** What counts as "defence industry news"? What counts as "world events relevant to defence"? Sonnet relevance filter needs a tight system prompt to avoid noise (e.g. excluding consumer tech, sports, finance unless directly defence-adjacent).
+4. **Scheduler topology.** One cron that fans out per-company, or one cron per company? OPS-02 lock-ID assignment for Juno's daily_summary job.
+5. **Migrating Seva data without downtime.** If we add `company_id` column, backfill all existing rows to `company_id='seva'` in the same migration. No data loss.
 
-**Out of scope (explicit exclusions for v2.1):**
-- AI content drafting (v1.0 sub-agents stay retired)
-- Autoposting to X / IG / LinkedIn (Phase B stays dormant)
-- Instagram / LinkedIn integration
-- Live macro stat indicators (FRED API — deferred to v2.2)
-- Kitco scraping (deferred to v2.2)
-- Mobile-responsive UI (desktop-only constraint preserved)
-- WhatsApp ping for calendar items (deferred to v2.2)
+**Out of scope (explicit exclusions for v3.0 — deferred to v3.1+):**
+- Juno Content Calendar (Tab 2) — same paper-planner UI but Juno-scoped, deferred
+- Juno Weekly Viral Sweeper (Tab 3) — defence-sector X API queries + virality compute, deferred
+- Per-company branding/color palettes (Juno keeps the same amber/zinc baseline initially; brand customization is a v3.1+ feature)
+- Adding a third company beyond Seva + Juno (v3.0 proves the pattern with two; N companies is v3.2+)
+- Mobile-responsive UI (still single-user desktop, same constraint as v2.x)
+- Cross-company analytics / unified dashboards
+- Per-company user permissions (single-operator model continues; the operator sees all companies they can switch into)
 
 ## Requirements
 
@@ -192,4 +190,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 — v2.1 milestone COMPLETE. All 4 phases shipped (5 Foundation, 6 Content Calendar, 7 Weekly Viral Sweeper with X-API pivot, 8 UI Polish + Dead-Code Strip). 3-tab content engine live with Linear-style amber/zinc design; v1.0 sub-agent dead-code removed.*
+*Last updated: 2026-05-19 — Milestone v3.0 initiated. Multi-tenant pivot: single-tenant Seva dashboard becomes a multi-tenant platform onboarding Juno Industries (defence tech, Canada) starting with the News Funnel. v2.1 complete (3-tab content engine + Linear UI + dead-code strip); v3.0 carries that surface forward and adds a company switcher.*

@@ -1,31 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: — Three-Tab Content Engine + UI Polish
-status: Milestone complete
-stopped_at: Completed 08-04-PLAN.md (Wave 3 UI-06 dead-code strip — Phase 8 complete; v2.1 milestone READY for verification)
-last_updated: "2026-05-19T18:24:10.222Z"
+milestone: v3.0
+milestone_name: — Multi-Tenant Dashboards (Juno Industries Onboarding)
+status: Defining requirements
+stopped_at: Milestone v3.0 started — PROJECT.md updated, gathering requirements
+last_updated: "2026-05-19T19:00:00.000Z"
 last_activity: 2026-05-19
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 20
-  completed_plans: 20
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-18)
+See: .planning/PROJECT.md (updated 2026-05-19)
 
-**Core value:** Every piece of intelligence the digest surfaces must be genuinely useful to a senior gold analyst — a data point, an insight, a connection no one else made.
-**Current focus:** Phase 08 — ui-polish-dead-code-strip
+**Core value:** Every piece of intelligence the digest surfaces must be genuinely useful to the senior analyst for that company (gold for Seva, defence for Juno) — a data point, an insight, a connection no one else made.
+**Current focus:** Milestone v3.0 — defining requirements (multi-tenancy + Juno News Funnel)
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-19 — Milestone v3.0 started (PROJECT.md updated for multi-tenant pivot)
 
 ## Performance Metrics
 
