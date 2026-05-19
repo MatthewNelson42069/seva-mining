@@ -136,7 +136,12 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 4. Today's cell is visually distinguished (amber-500 ring + background tint); items display tag-color-coded chips; cells with more than 3 items show a "+N more" badge
 5. `GET /calendar` with `start=` and `end=` date params returns items in `date ASC` order; dates round-trip as `"YYYY-MM-DD"` strings regardless of Railway timezone (no UTC off-by-one)
 
-**Plans:** TBD
+**Plans:** 5 plans
+- [ ] 06-01-PLAN.md — Requirements rephrase + Migration 0013 (title nullable + UNIQUE(date)) + Pydantic schemas (Wave 1)
+- [ ] 06-02-PLAN.md — Full CRUD router replace + pytest coverage including P1/P4 defenses (Wave 2, depends on 06-01)
+- [ ] 06-03-PLAN.md — Frontend API module + useCalendar hook + 3 optimistic mutation hooks with rollback (Wave 2, depends on 06-01)
+- [ ] 06-04-PLAN.md — ISO week helpers + DayCell (textarea + auto-save 4-way branch) + WeeklyGrid (Wave 3, depends on 06-02 + 06-03)
+- [ ] 06-05-PLAN.md — WeekNav + live ContentCalendarPage + human-verify checkpoint (Wave 4, depends on 06-04)
 
 **UI hint**: yes
 
