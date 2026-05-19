@@ -136,6 +136,7 @@ def test_retired_crons_absent_from_job_lock_ids():
     quick-260424-i8b: morning_digest key renamed to midday_digest (lock ID 1005 unchanged).
     Phase 1 Plan 05: daily_summary=1017 + daily_summary_prune=1018 added; midday_digest retained
     as dead code (registration removed from build_scheduler; factory + dict entry kept per CONTEXT).
+    Phase 5 Plan 05-01: weekly_sweeper=1019 reserved (registration ships Phase 7 Plan 05).
     """
     assert "content_agent" not in JOB_LOCK_IDS
     assert "gold_history_agent" not in JOB_LOCK_IDS
@@ -143,8 +144,9 @@ def test_retired_crons_absent_from_job_lock_ids():
     assert "expiry_sweep" not in JOB_LOCK_IDS
     assert "sub_long_form" not in JOB_LOCK_IDS  # retired per quick-260423-k8n
     assert "morning_digest" not in JOB_LOCK_IDS  # renamed to midday_digest per quick-260424-i8b
-    # 9 keys total: midday_digest (dead code) + 6 sub-agents + daily_summary + daily_summary_prune
-    assert len(JOB_LOCK_IDS) == 9
+    # 10 keys total: midday_digest (dead code) + 6 sub-agents + daily_summary +
+    # daily_summary_prune + weekly_sweeper
+    assert len(JOB_LOCK_IDS) == 10
     assert set(JOB_LOCK_IDS.keys()) == {
         "midday_digest",        # dead code — registration removed Phase 1 Plan 05 (CRIT-1)
         "sub_breaking_news",
@@ -155,18 +157,20 @@ def test_retired_crons_absent_from_job_lock_ids():
         "sub_gold_history",
         "daily_summary",        # Phase 1 Plan 05
         "daily_summary_prune",  # Phase 1 Plan 05 (registration ships Phase 4)
+        "weekly_sweeper",       # Phase 5 Plan 05-01 reservation; Phase 7 Plan 05 registration
     }
 
 
 @pytest.mark.asyncio
-async def test_scheduler_registers_2_jobs_after_v1_deregistration():
-    """build_scheduler() registers exactly 2 jobs after Phase 4 v1.0 deregistration.
+async def test_scheduler_registers_3_jobs_after_v1_deregistration():
+    """build_scheduler() registers exactly 3 jobs after Phase 7 weekly_sweeper add.
 
     Phase 1 Plan 05 (CRIT-1 / SUM-06): midday_digest registration REMOVED;
     daily_summary registration ADDED.
     Phase 4 Plan 01 Task 1: daily_summary_prune ADDED.
     Phase 4 Plan 01 Task 4: 6 v1.0 sub-agent crons DEREGISTERED (user-approved).
-    Final state: 2 jobs — daily_summary + daily_summary_prune.
+    Phase 7 Plan 05 (SWEEP-09): weekly_sweeper ADDED.
+    Final state: 3 jobs — daily_summary + daily_summary_prune + weekly_sweeper.
     """
     mock_engine = MagicMock()
     with patch(
@@ -182,10 +186,11 @@ async def test_scheduler_registers_2_jobs_after_v1_deregistration():
             [
                 "daily_summary",        # Phase 1 Plan 05 replacement for midday_digest
                 "daily_summary_prune",  # Phase 4 Plan 01 (OPS-01)
+                "weekly_sweeper",       # Phase 7 Plan 05 (SWEEP-09)
             ]
         )
         assert ids == expected, f"expected {expected}, got {ids}"
-        assert len(jobs) == 2
+        assert len(jobs) == 3
         assert "midday_digest" not in ids, "midday_digest must be removed (CRIT-1)"
     finally:
         if scheduler.running:
@@ -714,8 +719,8 @@ def test_content_cron_agents_is_empty_after_v1_deregistration():
 async def test_build_scheduler_omits_v1_sub_agent_crons():
     """build_scheduler must NOT register any sub_* jobs after v1.0 deregistration.
 
-    The scheduler after Phase 4 Task 4 contains exactly:
-      daily_summary, daily_summary_prune
+    The scheduler after Phase 4 Task 4 + Phase 7 Plan 05 contains exactly:
+      daily_summary, daily_summary_prune, weekly_sweeper
     — no sub_breaking_news, sub_threads, sub_quotes, sub_infographics,
     sub_gold_media, or sub_gold_history.
     """
@@ -739,11 +744,12 @@ async def test_build_scheduler_omits_v1_sub_agent_crons():
             assert sub_id not in job_ids, (
                 f"v1.0 sub-agent job '{sub_id}' must NOT be registered after deregistration"
             )
-        # Verify the v2.0 jobs are still present
+        # Verify the v2.0 + Phase 7 jobs are still present
         assert "daily_summary" in job_ids, "daily_summary must remain registered"
         assert "daily_summary_prune" in job_ids, "daily_summary_prune must remain registered"
-        assert len(job_ids) == 2, (
-            f"Scheduler should have exactly 2 jobs after v1.0 deregistration, got {len(job_ids)}: {job_ids}"
+        assert "weekly_sweeper" in job_ids, "weekly_sweeper must be registered (Phase 7 Plan 05)"
+        assert len(job_ids) == 3, (
+            f"Scheduler should have exactly 3 jobs after Phase 7 Plan 05, got {len(job_ids)}: {job_ids}"
         )
     finally:
         if scheduler.running:
@@ -778,3 +784,75 @@ async def test_reconcile_stale_runs_sweeps_daily_summary_prune_orphan():
     )
     params = stmt.compile().params
     assert params.get("status") == "failed" or "failed" in str(params)
+
+
+# ---------------------------------------------------------------------------
+# Weekly sweeper registration tests — Phase 7, Plan 05
+# ---------------------------------------------------------------------------
+
+
+def test_weekly_sweeper_in_job_lock_ids():
+    """SWEEP-03 — lock ID 1019 reserved in Phase 5 must still be present."""
+    import worker
+    assert "weekly_sweeper" in worker.JOB_LOCK_IDS
+    assert worker.JOB_LOCK_IDS["weekly_sweeper"] == 1019
+
+
+def test_job_lock_ids_unique():
+    """OPS-02 — all lock IDs must remain unique after Phase 7 changes."""
+    import worker
+    assert len(set(worker.JOB_LOCK_IDS.values())) == len(worker.JOB_LOCK_IDS), (
+        f"Duplicate lock IDs detected: {worker.JOB_LOCK_IDS}"
+    )
+
+
+def test_make_weekly_sweeper_job_returns_callable():
+    """The factory must return an async-callable inner function."""
+    import inspect
+    import worker
+    mock_engine = object()  # never invoked — we don't call the inner function
+    job = worker._make_weekly_sweeper_job(mock_engine)
+    assert callable(job), "factory did not return a callable"
+    assert inspect.iscoroutinefunction(job), "factory return is not async"
+
+
+@pytest.mark.asyncio
+async def test_build_scheduler_registers_weekly_sweeper(monkeypatch):
+    """SWEEP-09 — build_scheduler() must register a job with id='weekly_sweeper'
+    and CronTrigger(day_of_week='sun', hour=8, minute=0, timezone='America/Los_Angeles').
+    """
+    import worker
+
+    # _read_schedule_config does a real DB call — mock it
+    async def fake_read_config(engine):
+        return {"morning_digest_schedule_hour": "7"}
+
+    monkeypatch.setattr(worker, "_read_schedule_config", fake_read_config)
+
+    # Use a sentinel engine — never actually connected since we just inspect the scheduler
+    mock_engine = object()
+    sched = await worker.build_scheduler(mock_engine)
+
+    try:
+        jobs_by_id = {j.id: j for j in sched.get_jobs()}
+        assert "weekly_sweeper" in jobs_by_id, (
+            f"weekly_sweeper not registered. Registered jobs: {list(jobs_by_id.keys())}"
+        )
+
+        ws_job = jobs_by_id["weekly_sweeper"]
+        trigger = ws_job.trigger
+
+        # APScheduler CronTrigger stores fields in trigger.fields (list of CronField objects)
+        # Check by stringified field representation — robust across APScheduler versions
+        field_strs = {f.name: str(f) for f in trigger.fields}
+        assert field_strs.get("day_of_week", "").lower() in ("sun", "6"), (
+            f"day_of_week wrong: {field_strs.get('day_of_week')}"
+        )
+        assert field_strs.get("hour") == "8", f"hour wrong: {field_strs.get('hour')}"
+        assert field_strs.get("minute") == "0", f"minute wrong: {field_strs.get('minute')}"
+        assert str(trigger.timezone) == "America/Los_Angeles", (
+            f"timezone wrong: {trigger.timezone}"
+        )
+    finally:
+        if sched.running:
+            sched.shutdown(wait=False)
