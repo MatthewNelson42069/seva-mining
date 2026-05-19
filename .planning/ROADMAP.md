@@ -205,7 +205,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 6. If one of the 4 subreddits returns 403, the sweeper completes with the remaining subreddits' posts and writes the subreddit error into `agent_runs.errors`; `status` is `partial`, not `failed`
 
 **Plans:** 6 plans
-- [ ] 07-01-PLAN.md — Wave 1: REQUIREMENTS.md X-API rescoping (drop SWEEP-01/02; replace SWEEP-04/05; rephrase SWEEP-08/13) + Pydantic schemas `WeeklySweepCard` + `WeeklySweepFeedResponse`
+- [x] 07-01-PLAN.md — Wave 1: REQUIREMENTS.md X-API rescoping (drop SWEEP-01/02; replace SWEEP-04/05; rephrase SWEEP-08/13) + Pydantic schemas `WeeklySweepCard` + `WeeklySweepFeedResponse`
 - [ ] 07-02-PLAN.md — Wave 2: `scheduler/agents/x_ingest.py` — `fetch_top_x_posts(query, max_results=100)` via tweepy AsyncClient + quota gate (twitter_monthly_tweet_count, 500 safety margin) + engagement re-rank, with pytest coverage of 7+ branches (SWEEP-04/05)
 - [ ] 07-03-PLAN.md — Wave 2: `backend/app/routers/weekly_sweeps.py` — replace Phase 5 stub with full `GET /weekly-sweeps?limit=12` (ge=1 le=52, generated_at DESC, auth-gated) + pytest coverage (SWEEP-12)
 - [ ] 07-04-PLAN.md — Wave 3: `scheduler/agents/weekly_sweeper.py` — `run_weekly_sweeper()` orchestrator with `_compute_virality` (P3 NULL guard + P10 URL canonicalization + P9 per-row dedup), Sonnet call (P6/P7/P8/P14 defenses), P15 insufficient-signal fallback, SWEEP-11 status mapping, P13 `__main__` escape hatch + pytest coverage of 8+ branches (SWEEP-06/07/08/10/11)
