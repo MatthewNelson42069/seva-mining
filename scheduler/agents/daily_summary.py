@@ -782,13 +782,20 @@ async def run_juno_daily_summary() -> None:
     period_label = _derive_period_label(now_la)
 
     # Idempotency — per-company check (uses scoped_summaries('juno')).
+    # NOTE: Juno's run always writes status='partial' in v3.0 (Phase 10 will
+    # fill the real content). The Seva-side _idempotency_skip excludes
+    # 'partial'/'failed' so a flaky run can be retried — but Juno's
+    # successful run IS partial in Phase 9, so 'partial' MUST be treated
+    # as an idempotency hit here. Otherwise back-to-back fires within the
+    # window write duplicate Juno rows. (v3.0 Phase 9 Wave 4 — bug found
+    # during 09-05 smoke-test; Rule 1 auto-fix.)
     async with AsyncSessionLocal() as session:
         cutoff = now_utc - timedelta(minutes=IDEMPOTENCY_WINDOW_MIN)
         stmt = (
             scoped_summaries("juno")
             .with_only_columns(DailySummary.id)
             .where(DailySummary.generated_at >= cutoff)
-            .where(DailySummary.status.in_(["running", "completed"]))
+            .where(DailySummary.status.in_(["running", "completed", "partial"]))
             .limit(1)
         )
         result = await session.execute(stmt)

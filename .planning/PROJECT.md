@@ -171,6 +171,8 @@ Every piece of intelligence the digest surfaces must be genuinely useful to a se
 | Skip multi-tenancy for v1 | No over-engineering — refactor when second client actually exists | — Pending |
 | Neon free tier | Upgrade to Pro ($19/mo) when 512MB storage limit is reached | — Pending |
 | Event mode for Twitter | Engagement spike (3x+) OR significant price movement triggers higher output (8-10 posts) | — Pending |
+| 2026-05-19 — v3.0 Phase 9 — AppHeader freeze formally lifted | Phase 5 byte-freeze of `AppHeader.tsx` lifted per 09-CONTEXT.md D-02. Surgical 5-line `<CompanySwitcher />` insert between brand-mark `<div>` and Logout `<button>`. Brand mark + wordmark stay "Seva Mining" on both tenants per D-02a; per-tenant branding deferred to v3.1+ (TENANT-BRAND-v31). Third documentation location per D-02 (a = 09-SUMMARY.md Decisions section; b = inline `// v3.0 freeze-lift (Phase 9) — see 09-CONTEXT.md D-02` comment in AppHeader.tsx; c = this entry). | Locked |
+| 2026-05-19 — v3.0 Phase 9 — Multi-tenancy strategy: row-level company_id | Per 09-CONTEXT.md D-03 — Alembic 0014 adds `company_id` column + CHECK constraint `IN ('seva', 'juno')` to all three multi-tenant tables (`daily_summaries`, `calendar_items`, `weekly_sweeps`); `ACTIVE_COMPANIES: Literal["seva", "juno"]` lives in backend + scheduler `companies/__init__.py`. No `companies` DB table in v3.0 — accepted tech debt; close in v3.2+ when N>2 tenants requires a real table (REQUIREMENTS.md TENANT-N-v32). All tenant-scoped reads route through `backend/app/queries/scoped.py` helpers; CI grep gate (`scripts/verify-tenant-isolation.sh`) enforces no raw `select(DailySummary | CalendarItem | WeeklySweep)` outside that module. | Locked |
 
 ## Evolution
 
