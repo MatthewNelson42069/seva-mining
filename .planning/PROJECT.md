@@ -61,6 +61,9 @@ Every piece of intelligence the digest surfaces must be genuinely useful to a se
 - ✓ Three-tab dashboard shell + route restructure with auth-gate preservation (TAB-01..05) — v2.1 Phase 5
 - ✓ `calendar_items` + `weekly_sweeps` tables (Alembic 0011/0012) with dual-model SQLAlchemy parity and auth-gated stub routers (DB-01..05) — v2.1 Phase 5
 
+**v2.1 Content Calendar — Paper-Planner Model (shipped 2026-05-19):**
+- ✓ Weekly Mon-Sun grid where each day is a direct-edit textarea with auto-save on blur; full CRUD over `calendar_items` with optimistic mutations + rollback; 1 row per date enforced via Alembic 0013 (title nullable + UNIQUE(date)); plain text only, no tags/dialogs/chips per user simplification (CAL-01..10) — v2.1 Phase 6
+
 **v1.0.1 Approval Dashboard (deprecated by v2.0 pivot, source retained as dead code):**
 - ✓ Validated in Phase 8: DigestPage daily digest with prev/next navigation (DGST-01..03)
 - ✓ Validated in Phase 8: ContentPage content review with format-specific rendering and approve flow (CREV-01..05)
