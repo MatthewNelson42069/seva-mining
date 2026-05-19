@@ -69,9 +69,9 @@ Linear-style dark theme with amber-500 accents applied across all 3 tabs. Existi
 - [x] **UI-02**: System refines spacing tokens — generous whitespace inside cards (`p-6` minimum), `gap-6` between card sections, `space-y-4` between section bullets in markdown rendering; matches the Linear/Vercel dashboard density target
 - [x] **UI-03**: System refines typography weights using existing Geist Variable font — headings 600, sub-headings 500, body 400, monospace numerics for upvote counts (Reddit posts) and source counts (virality stories); NO font swap to Inter
 - [x] **UI-04**: System refines subtle borders + hover states on all cards using `border border-zinc-800` baseline + `hover:border-zinc-700` transition; consistent across summary cards, calendar items, sweep card sections
-- [ ] **UI-05** *(rephrased 2026-05-19 per Phase 8 D-01 — X-API pivot in Phase 7 dropped Reddit)*: System renders X-handle attribution as monospace-styled pills (e.g., `@handle` in `font-mono text-xs bg-zinc-800/60 px-2 py-0.5 rounded`); pill is a clickable link to `https://x.com/{handle}` (target=_blank, rel=noopener) with `hover:border-amber-500/40 hover:text-amber-300 transition-colors`; transformation applied via `rehypeHandleMentions` rehype plugin so both bare `@handle` text and existing `[@handle](url)` markdown links route through the same pill component
+- [x] **UI-05** *(rephrased 2026-05-19 per Phase 8 D-01 — X-API pivot in Phase 7 dropped Reddit)*: System renders X-handle attribution as monospace-styled pills (e.g., `@handle` in `font-mono text-xs bg-zinc-800/60 px-2 py-0.5 rounded`); pill is a clickable link to `https://x.com/{handle}` (target=_blank, rel=noopener) with `hover:border-amber-500/40 hover:text-amber-300 transition-colors`; transformation applied via `rehypeHandleMentions` rehype plugin so both bare `@handle` text and existing `[@handle](url)` markdown links route through the same pill component
 - [ ] **UI-06**: System strips v1.0 dead-code content sub-agent source files (`scheduler/agents/content/*.py` for retired formats + dead-code lock-ID dict entries 1010-1016 + comments referencing them) once Phases 5-7 are merged and verifier confirms no surviving callers; runs as the final task of Phase 8
-- [ ] **UI-07**: System completes a visual QA pass across all 3 tabs at desktop resolution (1440x900 minimum) — confirms no layout regressions, no dark-mode contrast failures (WCAG AA on text), and no broken shadcn primitive interactions; intentionally skips mobile-responsive (out of scope per single-user desktop constraint)
+- [x] **UI-07**: System completes a visual QA pass across all 3 tabs at desktop resolution (1440x900 minimum) — confirms no layout regressions, no dark-mode contrast failures (WCAG AA on text), and no broken shadcn primitive interactions; intentionally skips mobile-responsive (out of scope per single-user desktop constraint)
 
 ## v2.2+ Requirements
 
@@ -150,9 +150,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-02 | Phase 8 | Complete |
 | UI-03 | Phase 8 | Complete |
 | UI-04 | Phase 8 | Complete |
-| UI-05 | Phase 8 | Pending |
+| UI-05 | Phase 8 | Complete (2026-05-19, plan 08-03) |
 | UI-06 | Phase 8 | Pending |
-| UI-07 | Phase 8 | Pending |
+| UI-07 | Phase 8 | Complete (2026-05-19, plan 08-03) |
 
 **Coverage:**
 - v2.1 requirements: 41 total (5 TAB + 5 DB + 10 CAL + 14 SWEEP + 7 UI)
