@@ -96,3 +96,62 @@ def test_weekly_sweep_uses_date_for_week_boundaries(scheduler_path):
             assert isinstance(col.type, Date), (
                 f"{label} WeeklySweep.{col_name} type is {type(col.type).__name__}; expected Date"
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 9 Wave 0 RED — DailySummary parity (TENANT-01)
+#
+# Mirrors the CalendarItem + WeeklySweep parity tests above. DailySummary
+# parity is added in v3.0 because Phase 9 dual-edits the backend AND
+# scheduler models to add `company_id`. This was not covered by the
+# pre-existing parity suite (which only covered CalendarItem + WeeklySweep).
+#
+# (Iteration 2 — Warning 1 EXCEPTION) Per-function skip is used here
+# instead of module-level skip — otherwise the existing CalendarItem +
+# WeeklySweep parity tests above would also skip, regressing Phase 5 GREEN
+# coverage. Wave 1 (09-02-PLAN.md Task 2 step 7) removes the per-function
+# skip below to turn this test GREEN.
+# ---------------------------------------------------------------------------
+
+
+def test_daily_summary_parity(scheduler_path):
+    """Phase 9 Wave 0 RED — DailySummary parity across backend + scheduler.
+
+    Asserts both DailySummary models share the same __tablename__, column
+    names, and column types — including the v3.0 Phase 9 addition of
+    `company_id VARCHAR(20) NOT NULL DEFAULT 'seva'`.
+    """
+    pytest.skip(
+        "DailySummary parity requires company_id column — lands in Wave 1 "
+        "(09-02-PLAN.md). Remove this line in Wave 1 Task 2 step 7 to turn "
+        "this test GREEN.",
+        allow_module_level=False,
+    )
+    # The body below is currently unreachable (skip above).
+    # Wave 1 removes the skip line so this body runs.
+
+    from app.models.daily_summary import DailySummary as BackendDS
+
+    from models.daily_summary import DailySummary as SchedulerDS
+
+    assert BackendDS.__tablename__ == SchedulerDS.__tablename__ == "daily_summaries"
+
+    backend_cols = _columns_by_name(BackendDS)
+    scheduler_cols = _columns_by_name(SchedulerDS)
+
+    assert set(backend_cols.keys()) == set(scheduler_cols.keys()), (
+        f"Column name mismatch: backend={set(backend_cols)} scheduler={set(scheduler_cols)}"
+    )
+    for name in backend_cols:
+        assert backend_cols[name] == scheduler_cols[name], (
+            f"Column {name}: backend type={backend_cols[name]!r} "
+            f"scheduler type={scheduler_cols[name]!r}"
+        )
+
+    # Explicit v3.0 Phase 9 — both sides MUST carry the new company_id column.
+    assert "company_id" in backend_cols, (
+        "v3.0 Phase 9: backend DailySummary must carry company_id column"
+    )
+    assert "company_id" in scheduler_cols, (
+        "v3.0 Phase 9: scheduler DailySummary must carry company_id column"
+    )
