@@ -16,15 +16,19 @@ from pydantic import BaseModel, ConfigDict
 
 
 class WeeklySweepCard(BaseModel):
-    """One weekly sweep card returned by GET /weekly-sweeps.
+    """One weekly sweep card returned by GET /api/{company}/weekly-sweeps.
 
     Mirrors columns from backend/app/models/weekly_sweep.py with
     raw_sources_jsonb omitted (matches SummaryCardResponse pattern —
     internal telemetry, not for the UI).
+
+    v3.0 Phase 9 (TENANT-04): `company_id` surfaced as optional for debug
+    visibility — the URL prefix carries authoritative tenant scope.
     """
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    company_id: str | None = None  # v3.0 P9 — debug visibility (TENANT-04)
     generated_at: datetime
     week_start: date
     week_end: date

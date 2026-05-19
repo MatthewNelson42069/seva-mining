@@ -54,10 +54,15 @@ class CalendarItemResponse(BaseModel):
     the ORM column name is retained for schema-history reasons (Phase 5
     migration 0011 used `notes_md`), but the API contract surfaces it as
     the more semantically-correct `body`.
+
+    v3.0 Phase 9 (TENANT-04): `company_id` surfaced as optional for debug
+    visibility — the URL prefix carries authoritative tenant scope, but the
+    response field makes cross-tenant leaks observable.
     """
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: uuid.UUID
+    company_id: str | None = None  # v3.0 P9 — debug visibility (TENANT-04)
     date: date_type
     body: str | None = Field(default=None, alias="notes_md")
     created_at: datetime

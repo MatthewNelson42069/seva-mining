@@ -100,14 +100,20 @@ class RawSources(BaseModel):
 # ---------------------------------------------------------------------------
 
 class SummaryCardResponse(BaseModel):
-    """Card payload returned by GET /summaries.
+    """Card payload returned by GET /api/{company}/summaries.
 
     raw_sources_jsonb intentionally omitted — large forensics blob; if a
     detail endpoint is added later it can return it.
+
+    v3.0 Phase 9 (TENANT-04): `company_id` surfaced as optional for debugging
+    visibility — the URL already carries the tenant, but exposing the column
+    on the response makes cross-tenant leaks immediately visible in network
+    inspector / curl.
     """
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    company_id: str | None = None  # v3.0 P9 — debug visibility (TENANT-04)
     generated_at: datetime
     period_label: str
     gold_news_md: str | None

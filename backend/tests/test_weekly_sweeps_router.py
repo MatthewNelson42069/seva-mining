@@ -58,6 +58,10 @@ def make_sweep(
     sweep.status = status
     sweep.error_text = error_text
     sweep.agent_run_id = None
+    # v3.0 Phase 9 — Pydantic WeeklySweepCard.company_id is `str | None`.
+    # MagicMock auto-attr would return a MagicMock instance → Pydantic 422.
+    # Default to 'seva' (matches DB server_default).
+    sweep.company_id = "seva"
     return sweep
 
 
@@ -102,7 +106,7 @@ def authed_headers() -> dict:
 async def test_auth_required():
     """GET /weekly-sweeps without Authorization header returns 401."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/weekly-sweeps")
+        resp = await ac.get("/api/seva/weekly-sweeps")
     assert resp.status_code == 401
 
 
@@ -116,7 +120,7 @@ async def test_list_empty():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body == {"sweeps": [], "total": 0}
@@ -141,7 +145,7 @@ async def test_list_populated_desc_order():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert len(body["sweeps"]) == 3
@@ -156,14 +160,14 @@ async def test_list_populated_desc_order():
 async def test_limit_clamp_zero():
     """limit=0 returns 422 (ge=1 clamp via FastAPI Query validation)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/weekly-sweeps?limit=0", headers=authed_headers())
+        resp = await ac.get("/api/seva/weekly-sweeps?limit=0", headers=authed_headers())
     assert resp.status_code == 422
 
 
 async def test_limit_clamp_too_high():
     """limit=53 returns 422 (le=52 clamp per SWEEP-12)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/weekly-sweeps?limit=53", headers=authed_headers())
+        resp = await ac.get("/api/seva/weekly-sweeps?limit=53", headers=authed_headers())
     assert resp.status_code == 422
 
 
@@ -181,7 +185,7 @@ async def test_limit_smaller_than_total():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/weekly-sweeps?limit=5", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps?limit=5", headers=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert len(body["sweeps"]) == 5
@@ -203,7 +207,7 @@ async def test_status_serialization():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body["sweeps"][0]["status"] == "partial"
@@ -224,7 +228,7 @@ async def test_response_card_shape():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
         assert resp.status_code == 200
         card = resp.json()["sweeps"][0]
         # raw_sources_jsonb is internal telemetry and MUST NOT leak (matches SummaryCardResponse)

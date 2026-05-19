@@ -44,13 +44,11 @@ ALLOWED=(
 # the full list. Each entry MUST be paired with a Wave 2 task that refactors
 # that call site and deletes the entry from this array in the same commit.
 PRE_WAVE_2_WHITELIST=(
-  # Routers — Wave 2 Task 1 will refactor each to use scoped_*().
-  "backend/app/routers/summaries.py"      # TODO(Wave2): use scoped_summaries(company_id)
-  "backend/app/routers/calendar.py"       # TODO(Wave2): use scoped_calendar(company_id)
-  "backend/app/routers/weekly_sweeps.py"  # TODO(Wave2): use scoped_weekly_sweeps(company_id)
-  # Scheduler agents — Wave 2 Task 2 + Task 3 will refactor each.
-  "scheduler/agents/daily_summary.py"     # TODO(Wave2): use scoped_summaries(company_id) — lines 146, 521 column-select
-  "scheduler/agents/weekly_sweeper.py"    # TODO(Wave2): use scoped_summaries + scoped_weekly_sweeps — lines 131, 320
+  # v3.0 Phase 9 Wave 2 (09-03-PLAN.md): all 5 entries removed as routers + scheduler
+  # agents now route through the canonical scoped helpers
+  # (backend/app/queries/scoped.py + scheduler/queries/scoped.py).
+  # Wave 2 Task 1: backend/app/routers/{summaries,calendar,weekly_sweeps}.py — REFACTORED.
+  # Wave 2 Task 2: scheduler/agents/{daily_summary,weekly_sweeper}.py raw selects — REFACTORED.
 )
 
 # Recommended regex from RESEARCH §Code Example 7 Note:
@@ -84,5 +82,7 @@ if [ -n "$filtered" ]; then
 fi
 
 echo "PASS — all tenant-scoped selects routed through queries/scoped.py"
-echo "      (5 pre-Wave-2 call sites whitelisted — see PRE_WAVE_2_WHITELIST)"
+echo "      (Wave 2 complete: PRE_WAVE_2_WHITELIST emptied; all 5 prior raw"
+echo "       select() call sites now use scoped_summaries / scoped_calendar /"
+echo "       scoped_weekly_sweeps via backend + scheduler helper modules.)"
 exit 0

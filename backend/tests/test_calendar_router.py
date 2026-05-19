@@ -79,14 +79,14 @@ async def authed_calendar_client(calendar_client):
 @pytest.mark.asyncio
 async def test_get_calendar_requires_auth(calendar_client):
     """Router-level Depends(get_current_user) must reject unauthenticated."""
-    r = await calendar_client.get("/calendar?start=2026-05-18&end=2026-05-24")
+    r = await calendar_client.get("/api/seva/calendar?start=2026-05-18&end=2026-05-24")
     assert r.status_code == 401, r.text
 
 
 @pytest.mark.asyncio
 async def test_post_calendar_requires_auth(calendar_client):
     r = await calendar_client.post(
-        "/calendar", json={"date": "2026-05-20", "body": "x"}
+        "/api/seva/calendar", json={"date": "2026-05-20", "body": "x"}
     )
     assert r.status_code == 401, r.text
 
@@ -99,7 +99,7 @@ async def test_post_calendar_requires_auth(calendar_client):
 @pytest.mark.asyncio
 async def test_get_calendar_empty_range_returns_200(authed_calendar_client):
     r = await authed_calendar_client.get(
-        "/calendar?start=2026-05-18&end=2026-05-24"
+        "/api/seva/calendar?start=2026-05-18&end=2026-05-24"
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -109,16 +109,16 @@ async def test_get_calendar_empty_range_returns_200(authed_calendar_client):
 @pytest.mark.asyncio
 async def test_get_calendar_returns_items_in_date_asc(authed_calendar_client):
     await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-06-03", "body": "c"}
+        "/api/seva/calendar", json={"date": "2026-06-03", "body": "c"}
     )
     await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-06-01", "body": "a"}
+        "/api/seva/calendar", json={"date": "2026-06-01", "body": "a"}
     )
     await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-06-02", "body": "b"}
+        "/api/seva/calendar", json={"date": "2026-06-02", "body": "b"}
     )
     r = await authed_calendar_client.get(
-        "/calendar?start=2026-06-01&end=2026-06-07"
+        "/api/seva/calendar?start=2026-06-01&end=2026-06-07"
     )
     assert r.status_code == 200
     items = r.json()["items"]
@@ -130,13 +130,13 @@ async def test_get_calendar_returns_items_in_date_asc(authed_calendar_client):
 @pytest.mark.asyncio
 async def test_get_calendar_excludes_dates_outside_range(authed_calendar_client):
     await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-07-01", "body": "in"}
+        "/api/seva/calendar", json={"date": "2026-07-01", "body": "in"}
     )
     await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-07-31", "body": "out"}
+        "/api/seva/calendar", json={"date": "2026-07-31", "body": "out"}
     )
     r = await authed_calendar_client.get(
-        "/calendar?start=2026-07-01&end=2026-07-07"
+        "/api/seva/calendar?start=2026-07-01&end=2026-07-07"
     )
     body = r.json()
     assert len(body["items"]) == 1
@@ -153,7 +153,7 @@ async def test_post_creates_item_returns_201_with_response_shape(
     authed_calendar_client,
 ):
     r = await authed_calendar_client.post(
-        "/calendar",
+        "/api/seva/calendar",
         json={"date": "2026-05-20", "body": "draft thread about gold ETFs"},
     )
     assert r.status_code == 201, r.text
@@ -170,7 +170,7 @@ async def test_post_creates_item_returns_201_with_response_shape(
 @pytest.mark.asyncio
 async def test_post_rejects_blank_body_with_422(authed_calendar_client):
     r = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-05-20", "body": "   "}
+        "/api/seva/calendar", json={"date": "2026-05-20", "body": "   "}
     )
     assert r.status_code == 422, r.text
 
@@ -179,11 +179,11 @@ async def test_post_rejects_blank_body_with_422(authed_calendar_client):
 async def test_post_duplicate_date_returns_409(authed_calendar_client):
     """D-02 enforcement: UNIQUE(date) constraint surfaces as 409."""
     r1 = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-05-21", "body": "first"}
+        "/api/seva/calendar", json={"date": "2026-05-21", "body": "first"}
     )
     assert r1.status_code == 201
     r2 = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-05-21", "body": "second"}
+        "/api/seva/calendar", json={"date": "2026-05-21", "body": "second"}
     )
     assert r2.status_code == 409, r2.text
     assert "2026-05-21" in r2.json()["detail"]
@@ -202,7 +202,7 @@ async def test_patch_updates_body_and_bumps_updated_at(authed_calendar_client):
     asserting strict increase. created_at MUST be unchanged.
     """
     post = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-08-01", "body": "old"}
+        "/api/seva/calendar", json={"date": "2026-08-01", "body": "old"}
     )
     assert post.status_code == 201
     item_id = post.json()["id"]
@@ -214,7 +214,7 @@ async def test_patch_updates_body_and_bumps_updated_at(authed_calendar_client):
     await asyncio.sleep(0.05)
 
     patch = await authed_calendar_client.patch(
-        f"/calendar/{item_id}", json={"body": "new"}
+        f"/api/seva/calendar/{item_id}", json={"body": "new"}
     )
     assert patch.status_code == 200, patch.text
     body = patch.json()
@@ -229,7 +229,7 @@ async def test_patch_updates_body_and_bumps_updated_at(authed_calendar_client):
 @pytest.mark.asyncio
 async def test_patch_rejects_unknown_id_with_404(authed_calendar_client):
     r = await authed_calendar_client.patch(
-        "/calendar/00000000-0000-0000-0000-000000000000", json={"body": "x"}
+        "/api/seva/calendar/00000000-0000-0000-0000-000000000000", json={"body": "x"}
     )
     assert r.status_code == 404
 
@@ -237,11 +237,11 @@ async def test_patch_rejects_unknown_id_with_404(authed_calendar_client):
 @pytest.mark.asyncio
 async def test_patch_rejects_blank_body_with_422(authed_calendar_client):
     post = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-09-01", "body": "x"}
+        "/api/seva/calendar", json={"date": "2026-09-01", "body": "x"}
     )
     item_id = post.json()["id"]
     r = await authed_calendar_client.patch(
-        f"/calendar/{item_id}", json={"body": "   "}
+        f"/api/seva/calendar/{item_id}", json={"body": "   "}
     )
     assert r.status_code == 422
 
@@ -250,12 +250,12 @@ async def test_patch_rejects_blank_body_with_422(authed_calendar_client):
 async def test_patch_ignores_unknown_fields(authed_calendar_client):
     """CalendarItemUpdate exposes only `body`; date/tag/updated_at are ignored."""
     post = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-09-15", "body": "x"}
+        "/api/seva/calendar", json={"date": "2026-09-15", "body": "x"}
     )
     item_id = post.json()["id"]
     # Try to sneak in a date change and a fake updated_at — both must be ignored.
     r = await authed_calendar_client.patch(
-        f"/calendar/{item_id}",
+        f"/api/seva/calendar/{item_id}",
         json={
             "body": "y",
             "date": "1900-01-01",
@@ -276,14 +276,14 @@ async def test_patch_ignores_unknown_fields(authed_calendar_client):
 @pytest.mark.asyncio
 async def test_delete_returns_204_and_removes_row(authed_calendar_client):
     post = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-10-01", "body": "to delete"}
+        "/api/seva/calendar", json={"date": "2026-10-01", "body": "to delete"}
     )
     item_id = post.json()["id"]
-    d = await authed_calendar_client.delete(f"/calendar/{item_id}")
+    d = await authed_calendar_client.delete(f"/api/seva/calendar/{item_id}")
     assert d.status_code == 204, d.text
     # Confirm it's gone via GET range
     g = await authed_calendar_client.get(
-        "/calendar?start=2026-10-01&end=2026-10-01"
+        "/api/seva/calendar?start=2026-10-01&end=2026-10-01"
     )
     assert g.json()["total"] == 0
 
@@ -291,7 +291,7 @@ async def test_delete_returns_204_and_removes_row(authed_calendar_client):
 @pytest.mark.asyncio
 async def test_delete_returns_404_on_missing(authed_calendar_client):
     r = await authed_calendar_client.delete(
-        "/calendar/00000000-0000-0000-0000-000000000000"
+        "/api/seva/calendar/00000000-0000-0000-0000-000000000000"
     )
     assert r.status_code == 404
 
@@ -310,12 +310,12 @@ async def test_create_then_get_round_trips_date_in_utc(authed_calendar_client):
     silent datetime conversion that would slip into the prior/next day.
     """
     r1 = await authed_calendar_client.post(
-        "/calendar", json={"date": "2026-11-15", "body": "P1 test"}
+        "/api/seva/calendar", json={"date": "2026-11-15", "body": "P1 test"}
     )
     assert r1.status_code == 201
     assert r1.json()["date"] == "2026-11-15"
 
     r2 = await authed_calendar_client.get(
-        "/calendar?start=2026-11-15&end=2026-11-15"
+        "/api/seva/calendar?start=2026-11-15&end=2026-11-15"
     )
     assert r2.json()["items"][0]["date"] == "2026-11-15"

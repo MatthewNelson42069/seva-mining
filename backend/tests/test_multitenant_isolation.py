@@ -1,55 +1,94 @@
 """Cross-tenant leak detection (TENANT-10).
 
-Phase 9 Wave 0 RED — production code lands in Wave 2 (09-03-PLAN.md).
-Router prefix expected at:
+v3.0 Phase 9 Wave 2 — production code landed in 09-03-PLAN.md. Tests verify
+that each tenant's endpoint returns ONLY its own rows. Catches any router
+that bypasses `scoped_*()` helpers.
+
+Router prefix:
     /api/{company}/summaries
     /api/{company}/calendar?start=...&end=...
     /api/{company}/weekly-sweeps
 
-Creates rows for BOTH tenants, then asserts each tenant's API returns ONLY
-its own rows. Parametrized over ('seva', 'juno') so symmetry is explicit.
-Catches any router that bypasses scoped_*() helpers.
+Fixture wiring (Wave 2 deviation — Rule 2 critical-functionality fix):
+The shared `tenant_test_client` fixture creates ONE in-memory SQLite engine,
+creates the 3 tenant-scoped tables on it, overrides FastAPI's `get_db` to
+yield sessions from THAT engine, and exposes both the HTTP client AND a
+session factory so the test can seed rows + hit endpoints against the same
+database. The conftest's stock `async_db_session` + `authed_client` pair
+use SEPARATE engines (per-fixture) and would never see each other's data
+under SQLite `:memory:` semantics — that's why Wave 0 deferred this test.
 
 Sources:
 - PITFALLS.md CRITICAL-2 ("Query without company_id filter is the #1
   multi-tenancy bug")
 - 09-CONTEXT.md TENANT-10
-- 09-RESEARCH.md §Code Example 10 (this file is a near-verbatim copy)
-
-The module-level pytest.skip below is the canonical Phase-9 Wave-0 idiom:
-removing this single line in Wave 2 (after the /api/{company}/* router prefix
-+ get_current_company() dependency land) turns the whole module GREEN.
+- 09-RESEARCH.md §Code Example 10
 """
 from __future__ import annotations
-
-import pytest
-
-pytest.skip(
-    "/api/{company}/* router prefix lands in Wave 2 (09-03-PLAN.md). "
-    "Remove this line in Wave 2 Task 1 step 6 to turn tests GREEN.",
-    allow_module_level=True,
-)
-
-# ---------------------------------------------------------------------------
-# Unreachable until Wave 2 removes the skip line above. Lazy imports inside
-# each test so the module collects cleanly even before the models carry
-# company_id and the router prefix lands.
-# ---------------------------------------------------------------------------
 
 import uuid
 from datetime import datetime, timezone
 
+import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.ext.compiler import compiles
 
+from app.auth import create_access_token
+from app.database import get_db
+from app.main import app
 from app.models.calendar_item import CalendarItem
 from app.models.daily_summary import DailySummary
 from app.models.weekly_sweep import WeeklySweep
 
 
+# SQLite has no JSONB — compile JSONB to JSON when running against SQLite so
+# the model.__table__.create() call below succeeds for the in-memory test DB.
+# Production (Neon Postgres) is unaffected — the @compiles dispatcher only
+# fires for the 'sqlite' dialect.
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_as_json_on_sqlite(type_, compiler, **kw):  # noqa: D401
+    return compiler.visit_JSON(JSON())
+
+pytestmark = pytest.mark.asyncio
+
+
 @pytest_asyncio.fixture
-async def both_tenant_rows(async_db_session: AsyncSession):
-    """Seed one row per tenant per multi-tenant table."""
+async def tenant_test_engine():
+    """Single SQLite engine shared between row-seeding session AND HTTP client.
+
+    Creates the 3 tenant-scoped tables (daily_summaries, calendar_items,
+    weekly_sweeps). Postgres-only types (UUID, JSONB) compile against SQLite
+    via SQLAlchemy's generic fallbacks for in-memory test execution.
+    """
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        # Only create the 3 tenant-scoped tables — keep this module self-contained.
+        await conn.run_sync(lambda c: DailySummary.__table__.create(c))
+        await conn.run_sync(lambda c: CalendarItem.__table__.create(c))
+        await conn.run_sync(lambda c: WeeklySweep.__table__.create(c))
+    yield engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def tenant_session_factory(tenant_test_engine):
+    """Async session factory bound to the shared engine."""
+    return async_sessionmaker(
+        tenant_test_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+
+@pytest_asyncio.fixture
+async def both_tenant_rows(tenant_session_factory):
+    """Seed one row per tenant per multi-tenant table via the shared engine."""
     now = datetime.now(timezone.utc)
     rows = [
         DailySummary(
@@ -105,10 +144,28 @@ async def both_tenant_rows(async_db_session: AsyncSession):
             status="partial",
         ),
     ]
-    for row in rows:
-        async_db_session.add(row)
-    await async_db_session.commit()
+    async with tenant_session_factory() as session:
+        for row in rows:
+            session.add(row)
+        await session.commit()
     return rows
+
+
+@pytest_asyncio.fixture
+async def tenant_authed_client(tenant_session_factory):
+    """HTTP client wired to the SHARED engine via get_db override + Authorization header."""
+    async def override_get_db():
+        async with tenant_session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    token = create_access_token()
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        ac.headers.update({"Authorization": f"Bearer {token}"})
+        yield ac
+    app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.mark.parametrize("company", ["seva", "juno"])
@@ -121,7 +178,7 @@ async def both_tenant_rows(async_db_session: AsyncSession):
     ],
 )
 async def test_tenant_isolation(
-    authed_client, both_tenant_rows, company, endpoint
+    tenant_authed_client, both_tenant_rows, company, endpoint
 ):
     """Each tenant's endpoint returns ONLY its own rows.
 
@@ -130,7 +187,7 @@ async def test_tenant_isolation(
     response shape where a row from the OTHER tenant leaks through.
     """
     url = endpoint.format(company=company)
-    response = await authed_client.get(url)
+    response = await tenant_authed_client.get(url)
     assert response.status_code == 200, (
         f"GET {url} returned {response.status_code}: {response.text}"
     )
@@ -158,13 +215,13 @@ async def test_tenant_isolation(
     "invalid_slug",
     ["nonsense", "SEVA", "seva!", "x" * 30],
 )
-async def test_invalid_company_returns_404(authed_client, invalid_slug):
+async def test_invalid_company_returns_404(tenant_authed_client, invalid_slug):
     """get_current_company validation rejects malformed/unknown slugs.
 
     Either the path-regex `^[a-z][a-z0-9-]{1,19}$` rejects with 422, or the
     dependency rejects with 404 — both are acceptable.
     """
-    response = await authed_client.get(f"/api/{invalid_slug}/summaries")
+    response = await tenant_authed_client.get(f"/api/{invalid_slug}/summaries")
     assert response.status_code in (404, 422), (
         f"Expected 404 or 422 for invalid slug {invalid_slug!r}, "
         f"got {response.status_code}"

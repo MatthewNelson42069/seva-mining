@@ -62,9 +62,16 @@ app.include_router(content_router)
 app.include_router(config_router)
 app.include_router(content_bundles_router)
 app.include_router(post_to_x_router)  # Phase B (quick-260424-l0d)
-app.include_router(summaries_router)  # Phase 1, Plan 04 (v2.0 daily summary feed)
-app.include_router(calendar_router)        # Phase 5, Plan 04 (v2.1 Content Calendar stub — DB-04)
-app.include_router(weekly_sweeps_router)   # Phase 5, Plan 04 (v2.1 Weekly Viral Sweeper stub — DB-04)
+# v3.0 Phase 9 — TENANT-04 — multi-tenant path prefix per 09-CONTEXT.md D-04.
+# Three tenant-scoped routers mounted under /api/{company}. Other routers
+# (auth, queue, watchlists, keywords, agent_runs, digests, content, config,
+# content_bundles, post_to_x) stay at root because they are NOT tenant-scoped
+# in v3.0 — single-operator login is global, queue/content/agent telemetry
+# is gold-only in v3.0 (per CONTEXT.md "v3.0 keeps 'Seva Mining' wordmark on
+# both tenants; per-company branding deferred to v3.1+").
+app.include_router(summaries_router, prefix="/api/{company}")       # v3.0 P9 — TENANT-04
+app.include_router(calendar_router, prefix="/api/{company}")        # v3.0 P9 — TENANT-04
+app.include_router(weekly_sweeps_router, prefix="/api/{company}")   # v3.0 P9 — TENANT-04
 
 
 @app.get("/health")

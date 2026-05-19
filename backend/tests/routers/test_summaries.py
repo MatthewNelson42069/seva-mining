@@ -49,6 +49,10 @@ def make_summary(
     }
     summary.status = status
     summary.error_text = error_text
+    # v3.0 Phase 9 — Pydantic SummaryCardResponse.company_id is `str | None`.
+    # MagicMock auto-attr would return a MagicMock instance → Pydantic 422.
+    # Default to 'seva' (matches DB server_default).
+    summary.company_id = "seva"
     return summary
 
 
@@ -75,7 +79,7 @@ def authed_headers() -> dict:
 async def test_get_summaries_unauthenticated_returns_401():
     """GET /summaries without Authorization header returns 401."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/summaries")
+        resp = await ac.get("/api/seva/summaries")
     assert resp.status_code == 401
 
 
@@ -89,7 +93,7 @@ async def test_get_summaries_empty_returns_200_with_empty_list():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/summaries", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries", headers=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body == {"summaries": [], "total": 0}
@@ -114,7 +118,7 @@ async def test_get_summaries_returns_rows_in_descending_order():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/summaries", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries", headers=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] == 3
@@ -140,7 +144,7 @@ async def test_get_summaries_respects_limit_param():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/summaries?limit=2", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries?limit=2", headers=authed_headers())
         assert resp.status_code == 200
         assert len(resp.json()["summaries"]) == 2
     finally:
@@ -150,14 +154,14 @@ async def test_get_summaries_respects_limit_param():
 async def test_get_summaries_limit_above_120_rejected():
     """GET /summaries?limit=121 returns 422 (limit le=120)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/summaries?limit=121", headers=authed_headers())
+        resp = await ac.get("/api/seva/summaries?limit=121", headers=authed_headers())
     assert resp.status_code == 422
 
 
 async def test_get_summaries_limit_zero_rejected():
     """GET /summaries?limit=0 returns 422 (limit ge=1)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/summaries?limit=0", headers=authed_headers())
+        resp = await ac.get("/api/seva/summaries?limit=0", headers=authed_headers())
     assert resp.status_code == 422
 
 
@@ -171,7 +175,7 @@ async def test_get_summaries_response_omits_raw_sources_jsonb():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/summaries", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries", headers=authed_headers())
         assert resp.status_code == 200
         card = resp.json()["summaries"][0]
         assert "raw_sources_jsonb" not in card
