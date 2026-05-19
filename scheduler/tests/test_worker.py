@@ -100,6 +100,8 @@ def test_retired_crons_absent_from_job_lock_ids():
     Phase 1 Plan 05: daily_summary=1017 + daily_summary_prune=1018 added; midday_digest retained
     as dead code (registration removed from build_scheduler; factory + dict entry kept per CONTEXT).
     Phase 5 Plan 05-01: weekly_sweeper=1019 reserved (registration ships Phase 7 Plan 05).
+    v3.0 Phase 9 (D-01): juno_daily_summary=1020 (registered) + juno_weekly_sweeper=1021
+    (slot-only — registration deferred to v3.1+) added.
     """
     assert "content_agent" not in JOB_LOCK_IDS
     assert "gold_history_agent" not in JOB_LOCK_IDS
@@ -107,28 +109,33 @@ def test_retired_crons_absent_from_job_lock_ids():
     assert "expiry_sweep" not in JOB_LOCK_IDS
     assert "sub_long_form" not in JOB_LOCK_IDS  # retired per quick-260423-k8n
     assert "morning_digest" not in JOB_LOCK_IDS  # renamed to midday_digest per quick-260424-i8b
-    # 4 keys total: midday_digest (dead code retained per D-07) + daily_summary +
-    # daily_summary_prune + weekly_sweeper. v1.0 sub_* entries (1010-1016) stripped
-    # in Phase 8 UI-06 (260519 — see CLAUDE.md historical notes).
-    assert len(JOB_LOCK_IDS) == 4
+    # 6 keys total: midday_digest (dead code retained per D-07) + daily_summary +
+    # daily_summary_prune + weekly_sweeper + juno_daily_summary + juno_weekly_sweeper.
+    # v1.0 sub_* entries (1010-1016) stripped in Phase 8 UI-06 (260519 — see CLAUDE.md).
+    assert len(JOB_LOCK_IDS) == 6
     assert set(JOB_LOCK_IDS.keys()) == {
-        "midday_digest",        # dead code — registration removed Phase 1 Plan 05 (CRIT-1)
-        "daily_summary",        # Phase 1 Plan 05
-        "daily_summary_prune",  # Phase 1 Plan 05 (registration ships Phase 4)
-        "weekly_sweeper",       # Phase 5 Plan 05-01 reservation; Phase 7 Plan 05 registration
+        "midday_digest",          # dead code — registration removed Phase 1 Plan 05 (CRIT-1)
+        "daily_summary",          # Phase 1 Plan 05
+        "daily_summary_prune",    # Phase 1 Plan 05 (registration ships Phase 4)
+        "weekly_sweeper",         # Phase 5 Plan 05-01 reservation; Phase 7 Plan 05 registration
+        "juno_daily_summary",     # v3.0 Phase 9 D-01 — registered
+        "juno_weekly_sweeper",    # v3.0 Phase 9 D-01 — slot-only (v3.1+)
     }
 
 
 @pytest.mark.asyncio
-async def test_scheduler_registers_3_jobs_after_v1_deregistration():
-    """build_scheduler() registers exactly 3 jobs after Phase 7 weekly_sweeper add.
+async def test_scheduler_registers_4_jobs_after_juno_add():
+    """build_scheduler() registers exactly 4 jobs after Phase 9 juno_daily_summary add.
 
     Phase 1 Plan 05 (CRIT-1 / SUM-06): midday_digest registration REMOVED;
     daily_summary registration ADDED.
     Phase 4 Plan 01 Task 1: daily_summary_prune ADDED.
     Phase 4 Plan 01 Task 4: 6 v1.0 sub-agent crons DEREGISTERED (user-approved).
     Phase 7 Plan 05 (SWEEP-09): weekly_sweeper ADDED.
-    Final state: 3 jobs — daily_summary + daily_summary_prune + weekly_sweeper.
+    v3.0 Phase 9 (TENANT-08): juno_daily_summary ADDED (juno_weekly_sweeper
+    slot-only — NOT registered per D-01).
+    Final state: 4 jobs — daily_summary + daily_summary_prune + weekly_sweeper
+    + juno_daily_summary.
     """
     mock_engine = MagicMock()
     with patch(
@@ -145,11 +152,15 @@ async def test_scheduler_registers_3_jobs_after_v1_deregistration():
                 "daily_summary",        # Phase 1 Plan 05 replacement for midday_digest
                 "daily_summary_prune",  # Phase 4 Plan 01 (OPS-01)
                 "weekly_sweeper",       # Phase 7 Plan 05 (SWEEP-09)
+                "juno_daily_summary",   # v3.0 Phase 9 (TENANT-08)
             ]
         )
         assert ids == expected, f"expected {expected}, got {ids}"
-        assert len(jobs) == 3
+        assert len(jobs) == 4
         assert "midday_digest" not in ids, "midday_digest must be removed (CRIT-1)"
+        assert "juno_weekly_sweeper" not in ids, (
+            "juno_weekly_sweeper must be slot-only (D-01) — not registered in v3.0"
+        )
     finally:
         if scheduler.running:
             scheduler.shutdown(wait=False)
@@ -653,12 +664,16 @@ async def test_build_scheduler_omits_v1_sub_agent_crons():
             assert sub_id not in job_ids, (
                 f"v1.0 sub-agent job '{sub_id}' must NOT be registered after deregistration"
             )
-        # Verify the v2.0 + Phase 7 jobs are still present
+        # Verify the v2.0 + Phase 7 + Phase 9 jobs are still present
         assert "daily_summary" in job_ids, "daily_summary must remain registered"
         assert "daily_summary_prune" in job_ids, "daily_summary_prune must remain registered"
         assert "weekly_sweeper" in job_ids, "weekly_sweeper must be registered (Phase 7 Plan 05)"
-        assert len(job_ids) == 3, (
-            f"Scheduler should have exactly 3 jobs after Phase 7 Plan 05, got {len(job_ids)}: {job_ids}"
+        assert "juno_daily_summary" in job_ids, (
+            "juno_daily_summary must be registered (v3.0 Phase 9 TENANT-08)"
+        )
+        assert len(job_ids) == 4, (
+            f"Scheduler should have exactly 4 jobs after Phase 9 juno_daily_summary "
+            f"add, got {len(job_ids)}: {job_ids}"
         )
     finally:
         if scheduler.running:
@@ -790,11 +805,6 @@ def test_juno_lock_ids_present():
     APScheduler job in Phase 9; 1021 is the slot ONLY (registration deferred
     to v3.1+ when Juno Weekly Sweeper lands).
     """
-    pytest.skip(
-        "juno_* lock IDs land in Wave 2 (09-03-PLAN.md). "
-        "Remove this line in Wave 2 Task 2 step 3 to turn this test GREEN.",
-        allow_module_level=False,
-    )
     assert JOB_LOCK_IDS.get("juno_daily_summary") == 1020, (
         "v3.0 Phase 9 D-01: juno_daily_summary must be 1020"
     )
@@ -815,11 +825,6 @@ async def test_juno_daily_summary_registered():
     08:05 + 12:05 PT (same twice-daily cadence, 5-min offset). Both use
     America/Los_Angeles timezone.
     """
-    pytest.skip(
-        "juno_daily_summary registration lands in Wave 2 (09-03-PLAN.md). "
-        "Remove this line in Wave 2 Task 2 step 5 to turn this test GREEN.",
-        allow_module_level=False,
-    )
     from apscheduler.triggers.cron import CronTrigger
 
     mock_engine = MagicMock()
@@ -868,13 +873,6 @@ async def test_scheduler_registers_4_jobs_after_juno_add():
     test_scheduler_registers_3_jobs_after_v1_deregistration test must ALSO
     be updated to expect 4 jobs (or its assertion adjusted to a >= check).
     """
-    pytest.skip(
-        "juno_daily_summary registration lands in Wave 2 (09-03-PLAN.md). "
-        "Remove this line in Wave 2 Task 2 step 5 to turn this test GREEN. "
-        "Also update test_scheduler_registers_3_jobs_after_v1_deregistration "
-        "above to expect 4 jobs.",
-        allow_module_level=False,
-    )
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",
@@ -911,11 +909,6 @@ async def test_juno_weekly_sweeper_NOT_registered():
     v3.1+ when Juno Weekly Sweeper lands". This test guards against an
     accidental Phase 9 registration of the sweeper.
     """
-    pytest.skip(
-        "juno_weekly_sweeper guard lands in Wave 2 (09-03-PLAN.md) when the "
-        "juno additions ship. Remove this line in Wave 2 Task 2 step 5.",
-        allow_module_level=False,
-    )
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",

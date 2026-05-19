@@ -99,6 +99,13 @@ JOB_LOCK_IDS: dict[str, int] = {
 
     # v2.1 Phase 7 weekly_sweeper cron (lock reserved Phase 5 Plan 01).
     "weekly_sweeper": 1019,
+
+    # v3.0 Phase 9 — D-01: per-company jobs with explicit lock IDs.
+    # 1020 is REGISTERED in build_scheduler() below (juno_daily_summary).
+    # 1021 is RESERVED only — registration deferred to v3.1+ when Juno
+    # Weekly Sweeper lands. OPS-02 assertion still validates uniqueness.
+    "juno_daily_summary": 1020,
+    "juno_weekly_sweeper": 1021,
 }
 
 # OPS-02 — startup uniqueness assertion. Costs nothing and catches future
@@ -235,6 +242,36 @@ def _make_daily_summary_job(engine):
     return job
 
 
+def _make_juno_daily_summary_job(engine):
+    """Create the juno_daily_summary job callback (advisory-lock wrapped).
+
+    v3.0 Phase 9 (TENANT-08). Mirrors _make_daily_summary_job exactly,
+    swapping the lock ID (1020 vs 1017) and the inner entry point
+    (run_juno_daily_summary vs run_daily_summary). The Juno entry point is
+    registered as a stub in Phase 9 (writes status='partial' row); Phase 10
+    fills the actual feeds/prompts/Sonnet call.
+
+    The factory CLOSES OVER the engine. company_id='juno' is baked into
+    the entry point name; no APScheduler args= injection needed (matches
+    D-01's "factory mirroring _make_daily_summary_job" pattern).
+
+    run_juno_daily_summary is imported lazily at call time so worker.py
+    module import does not pay the daily_summary import cost on Railway boot.
+    """
+
+    async def job():
+        async with engine.connect() as conn:
+            from agents.daily_summary import run_juno_daily_summary  # lazy
+            await with_advisory_lock(
+                conn,
+                JOB_LOCK_IDS["juno_daily_summary"],
+                "juno_daily_summary",
+                run_juno_daily_summary,
+            )
+
+    return job
+
+
 def _make_daily_summary_prune_job(engine):
     """Create the daily_summary_prune job callback (advisory-lock wrapped).
 
@@ -343,11 +380,16 @@ async def _read_schedule_config(engine) -> dict[str, str]:
 
 
 async def build_scheduler(engine) -> AsyncIOScheduler:
-    """Build the APScheduler instance with 3 jobs registered.
+    """Build the APScheduler instance with 4 jobs registered.
 
     - daily_summary: cron at 08:00 + 12:00 America/Los_Angeles (Phase 1 Plan 05).
     - daily_summary_prune: cron at 03:00 America/Los_Angeles (Phase 4 OPS-01).
     - weekly_sweeper: cron Sun 08:00 America/Los_Angeles (Phase 7 Plan 05).
+    - juno_daily_summary: cron at 08:05 + 12:05 America/Los_Angeles
+      (v3.0 Phase 9 — TENANT-08, 5-min stagger from Seva per D-01a).
+
+    juno_weekly_sweeper (lock 1021) is reserved in JOB_LOCK_IDS but NOT
+    registered as a job — slot-only per v3.0 Phase 9 D-01.
 
     Phase 8 UI-06 (260519): all v1.0 content sub-agent crons fully retired
     (source files + tests + lock IDs 1010-1016 stripped). Historical lineage:
@@ -363,8 +405,9 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     await _read_schedule_config(engine)  # reads DB config; morning_digest_schedule_hour no longer used
 
     logger.info(
-        "Schedule config: 3 cron jobs (daily_summary 08:00+12:00 PT, "
-        "daily_summary_prune 03:00 PT, weekly_sweeper Sun 08:00 PT). "
+        "Schedule config: 4 cron jobs (daily_summary 08:00+12:00 PT, "
+        "juno_daily_summary 08:05+12:05 PT, daily_summary_prune 03:00 PT, "
+        "weekly_sweeper Sun 08:00 PT). "
         "cron_sub_agents=%d (CONTENT_CRON_AGENTS empty post-Phase-8 UI-06 strip).",
         len(CONTENT_CRON_AGENTS),
     )
@@ -397,6 +440,26 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         ),
         id="daily_summary",
         name="Daily Summary — 08:00 + 12:00 America/Los_Angeles",
+    )
+
+    # v3.0 Phase 9 — TENANT-08 — Juno daily_summary at 08:05 + 12:05 PT.
+    # 5-min stagger from Seva's hour="8,12", minute=0 (D-01a). Rationale:
+    # spreads Anthropic API rate-limit pressure (PITFALLS.md §3) and avoids
+    # simultaneous Sonnet calls. Lock ID 1020 (JOB_LOCK_IDS["juno_daily_summary"]).
+    # juno_weekly_sweeper (lock 1021) is slot-only in v3.0 — registration
+    # deferred to v3.1+ per D-01. 08:05 + 12:05 are both outside the
+    # DST-ambiguous 01:00-02:00 window (MOD-1 — safe).
+    scheduler.add_job(
+        _make_juno_daily_summary_job(engine),
+        trigger=CronTrigger(
+            hour="8,12",
+            minute=5,
+            timezone="America/Los_Angeles",
+        ),
+        id="juno_daily_summary",
+        name="Daily Summary — Juno — 08:05 + 12:05 America/Los_Angeles",
+        max_instances=1,
+        misfire_grace_time=1800,
     )
 
     # daily_summary_prune — fires at 03:00 PT daily (OPS-01).
