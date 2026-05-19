@@ -3,8 +3,8 @@
  * CompanySwitcher — segmented control + queryClient.clear() + navigate
  * (TENANT-07, TENANT-09).
  *
- * Phase 9 Wave 0 RED — production code lands in Wave 3 (09-04-PLAN.md).
- * Component expected at: frontend/src/components/layout/CompanySwitcher.tsx
+ * GREEN as of Wave 3 (09-04 Task 2). Component lives at
+ * frontend/src/components/layout/CompanySwitcher.tsx.
  *
  * Contract (per D-07, D-08, 09-UI-SPEC.md):
  *   - Renders two side-by-side buttons (Seva | Juno).
@@ -18,8 +18,6 @@
  *     (in that order — clear MUST happen before navigate so the new tenant's
  *      first queries don't render stale rows from the previous tenant.)
  *   - Click on the ALREADY-ACTIVE button is a no-op (no clear, no navigate).
- *
- * Vitest skip idiom: per-test `it.skip()`. Wave 3 removes each `.skip`.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
@@ -54,8 +52,7 @@ describe('CompanySwitcher (TENANT-07, TENANT-09)', () => {
     mockClear.mockReset()
   })
 
-  it.skip('renders Seva and Juno buttons with active class on current tenant', async () => {
-    // Wave 3 (09-04-PLAN.md) — CompanySwitcher not yet created.
+  it('renders Seva and Juno buttons with active class on current tenant', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter, Routes, Route } = await import('react-router-dom')
     const { CompanySwitcher } = await import(
@@ -77,8 +74,7 @@ describe('CompanySwitcher (TENANT-07, TENANT-09)', () => {
     expect(junoBtn.className).not.toMatch(/border-brand-accent/)
   })
 
-  it.skip('clicking Juno calls queryClient.clear() then navigate to /juno/calendar', async () => {
-    // Wave 3 (09-04-PLAN.md) — CompanySwitcher not yet created.
+  it('clicking Juno calls queryClient.clear() then navigate to /juno/calendar', async () => {
     const { render, screen, fireEvent } = await import('@testing-library/react')
     const { MemoryRouter, Routes, Route } = await import('react-router-dom')
     const { CompanySwitcher } = await import(
@@ -104,8 +100,7 @@ describe('CompanySwitcher (TENANT-07, TENANT-09)', () => {
     expect(clearOrder).toBeLessThan(navOrder)
   })
 
-  it.skip('preserves sub-path when switching (e.g. /seva/viral -> /juno/viral)', async () => {
-    // Wave 3 (09-04-PLAN.md) — CompanySwitcher not yet created.
+  it('preserves sub-path when switching (e.g. /seva/viral -> /juno/viral)', async () => {
     const { render, screen, fireEvent } = await import('@testing-library/react')
     const { MemoryRouter, Routes, Route } = await import('react-router-dom')
     const { CompanySwitcher } = await import(
@@ -124,8 +119,7 @@ describe('CompanySwitcher (TENANT-07, TENANT-09)', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/juno/viral')
   })
 
-  it.skip('switching while at /seva/ goes to /juno/ (empty sub-path)', async () => {
-    // Wave 3 (09-04-PLAN.md) — CompanySwitcher not yet created.
+  it('switching while at /seva/ goes to /juno/ (empty sub-path)', async () => {
     const { render, screen, fireEvent } = await import('@testing-library/react')
     const { MemoryRouter, Routes, Route } = await import('react-router-dom')
     const { CompanySwitcher } = await import(
@@ -144,8 +138,7 @@ describe('CompanySwitcher (TENANT-07, TENANT-09)', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/juno/')
   })
 
-  it.skip('clicking the already-active tenant is a no-op', async () => {
-    // Wave 3 (09-04-PLAN.md) — CompanySwitcher not yet created.
+  it('clicking the already-active tenant is a no-op', async () => {
     const { render, screen, fireEvent } = await import('@testing-library/react')
     const { MemoryRouter, Routes, Route } = await import('react-router-dom')
     const { CompanySwitcher } = await import(
@@ -167,6 +160,5 @@ describe('CompanySwitcher (TENANT-07, TENANT-09)', () => {
   })
 })
 
-// Once Wave 3 ships frontend/src/components/layout/CompanySwitcher.tsx,
-// REMOVE the `.skip` on each it.skip(...) above and the suite should pass
-// GREEN.
+// Wave 3 ships frontend/src/components/layout/CompanySwitcher.tsx and the
+// suite is GREEN.

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import { AppHeader } from '../AppHeader'
 
@@ -22,10 +23,18 @@ vi.mock('@/stores', () => ({
 }))
 
 function renderHeader() {
+  // v3.0 Phase 9 — AppHeader now embeds <CompanySwitcher /> which calls
+  // useQueryClient + useParams. Wrap in a QueryClientProvider AND mount
+  // inside a /:company route so useParams resolves to a valid tenant.
+  const queryClient = new QueryClient()
   return render(
-    <MemoryRouter>
-      <AppHeader />
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/seva']}>
+        <Routes>
+          <Route path=":company/*" element={<AppHeader />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 

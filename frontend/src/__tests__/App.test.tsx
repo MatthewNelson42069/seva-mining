@@ -3,37 +3,39 @@
  * App router — bookmark grace redirects + :company nested route (TENANT-05,
  * TENANT-06).
  *
- * Phase 9 Wave 0 RED — production code lands in Wave 3 (09-04-PLAN.md).
- * App.tsx will be updated to:
- *   - Add <Route path=":company"> wrapper around <TabbedDashboard>.
- *   - Add bookmark grace <Navigate> elements:
+ * GREEN as of Wave 3 (09-04 Task 2). App.tsx now exports `AppRoutes` —
+ * the route tree extracted from App so tests can mount it inside a
+ * <MemoryRouter>:
+ *   - Adds <Route path=":company"> wrapper around <TabbedDashboard>.
+ *   - Adds bookmark grace <Navigate> elements:
  *       /            -> /seva     (D-05: bare / redirects to /seva/)
  *       /calendar    -> /seva/calendar  (D-06)
  *       /viral       -> /seva/viral     (D-06)
  *       /queue       -> /seva           (D-06; legacy v2.0)
  *       /agents/:slug -> /seva          (D-06; legacy v2.0)
  *       /digest, /settings, /login      — unchanged (NOT tenant-scoped)
- *
- * Vitest skip idiom: per-test `it.skip()`. Wave 3 removes each `.skip`.
- *
- * Note on testing App.tsx: the real App mounts its own <BrowserRouter>.
- * For these tests we re-define the route tree inside a <MemoryRouter> so
- * we can control initial entries. The Wave 3 implementation should factor
- * the route tree into a testable shape (e.g. export `<AppRoutes />` that
- * the tests can mount inside <MemoryRouter>).
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 
-// Indirect-path pattern (see queryKeys.test.ts for rationale): `AppRoutes`
-// is NOT yet exported from `@/App` — App.tsx currently exports the default
-// `App` only. Wave 3 must factor the route tree into a testable
-// `AppRoutes` export. Until then, this indirection keeps vite's
-// import-analysis from failing the whole file at transform time.
+// Indirect-path pattern (historical — kept for symmetry with the other
+// Wave 0 test files). The `AppRoutes` named export is shipped by Wave 3.
 const appRoutesPath = '@/App'
 
+// Auth setup: the :company route + /digest + /settings live inside
+// <ProtectedRoute>, which redirects to /login when isAuthenticated is
+// false. Tests need a stub access_token so the ProtectedRoute resolves
+// to <Outlet />. The bookmark grace <Navigate> elements live OUTSIDE
+// ProtectedRoute, so /, /calendar, /viral, /queue, /agents/:slug fire
+// even without this — but setting auth uniformly keeps the test setup
+// simple.
+beforeEach(async () => {
+  localStorage.setItem('access_token', 'test-token')
+  const { useAppStore } = await import('@/stores')
+  useAppStore.setState({ token: 'test-token', isAuthenticated: true })
+})
+
 describe('App router bookmark grace (TENANT-06)', () => {
-  it.skip('bare / redirects to /seva', async () => {
-    // Wave 3 (09-04-PLAN.md) — bookmark grace redirects not yet wired.
+  it('bare / redirects to /seva', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter, useLocation } = await import('react-router-dom')
     const { AppRoutes } = await import(/* @vite-ignore */ appRoutesPath)
@@ -53,8 +55,7 @@ describe('App router bookmark grace (TENANT-06)', () => {
     expect(screen.getByTestId('current-path').textContent).toBe('/seva')
   })
 
-  it.skip('/calendar redirects to /seva/calendar', async () => {
-    // Wave 3 (09-04-PLAN.md) — bookmark grace redirects not yet wired.
+  it('/calendar redirects to /seva/calendar', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter, useLocation } = await import('react-router-dom')
     const { AppRoutes } = await import(/* @vite-ignore */ appRoutesPath)
@@ -76,8 +77,7 @@ describe('App router bookmark grace (TENANT-06)', () => {
     )
   })
 
-  it.skip('/viral redirects to /seva/viral', async () => {
-    // Wave 3 (09-04-PLAN.md) — bookmark grace redirects not yet wired.
+  it('/viral redirects to /seva/viral', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter, useLocation } = await import('react-router-dom')
     const { AppRoutes } = await import(/* @vite-ignore */ appRoutesPath)
@@ -97,8 +97,7 @@ describe('App router bookmark grace (TENANT-06)', () => {
     expect(screen.getByTestId('current-path').textContent).toBe('/seva/viral')
   })
 
-  it.skip('/queue redirects to /seva (legacy v2.0 grace)', async () => {
-    // Wave 3 (09-04-PLAN.md) — bookmark grace redirects not yet wired.
+  it('/queue redirects to /seva (legacy v2.0 grace)', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter, useLocation } = await import('react-router-dom')
     const { AppRoutes } = await import(/* @vite-ignore */ appRoutesPath)
@@ -118,8 +117,7 @@ describe('App router bookmark grace (TENANT-06)', () => {
     expect(screen.getByTestId('current-path').textContent).toBe('/seva')
   })
 
-  it.skip('/agents/breaking_news redirects to /seva (legacy v2.0 grace)', async () => {
-    // Wave 3 (09-04-PLAN.md) — bookmark grace redirects not yet wired.
+  it('/agents/breaking_news redirects to /seva (legacy v2.0 grace)', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter, useLocation } = await import('react-router-dom')
     const { AppRoutes } = await import(/* @vite-ignore */ appRoutesPath)
@@ -139,8 +137,7 @@ describe('App router bookmark grace (TENANT-06)', () => {
     expect(screen.getByTestId('current-path').textContent).toBe('/seva')
   })
 
-  it.skip('/digest stays at /digest (not tenant-scoped — D-06)', async () => {
-    // Wave 3 (09-04-PLAN.md) — /digest must NOT be tenant-prefixed.
+  it('/digest stays at /digest (not tenant-scoped — D-06)', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter, useLocation } = await import('react-router-dom')
     const { AppRoutes } = await import(/* @vite-ignore */ appRoutesPath)
@@ -160,8 +157,7 @@ describe('App router bookmark grace (TENANT-06)', () => {
     expect(screen.getByTestId('current-path').textContent).toBe('/digest')
   })
 
-  it.skip(':company route mounts TabbedDashboard with useParams', async () => {
-    // Wave 3 (09-04-PLAN.md) — nested :company route not yet wired.
+  it(':company route mounts TabbedDashboard with useParams', async () => {
     const { render, screen } = await import('@testing-library/react')
     const { MemoryRouter } = await import('react-router-dom')
     const { AppRoutes } = await import(/* @vite-ignore */ appRoutesPath)
@@ -178,7 +174,5 @@ describe('App router bookmark grace (TENANT-06)', () => {
   })
 })
 
-// Once Wave 3 ships the nested :company route + bookmark grace <Navigate>
-// elements in App.tsx (and exports `AppRoutes` so tests can mount it inside
-// <MemoryRouter>), REMOVE the `.skip` on each it.skip(...) above and the
-// suite should pass GREEN.
+// Wave 3 ships nested :company route + bookmark grace <Navigate> elements
+// in App.tsx and the suite is GREEN.

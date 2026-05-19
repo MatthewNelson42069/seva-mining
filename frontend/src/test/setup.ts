@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom/vitest'
+import { cleanup } from '@testing-library/react'
 import { server } from '@/mocks/node'
 import { beforeAll, afterEach, afterAll } from 'vitest'
 
@@ -17,5 +18,8 @@ if (typeof localStorage === 'undefined' || typeof localStorage.getItem !== 'func
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  cleanup()
+  server.resetHandlers()
+})
 afterAll(() => server.close())

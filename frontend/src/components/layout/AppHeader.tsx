@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useAppStore } from '@/stores'
+import { CompanySwitcher } from './CompanySwitcher'
 
 export function AppHeader() {
   const navigate = useNavigate()
@@ -20,6 +21,9 @@ export function AppHeader() {
           </div>
           <span className="text-sm font-semibold text-white">Seva Mining</span>
         </div>
+
+        {/* v3.0 freeze-lift (Phase 9) — see 09-CONTEXT.md D-02 */}
+        <CompanySwitcher />
 
         {/* Logout */}
         <button
