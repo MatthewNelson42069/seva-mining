@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: — Three-Tab Content Engine + UI Polish
 status: Ready to execute
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-05-19T05:11:35.266Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-05-19T05:12:10.398Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 16
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-18)
 ## Current Position
 
 Phase: 07 (weekly-viral-sweeper) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 
 ## Performance Metrics
 
@@ -116,6 +116,7 @@ Plan: 3 of 6
 | Phase 06-content-calendar P05 | 4min | 3 tasks | 4 files |
 | Phase 07-weekly-viral-sweeper P01 | 3min | 2 tasks | 2 files |
 | Phase 07-weekly-viral-sweeper P02 | 2 min | 2 tasks | 2 files |
+| Phase 07-weekly-viral-sweeper P03 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -265,6 +266,8 @@ Recent decisions affecting current work:
 - [Phase 07-weekly-viral-sweeper]: Config model __tablename__ is 'config' not 'bot_config' — same model gold_media.py uses; plan's bot_config naming is descriptive
 - [Phase 07-weekly-viral-sweeper]: tweet_fields trimmed vs gold_media.py — no attachments/media expansions (sweeper is text-discovery not video-discovery)
 - [Phase 07-weekly-viral-sweeper]: Results list sorted (not response.data) — cleaner test mocking, no tweepy object mutation
+- [Phase 07-weekly-viral-sweeper]: 07-03: Mocked AsyncSession pattern for weekly_sweeps router tests (PostgreSQL UUID/JSONB columns incompatible with SQLite test DB) — mirrors test_summaries.py canonical pattern
+- [Phase 07-weekly-viral-sweeper]: 07-03: total via separate select(func.count()).select_from(WeeklySweep) call (not len(rows)) so 07-06 can show 'showing N of M' labels without a follow-up plan
 
 ### Pending Todos
 
@@ -345,7 +348,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-19T05:11:35.261Z
+Last session: 2026-05-19T05:12:10.393Z
 Last activity: 2026-05-19
 
 Prior activity: 2026-04-22 — Completed quick-260422-mfg (full rename `sub_video_clip` → `sub_gold_media` across scheduler + backend + frontend + DB). **Origin:** follow-up (b) from the zid debug session — `scheduler/agents/content/video_clip.py` hard-coded `CONTENT_TYPE="video_clip"` and `AGENT_NAME="sub_video_clip"` while `frontend/src/config/agentTabs.ts` L32 already showed `label: 'Gold Media'` and CLAUDE.md enumerated "gold media" as a canonical content type; the split wasted cycles in the zid debug session (debugger hunted for a `gold_media.py` file that didn't exist). Ran via `/gsd:quick --discuss` workflow; user responded "All clear" to the 3 gray-area AskUserQuestion batch, locking 8 decisions (D-01 through D-08) to Recommended paths: D-01 full rename, D-02 Alembic migration (auditable, vs one-off railway-run UPDATE), D-03 test file renamed, D-04 frontend component file renamed, D-05 worker.py "Gold Media" display unchanged, D-06 lock value 1015 preserved, D-07 `VIDEO_ACCOUNTS` → `GOLD_MEDIA_ACCOUNTS`, D-08 no backward-compat aliases. **Changes:** 3 git-renamed files (history preserved — `scheduler/agents/content/gold_media.py` 88% similarity `git log --follow` reaches vxg 68b21d1 + eoe 762b08b, `scheduler/tests/test_gold_media.py` 61%, `frontend/src/components/content/GoldMediaPreview.tsx` 90%) + 16 modified files across all 4 layers + 1 new Alembic migration `0008_rename_video_clip_to_gold_media.py` (single-headed chain confirmed via `alembic heads` = `0008 (head)`; upgrade updates `content_bundles.content_type` then `agent_runs.agent_name`; downgrade symmetric reverse). Planner extended rename scope for zero-grep hygiene consistency: internal helpers `_search_video_clips` → `_search_gold_media_clips`, `_draft_video_caption` → `_draft_gold_media_caption`, constant `VIDEO_CLIP_SCORE` → `GOLD_MEDIA_SCORE` (value 7.5 unchanged; only symbol moves). **Gates all 9 green:** scheduler 109/109 pytest + ruff clean; backend 69 passed + 5 skipped + ruff clean + alembic heads = 0008; frontend 52/52 vitest + tsc + lint + build all clean. **Zero-grep:** 0 matches for `video_clip`, `sub_video_clip`, `VideoClipPreview`, `VIDEO_ACCOUNTS`, `VIDEO_CLIP_SCORE`, `_search_video_clips`, `_draft_video_caption` across `scheduler/` + `backend/app/` + `frontend/src/` (0008 migration is sole permitted location for old strings by design). 2 commits on main: `e835b61` (refactor) + `69efac1` (SUMMARY). **Five of five zid follow-ups now addressed at the code level:** zid + krz + l40 + lbb + mfg. **Remaining:** (a) sub_gold_media (post-rename) consistent 0-items behavior — deferred as separate `/gsd:debug` investigation path (probe X API quota, `GOLD_MEDIA_ACCOUNTS` availability, analyst-quality-gate rejection rate from vxg). This rename was purely cosmetic/structural; 0-items is a distinct investigation.
@@ -371,5 +374,5 @@ Prior activity: 2026-04-21 — Completed quick-260421-m9k (sub_breaking_news hou
 Prior activity: 2026-04-21 — Completed quick-260421-k9z (dead-code cleanup follow-up to eoe). Removed orphan-island `select_qualifying_stories`/`select_top_story`/`_is_within_window` from `scheduler/agents/content_agent.py` (−81 lines; `breaking_window_hours` param dies with the island); deleted orphan `frontend/src/pages/ContentPage.tsx` + test (−547 lines) and stripped stale App.tsx comment; removed zombie config keys `content_agent_max_stories_per_run` + `content_agent_breaking_window_hours` from both `seed_content_data.py::CONFIG_DEFAULTS` AND `worker.py::upsert_agent_config` (write-only post-eoe, zero readers). DELETE migration docstring in seed script extended from 4 → 6 retired keys. 2 atomic commits on `quick/260421-k9z-dead-code-cleanup`: `b8aec6e` (scheduler) / `704d7b3` (frontend). All gates green (scheduler 74/74, backend 69/5, frontend 52/52, ruff/eslint/tsc/build all clean). Deviation #6 in eoe SUMMARY was documented as stale — both config keys were write-only post-split, not read by `fetch_stories()` as previously claimed.
 
 Prior activity: 2026-04-21 — quick-260420-sn9 fully purged the Twitter Agent and trimmed the Senior Agent to morning-digest-only, across 5 atomic commits. System is now **single-agent** (Content only, with `morning_digest` + `gold_history_agent` as supporting crons). **Task 1 (scheduler, `62ffda4`):** deleted `scheduler/agents/twitter_agent.py` + `scheduler/tests/test_twitter_agent.py`; `worker.py` `_make_job` simplified (no twitter/senior branches), `JOB_LOCK_IDS` twitter/senior entries removed; 3 scheduler jobs remain (content_agent, morning_digest, gold_history_agent); `tweepy[async]>=4.14`, `x_api_bearer_token`/`x_api_key`/`x_api_secret`, and `_validate_env` `X_API_BEARER_TOKEN` critical gate **preserved** — Content Agent video_clip pipeline still reads X API. **Task 2 (senior trim, `be9cd8b`):** senior_agent.py reduced to `run_morning_digest()` only (dedup/expiry/queue-cap methods removed); paired tests updated. **Task 3 (backend, `aeaf412`):** `/config/quota` router endpoint removed; model/schema comments updated to document Twitter purge (with ruff E501 reflow); `seed_mock_data.py` rewritten content-only (removed 5 twitter + 5 instagram mock items); test fixtures migrated (watchlist/draft_item/keyword/rendered_image platforms → content); backend pytest 66 passed / 5 skipped, ruff clean. One deferred item logged: pre-existing ruff I001 in `backend/alembic/versions/0007_add_market_snapshots.py` (from `b28780b` / oa1 task, out-of-sn9-scope). **Task 4 (frontend, `c30e288`):** Platform type narrowed `'twitter' \| 'content'` → `'content'`; 7 Twitter-only files deleted (ApprovalCard + test, PlatformTabBar + test, QueuePage, QuotaBar, WatchlistTab); 13 files modified to remove Twitter UI (Sidebar nav, App.tsx `/twitter` route, AgentRunsTab filter option, KeywordsTab platform dropdown, ScoringTab "Twitter Agent Scoring" section, PlatformBadge/RelatedCardBadge config maps, useQueueCounts, handlers.ts mocks, DigestPage stats grid 3-col → 2-col + Twitter tile removed, SettingsPage tabs 6 → 5 (Keywords default), PlatformQueuePage both branches → ContentSummaryCard); 3 test assertions updated (DigestPage + SettingsPage + PlatformQueuePage); `pnpm tsc --noEmit` clean, `pnpm lint` clean, `pnpm test` 56/56, `pnpm build` 544KB green. **Task 5 (prod DB + docs, `55100c9`):** Prod Neon DB purge via `npx @railway/cli run` + asyncpg inside single transaction — **pre/post counts: 177 → 0 `draft_items WHERE platform='twitter'`**, **40 → 0 `watchlists` (25 twitter + 15 instagram orphans)**, **8 → 0 `config WHERE key LIKE 'twitter_%'`**; Content rows preserved at 955 both sides. One Rule-3 auto-fix inside the same txn: one `instagram` orphan row (from lvy-era data) had `related_id` pointing at a twitter row, triggering FK constraint; UPDATE-NULL'd that one `related_id` before DELETE could proceed. CLAUDE.md Project blurb updated "three-agent AI system" → "single-agent AI system," new historical note appended for 2026-04-20 mirroring the 2026-04-19 lvy note, Stack constraint line updated to list the 3 surviving scheduled jobs. `.planning/ROADMAP.md` deprecation notice added for Phase 4 + Phase 5, Phase 10 partial-deprecation banner, progress table updated. `.planning/REQUIREMENTS.md` TWIT-01..14 and SENR-01,02,03,04,05,08,09 struck through with `**(DEPRECATED 2026-04-20)**`; SENR-06 + SENR-07 retained (shipped via Phase 10-03 as `morning_digest` at 15:00 UTC). `.planning/STATE.md` (this file) updated with 2 new sn9 decision entries + 1 s3b cancellation entry + 2 new rows in Quick Tasks table. 5 commit SHAs on main: `62ffda4` / `be9cd8b` / `aeaf412` / `c30e288` / `55100c9`. **No push to origin/main** per operator instruction — commits remain local until operator reviews.
-Stopped at: Completed 07-02-PLAN.md
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
