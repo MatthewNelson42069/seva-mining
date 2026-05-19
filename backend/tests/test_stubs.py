@@ -1,7 +1,13 @@
-"""Phase 5 stub smoke tests — confirm GET /calendar and GET /weekly-sweeps
-return 200 OK with empty payloads through auth, and 401 without auth.
+"""Phase 5 stub smoke tests — confirm GET /weekly-sweeps returns 200 OK
+with empty payload through auth, and 401 without auth.
 
 Phase 5, Plan 04 — verifies DB-04 (router registration + auth gating).
+
+NOTE (Phase 6, Plan 02): the two `test_calendar_*_stub` tests were removed
+when the calendar router was promoted from Phase 5 stub to full CRUD. Their
+coverage is now provided by `test_calendar_router.py` (auth gate, empty
+range, full CRUD). The weekly_sweeps stub tests remain — Phase 7 will
+supersede them when that router gets fleshed out.
 """
 from __future__ import annotations
 
@@ -34,19 +40,6 @@ def client_no_auth():
     app.dependency_overrides.pop(get_current_user, None)
     with TestClient(app) as c:
         yield c
-
-
-def test_calendar_stub_returns_empty_with_auth(client_with_auth):
-    response = client_with_auth.get("/calendar")
-    assert response.status_code == 200, response.text
-    assert response.json() == {"items": [], "total": 0}
-
-
-def test_calendar_stub_returns_401_without_auth(client_no_auth):
-    response = client_no_auth.get("/calendar")
-    assert response.status_code == 401, (
-        f"Expected 401 without auth; got {response.status_code} body={response.text!r}"
-    )
 
 
 def test_weekly_sweeps_stub_returns_empty_with_auth(client_with_auth):
