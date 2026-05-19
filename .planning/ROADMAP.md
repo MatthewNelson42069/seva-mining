@@ -370,7 +370,14 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 4. v2.x bookmarks survive the migration: visiting `/`, `/calendar`, `/viral`, `/queue`, `/agents/:slug` as an authenticated user all land on the correct `/seva/*` page (no 404, no auth bypass); bookmarking `/juno/calendar` then logging out, then logging back in, returns the operator to `/juno/calendar` (login preserves intended URL); CI grep gate blocks raw `select(DailySummary|CalendarItem|WeeklySweep)` outside `queries/scoped.py` and raw `queryKey: [` outside `api/queryKeys.ts`
 5. `test_multitenant_isolation.py` passes with both Seva and Juno fixtures inserted: every list endpoint returns only the requested tenant's rows; cross-tenant `company_id` in URL path returns 404; ` AppHeader/CompanyBar` switcher visible on every authenticated page (including `/digest` and `/settings`)
 
-**Plans:** TBD
+**Plans:** 5 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Wave 0 RED-tests-first scaffolding (12 Wave 0 test files + CI grep gate `scripts/verify-tenant-isolation.sh` per VALIDATION.md)
+- [ ] 09-02-PLAN.md — Wave 1 DB foundation (Alembic 0014 with `server_default='seva'` + dual-model parity + `backend/app/queries/scoped.py` helpers + `get_current_company` FastAPI dep)
+- [ ] 09-03-PLAN.md — Wave 2 backend routers + scheduler (3 routers under `/api/{company}` + per-company cron with `juno_daily_summary=1020` lock ID + `juno_weekly_sweeper=1021` slot reserved + `run_juno_daily_summary` stub writes `status='partial'` row)
+- [ ] 09-04-PLAN.md — Wave 3 frontend routing + switcher + queryKeys (`<Route path=':company'>` wrapper + bookmark grace redirects + `CompanySwitcher` segmented control inside formally freeze-lifted AppHeader + Zustand persist for `lastVisitedCompany` + centralized TanStack key factory + per-page Juno empty-state short-circuits)
+- [ ] 09-05-PLAN.md — Wave 4 cross-tenant integration verification + human-verify checkpoint at 1440×900 (populates `test_multitenant_isolation.py` parametrized matrix; runs full 3-layer test suite + CI grep gate; reproduces verbatim 50+ item UI-SPEC QA checklist; smoke-tests one scheduler fire produces both tenants' rows; documents AppHeader freeze-lift in PROJECT.md Key Decisions per D-02 third documentation location)
 
 **UI hint**: yes
 
