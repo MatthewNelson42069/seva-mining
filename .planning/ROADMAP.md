@@ -30,7 +30,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 ### v2.1 — Three-Tab Content Engine + UI Polish
 
 - [ ] **Phase 5: Foundation — Tabs + DB + Backend Stubs** — DB migrations, dual-model parity, backend router stubs, frontend tab shell with route restructure
-- [ ] **Phase 6: Content Calendar** — Full CRUD over `calendar_items`: backend routes, Pydantic schemas, weekly grid UI, optimistic mutations
+- [x] **Phase 6: Content Calendar** — Full CRUD over `calendar_items`: backend routes, Pydantic schemas, weekly grid UI, optimistic mutations (completed 2026-05-19)
 - [ ] **Phase 7: Weekly Viral Sweeper** — Scheduler + Reddit ingestion + virality compute + Sonnet call + sweep card UI
 - [ ] **Phase 8: UI Polish + Dead-Code Strip** — Linear dark/amber-500 pass across all 3 tabs, WCAG audit, v1.0 dead-code removal
 
@@ -136,12 +136,12 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 4. Today's cell is visually distinguished (amber-500 ring + background tint); items display tag-color-coded chips; cells with more than 3 items show a "+N more" badge
 5. `GET /calendar` with `start=` and `end=` date params returns items in `date ASC` order; dates round-trip as `"YYYY-MM-DD"` strings regardless of Railway timezone (no UTC off-by-one)
 
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 - [x] 06-01-PLAN.md — Requirements rephrase + Migration 0013 (title nullable + UNIQUE(date)) + Pydantic schemas (Wave 1)
 - [x] 06-02-PLAN.md — Full CRUD router replace + pytest coverage including P1/P4 defenses (Wave 2, depends on 06-01)
 - [x] 06-03-PLAN.md — Frontend API module + useCalendar hook + 3 optimistic mutation hooks with rollback (Wave 2, depends on 06-01)
 - [x] 06-04-PLAN.md — ISO week helpers + DayCell (textarea + auto-save 4-way branch) + WeeklyGrid (Wave 3, depends on 06-02 + 06-03)
-- [ ] 06-05-PLAN.md — WeekNav + live ContentCalendarPage + human-verify checkpoint (Wave 4, depends on 06-04)
+- [x] 06-05-PLAN.md — WeekNav + live ContentCalendarPage + human-verify checkpoint (Wave 4, depends on 06-04)
 
 **UI hint**: yes
 
@@ -309,7 +309,7 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 | 3. Ontario Stats Ingestion | v2.0 | 1/1 | Complete | 2026-05-06 |
 | 4. Prune Cron + Ops Hardening | v2.0 | 1/1 | Complete | 2026-05-06 |
 | 5. Foundation — Tabs + DB + Backend Stubs | v2.1 | 0/5 | Planned | - |
-| 6. Content Calendar | v2.1 | 0/? | Not started | - |
+| 6. Content Calendar | v2.1 | 5/5 | Complete   | 2026-05-19 |
 | 7. Weekly Viral Sweeper | v2.1 | 0/? | Not started | - |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 0/? | Not started | - |
 
