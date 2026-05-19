@@ -94,43 +94,6 @@ def test_sub_agents_total_six():
     )
 
 
-def test_sub_agent_lock_ids():
-    """Phase 4 Task 4: CONTENT_CRON_AGENTS is empty; JOB_LOCK_IDS still contains
-    sub_* entries as dead code (mirrors midday_digest=1005 pattern from Phase 1).
-
-    Lock IDs 1010-1016 remain in JOB_LOCK_IDS as dead code — never reuse them.
-    """
-    # CONTENT_CRON_AGENTS is empty — no active sub-agent entries to iterate
-    assert len(CONTENT_CRON_AGENTS) == 0
-
-    # JOB_LOCK_IDS dead-code entries must still be present (preserved per CONTEXT)
-    for sub_id in ("sub_breaking_news", "sub_threads", "sub_quotes",
-                   "sub_infographics", "sub_gold_media", "sub_gold_history"):
-        assert sub_id in JOB_LOCK_IDS, (
-            f"JOB_LOCK_IDS['{sub_id}'] must be preserved as dead code"
-        )
-
-    assert JOB_LOCK_IDS["sub_breaking_news"] == 1010
-    assert JOB_LOCK_IDS["sub_threads"] == 1011
-    assert JOB_LOCK_IDS["sub_quotes"] == 1013
-    assert JOB_LOCK_IDS["sub_infographics"] == 1014
-    assert JOB_LOCK_IDS["sub_gold_media"] == 1015
-    assert JOB_LOCK_IDS["sub_gold_history"] == 1016
-
-
-def test_quotes_is_daily_cron():
-    """Phase 4 Task 4: sub_quotes removed from CONTENT_CRON_AGENTS (deregistered).
-    Its JOB_LOCK_IDS entry (1013) is preserved as dead code.
-    Historical: sub_quotes was registered at 12:00 America/Los_Angeles (dict-shape post-vxg).
-    """
-    # sub_quotes no longer in CONTENT_CRON_AGENTS — confirm absence
-    assert all(t[0] != "sub_quotes" for t in CONTENT_CRON_AGENTS), (
-        "sub_quotes must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
-    )
-    # JOB_LOCK_IDS entry preserved as dead code
-    assert JOB_LOCK_IDS.get("sub_quotes") == 1013
-
-
 def test_retired_crons_absent_from_job_lock_ids():
     """content_agent (1003), gold_history_agent (1009), and sub_long_form (1012) must NOT appear.
     quick-260424-i8b: morning_digest key renamed to midday_digest (lock ID 1005 unchanged).
@@ -144,17 +107,12 @@ def test_retired_crons_absent_from_job_lock_ids():
     assert "expiry_sweep" not in JOB_LOCK_IDS
     assert "sub_long_form" not in JOB_LOCK_IDS  # retired per quick-260423-k8n
     assert "morning_digest" not in JOB_LOCK_IDS  # renamed to midday_digest per quick-260424-i8b
-    # 10 keys total: midday_digest (dead code) + 6 sub-agents + daily_summary +
-    # daily_summary_prune + weekly_sweeper
-    assert len(JOB_LOCK_IDS) == 10
+    # 4 keys total: midday_digest (dead code retained per D-07) + daily_summary +
+    # daily_summary_prune + weekly_sweeper. v1.0 sub_* entries (1010-1016) stripped
+    # in Phase 8 UI-06 (260519 — see CLAUDE.md historical notes).
+    assert len(JOB_LOCK_IDS) == 4
     assert set(JOB_LOCK_IDS.keys()) == {
         "midday_digest",        # dead code — registration removed Phase 1 Plan 05 (CRIT-1)
-        "sub_breaking_news",
-        "sub_threads",
-        "sub_quotes",
-        "sub_infographics",
-        "sub_gold_media",
-        "sub_gold_history",
         "daily_summary",        # Phase 1 Plan 05
         "daily_summary_prune",  # Phase 1 Plan 05 (registration ships Phase 4)
         "weekly_sweeper",       # Phase 5 Plan 05-01 reservation; Phase 7 Plan 05 registration
@@ -267,28 +225,6 @@ def test_read_schedule_config_has_no_retired_keys():
     assert "morning_digest_schedule_hour" in source
 
 
-def test_breaking_news_is_hourly_cron():
-    """Phase 4 Task 4: sub_breaking_news removed from CONTENT_CRON_AGENTS (deregistered).
-    JOB_LOCK_IDS entry (1010) preserved as dead code.
-    Historical: post-m49, sub_breaking_news fired at HH:00 UTC via CronTrigger.
-    """
-    assert all(t[0] != "sub_breaking_news" for t in CONTENT_CRON_AGENTS), (
-        "sub_breaking_news must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
-    )
-    assert JOB_LOCK_IDS.get("sub_breaking_news") == 1010
-
-
-def test_threads_is_every_three_hours_cron():
-    """Phase 4 Task 4: sub_threads removed from CONTENT_CRON_AGENTS (deregistered).
-    JOB_LOCK_IDS entry (1011) preserved as dead code.
-    Historical: post-m49/j5i, sub_threads fired every 3h at HH:17 UTC via CronTrigger.
-    """
-    assert all(t[0] != "sub_threads" for t in CONTENT_CRON_AGENTS), (
-        "sub_threads must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
-    )
-    assert JOB_LOCK_IDS.get("sub_threads") == 1011
-
-
 def test_cron_agents_count_zero_after_v1_deregistration():
     """Phase 4 Task 4: CONTENT_CRON_AGENTS emptied — all 6 v1.0 sub-agent crons deregistered.
 
@@ -311,33 +247,6 @@ def test_cron_agents_use_dict_shape():
     for entry in CONTENT_CRON_AGENTS:
         assert len(entry) == 5
         assert isinstance(entry[4], dict)
-
-
-def test_gold_history_is_every_other_day():
-    """Phase 4 Task 4: sub_gold_history removed from CONTENT_CRON_AGENTS (deregistered).
-    JOB_LOCK_IDS entry (1016) preserved as dead code.
-    Historical: sub_gold_history used day='*/2' at noon PT.
-    """
-    assert all(t[0] != "sub_gold_history" for t in CONTENT_CRON_AGENTS), (
-        "sub_gold_history must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
-    )
-    assert JOB_LOCK_IDS.get("sub_gold_history") == 1016
-
-
-def test_infographics_is_daily_cron():
-    """Phase 4 Task 4: sub_infographics removed from CONTENT_CRON_AGENTS (deregistered)."""
-    assert all(t[0] != "sub_infographics" for t in CONTENT_CRON_AGENTS), (
-        "sub_infographics must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
-    )
-    assert JOB_LOCK_IDS.get("sub_infographics") == 1014
-
-
-def test_gold_media_is_daily_cron():
-    """Phase 4 Task 4: sub_gold_media removed from CONTENT_CRON_AGENTS (deregistered)."""
-    assert all(t[0] != "sub_gold_media" for t in CONTENT_CRON_AGENTS), (
-        "sub_gold_media must NOT be in CONTENT_CRON_AGENTS after Phase 4 deregistration"
-    )
-    assert JOB_LOCK_IDS.get("sub_gold_media") == 1015
 
 
 # ---------------------------------------------------------------------------
