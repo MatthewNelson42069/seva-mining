@@ -1,428 +1,360 @@
-# v2.1 Three-Tab Content Engine — FEATURES Research
+# v3.0 Multi-Tenant Dashboards + Juno News Funnel — FEATURES Research
 
-**Project:** Seva Mining v2.1 — Three-Tab Content Engine
-**Mode:** Ecosystem / Feature Research
-**Domain:** Personal intelligence + content-planning tool for a solo gold-sector operator
-**Confidence:** HIGH (praw/Reddit API), MEDIUM (subreddit subscriber counts), HIGH (virality dedup strategy), HIGH (content angle prompt structure)
-**Researched:** 2026-05-18
-
----
-
-## TABLE STAKES — Must Ship in v2.1
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Tab navigation (3 tabs) | The entire v2.1 premise — without it there is no product | S | shadcn `Tabs` (Radix primitive), `value` controlled by URL hash so deep-linking works |
-| Calendar CRUD (create/edit/delete items) | A calendar without editable items is a read-only view | M | `calendar_items` table, REST endpoints, TanStack Query optimistic mutations |
-| Weekly Reddit ingestion (Sunday cron) | The sweeper's primary content source — without it the card is empty | M | asyncpraw read-only, 4-5 subreddits, `subreddit.top(time_filter='week', limit=10)` |
-| Story virality compute | Differentiates the sweeper from a raw Reddit dump | M | SQL + Python over `daily_summaries.raw_sources_jsonb.gold_news[]` |
-| Sonnet content-angle generation | The output that makes the sweeper actionable | M | Single call, ~1000 tokens, 3 angles |
-| Weekly sweep card UI (Tab 3) | Surface for all three sweeper outputs | M | Three sections in one card: Reddit posts, viral stories, content angles |
-| Linear-style UI redesign | The visual refresh is explicitly in scope | M | Dark + amber-500, Inter, generous whitespace, shadcn components |
+**Project:** Seva Mining v3.0 — Multi-Tenant Dashboards (Seva + Juno toggle) + Juno (Defence) News Funnel
+**Mode:** Ecosystem / Feature Research (subsequent milestone — NEW features only)
+**Domain:** Multi-tenant personal-intelligence tool — adding defence-sector tenant to an already-shipped single-tenant gold-sector app
+**Confidence:** HIGH (multi-tenant UX patterns — Linear/Notion/Slack/Vercel are well-documented), HIGH (defence-news source taxonomy — Janes/Defense News/Breaking Defense/Defense One are industry-standard), MEDIUM (Canadian-specific procurement signal — DND/PSPC RSS coverage is thin), HIGH (world-events-relevance heuristic — semiconductor/hypersonic/conflict adjacency is well-mapped in CSIS/RAND analysis)
+**Researched:** 2026-05-19
 
 ---
 
-## DIFFERENTIATORS — Nice-to-Have in v2.1
+## SCOPE NOTE — What This Research Covers
+
+v3.0 is a **subsequent milestone** layered on top of a shipped v2.1 single-tenant app. This research deliberately scopes ONLY to NEW features for v3.0:
+
+1. **Multi-tenancy plumbing** — switcher UX, URL routing, per-company isolation surfaces
+2. **Juno News Funnel content** — the defence-industry analog of Seva's "gold news + Ontario law + Ontario stats" structure
+3. **World-events-relevant-to-defence** — the cross-cutting signal that distinguishes a defence News Funnel from a generic news aggregator
+
+**Out of scope for this research (already built or deferred per PROJECT.md):**
+- Seva News Funnel content (shipped v2.0, no changes)
+- Tab 2 Content Calendar / Tab 3 Weekly Viral Sweeper (Juno-side deferred to v3.1+)
+- Per-company branding (Juno reuses amber/zinc baseline initially)
+- Cross-company analytics / unified dashboards (explicit anti-feature)
+- N-company scaling beyond Seva + Juno (deferred to v3.2+)
+
+---
+
+## CATEGORY 1 — MULTI-TENANCY PLUMBING
+
+### TABLE STAKES — Must Ship in v3.0
+
+| Feature | Why Expected | Complexity | Dependencies on v2.x |
+|---------|--------------|------------|----------------------|
+| **Company switcher in `AppHeader`** | Every multi-tenant SaaS (Linear, Notion, Slack, Vercel, Linear) ships a workspace/team/org switcher; without it the app is single-tenant by definition | M | Surgical addition to Phase-5-frozen `AppHeader.tsx` — DO NOT rewrite; insert switcher component next to brand-mark |
+| **Persistent active-company state** | User must not be re-prompted on each navigation — current company persists across tab switches and page reloads | S | URL is source of truth (see routing below); localStorage as backup for deep-link freshness |
+| **URL reflects active company** | Deep-linking, browser back/forward, and shareable links all depend on company-in-URL — Linear/Notion both encode workspace in URL | M | Restructure existing `/` `/calendar` `/sweeper` routes; existing routes become `/{company}/...` (see routing decision below) |
+| **Per-company data isolation in API** | Defence news must never bleed into gold summaries (and vice versa) — every read endpoint scoped by active company; every write tagged with `company_id` | M | Alembic migration adding `company_id` to `daily_summaries`, `calendar_items`, `weekly_sweeps`; backfill all existing rows to `company_id='seva'` in same migration |
+| **Per-company cron scoping** | OPS-02 advisory-lock uniqueness must hold; daily_summary cron writes to the right company's rows; defence ingestion never overwrites gold rows | M | Either one cron that fans out per company (preferred — single OPS-02 lock per job-type), or N crons with N lock-IDs (rejected — explodes lock-ID space) |
+| **Seva data preservation across migration** | Zero downtime, zero data loss for existing Seva summaries — operator must see Seva history intact after migration | M | Alembic backfill in same upward migration; tested on dev DB copy before prod |
+| **Default landing company** | When user logs in, app must land on a company — first-login defaults to Seva (existing); switcher remembers last-active across sessions | S | localStorage `last_company` key checked on `/` redirect |
+
+### DIFFERENTIATORS — Worth Considering in v3.0
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Tag color-coding on calendar | At-a-glance content-type scanning | S | Fixed color map per tag slug (thread=blue, video=red, podcast=purple); CSS custom properties |
-| Today highlight on calendar | Orientation — user instantly knows "now" | S | Bold border + subtle `amber-500/10` background tint on current day cell |
-| Drag-and-drop reschedule | Faster than dropdowns for adjacent-day moves | L | `@dnd-kit/core` — see DnD section. Recommend deferring |
-| Day hover "+ Add" hint | Discoverability for empty cells | S | CSS `hover:` reveal on each day cell |
-| Reddit post score display | Shows why a post made the list | S | `score` field from praw `Submission.score`; render as badge |
-| Weekly sweep history | Browse past weeks' cards | M | Tab 3 shows only the latest `weekly_sweeps` row by default; add a week-picker dropdown |
+| **Keyboard shortcut for switcher** | Linear/Notion/Slack all ship cmd-shift-S or cmd-1/cmd-2 for instant workspace jump — saves a click for a high-frequency action | S | `Cmd+1` → Seva, `Cmd+2` → Juno; map via existing keyboard handler in `AppHeader` |
+| **Visual company badge / accent strip** | Lets operator confirm at a glance which company is active — prevents "wait, am I looking at gold or defence?" mistakes | S | Small text label or 4px accent strip below header; keep amber/zinc baseline (no full per-company palette in v3.0) |
+| **"Last updated" company-aware** | Existing v2.x footer/header timestamp reflects active-company's last summary, not the global most-recent | S | Already trivial once `company_id` is in queries |
 
----
-
-## ANTI-FEATURES — Never Ship in v2.1
+### ANTI-FEATURES — Never Ship in v3.0
 
 | Feature | Why Avoid | What to Do Instead |
 |---------|-----------|-------------------|
-| AI content drafting | v1.0 sub-agents are retired; scope creep | Calendar items are plain text notes; no AI involvement |
-| Autoposting | Hard prohibition in PROJECT.md | User copies text and posts manually |
-| WhatsApp ping for sweeper | User did not request it; adds delivery complexity for marginal value | Defer to v2.2; Option B (user visits the tab on Sunday) |
-| WhatsApp ping for calendar items | Deferred per PROJECT.md | Defer to v2.2 |
-| Live macro indicators (FRED API) | Explicitly deferred to v2.2 in PROJECT.md | The Macro Economic Stats section in Tab 1 stays as-is |
-| Mobile-responsive UI | Desktop-only constraint preserved | No change |
-| DnD for calendar (in v2.1) | High complexity-to-value ratio for a single user with low calendar density | Ship date-dropdown reschedule in v2.1; revisit DnD in v2.2 |
+| **Subdomain routing (juno.app, seva.app)** | Requires wildcard TLS, DNS work, Vercel config changes; zero UX benefit for a single-operator desktop tool; path-prefix is equivalent for shareability | Use path-prefix `/{company}/...` — works in any browser, no infra changes |
+| **Command palette (Cmd+K) for company switching** | Heavyweight pattern (GitHub/Linear/Figma scale) for 2 companies; dropdown beats palette when N ≤ 5 | Simple dropdown next to brand-mark; revisit palette at N=4+ companies |
+| **Per-company branding / color palettes** | Explicit out-of-scope in PROJECT.md ("Juno keeps the same amber/zinc baseline initially") | Keep zinc-900 + amber-500; defer branding to v3.1+ |
+| **Cross-company "all companies overview"** | Explicit out-of-scope ("strict per-company isolation") — operator wears one hat at a time | Switcher is the ONLY cross-cutting surface |
+| **Per-company user permissions / roles** | Single-operator model continues; no second user exists | No RBAC table, no `user_company_roles`, no permission checks |
+| **Company self-signup / public onboarding** | Two-tenant tool, not a SaaS — no onboarding flow needed | Companies are seeded via migration (`INSERT INTO companies VALUES ('seva',...), ('juno',...)`); no admin UI |
+| **Tenant deletion / archival UI** | Not needed at N=2 with hand-managed companies | Manual SQL if ever required; defer to v3.2+ |
+| **Mobile-responsive switcher** | Desktop-only constraint preserved from v2.x | Hover/click dropdown sized for 1440×900 viewport |
+| **Cross-company analytics dashboard** | Explicit out-of-scope in PROJECT.md | None — full per-company isolation |
+
+### URL ROUTING DECISION POINT (for roadmapper discussion-phase)
+
+Three options surveyed in the multi-tenant ecosystem:
+
+| Pattern | Example | Pros | Cons | Verdict for v3.0 |
+|---------|---------|------|------|------------------|
+| **Path-prefix** | `/seva/summaries`, `/juno/summaries` | Zero infra change; deep-linkable; works on Vercel without DNS work; trivial to extract company in middleware | Slightly cluttered URLs | **RECOMMENDED** — matches Vercel-Labs multi-tenant template (custom-subpaths pattern); zero ops cost |
+| **Subdomain** | `seva.app.com`, `juno.app.com` | Cleanest user-facing URL; natural tenant context | Wildcard TLS; DNS/Vercel config; SSL ops; bookmark migration for existing Seva users | **REJECTED** — infra overhead with zero UX win for single operator |
+| **Query param** | `/summaries?company=seva` | Easiest to retrofit | Awkward for deep links; browsers don't isolate state by query string | **REJECTED** — feels hacky, not used by any major SaaS for tenant context |
+
+**Recommendation:** Path-prefix `/{company}/...`. Existing routes (`/`, `/calendar`, `/sweeper`) become `/seva/`, `/seva/calendar`, `/seva/sweeper`. A bare `/` redirects to `/{last_company}/` (default `/seva/`). React Router v6 nested routes with a `:company` param at the top level.
+
+### SWITCHER UX DECISION POINT (for roadmapper discussion-phase)
+
+| Pattern | Example | Best at N | Verdict |
+|---------|---------|-----------|---------|
+| **Dropdown next to brand-mark** | Notion, Linear (top-left), Vercel | 2-8 | **RECOMMENDED** — simple, discoverable, matches `AppHeader` existing layout |
+| **Sidebar icons (vertical)** | Slack, Discord | 5+ | Rejected for v3.0 — overkill at N=2; would force a sidebar where none exists |
+| **Command palette (Cmd+K)** | GitHub, Figma | 10+ | Rejected for v3.0 — too heavyweight for 2 entities |
+| **Segmented control / tabs** | Some dashboards | 2-3 only | Marginal — works but feels like content tabs (Tab 1/2/3 already exist); would visually conflict |
+
+**Recommendation:** Dropdown next to brand-mark. Surgical addition to Phase-5-frozen `AppHeader.tsx`: a `<CompanySwitcher>` component placed between the brand-mark and the tabs nav. Trigger button shows current company name + chevron-down; opening reveals a list of 2 companies with check-mark on active. Cmd+1 / Cmd+2 keyboard shortcuts as a P2 nice-to-have.
 
 ---
 
-## FEATURE DEPENDENCIES
+## CATEGORY 2 — JUNO NEWS FUNNEL CONTENT
 
-```
-Tab Navigation (shadcn Tabs)
-    └──required by──> Tab 1: News Funnel (existing content moved into tab)
-    └──required by──> Tab 2: Content Calendar
-    └──required by──> Tab 3: Weekly Viral Sweeper
+### Direct Comparison to Seva News Funnel (v2.0)
 
-DB: calendar_items table + REST CRUD
-    └──required by──> Content Calendar UI (Tab 2)
-    └──required by──> Optimistic UI via TanStack Query
+| Seva (gold) | Juno (defence) | Notes |
+|-------------|----------------|-------|
+| Gold News (RSS + SerpAPI) | **Defence News** (RSS + SerpAPI) | Same architecture; different feed URLs + SerpAPI queries |
+| Ontario Law (SerpAPI + NRCan + Haiku filter) | **Canadian Defence Procurement** (DND + PSPC + Haiku filter) | Same architecture; Canada-specific signal |
+| Ontario Stats (StatCan WDS direct poll) | **World Events Relevant to Defence** (Sonnet relevance filter — see Category 3) | DIFFERENT — no equivalent direct-poll API for defence "stats"; replaced with a curated geopolitical-relevance section |
 
-DB: weekly_sweeps table
-    └──required by──> Weekly Sweep Card UI (Tab 3)
-    └──required by──> Sunday cron job
+Seva's 3-section structure (Gold News / Ontario Law / Ontario Stats) maps to Juno as (Defence News / Canadian Procurement / World Events). Same `SummaryCard` UI; same daily_summary cron pattern; same Linear amber/zinc design tokens; same XHandlePill plugin if any @handles appear.
 
-Sunday cron (APScheduler)
-    └──requires──> asyncpraw Reddit ingestion
-    └──requires──> Story virality compute (queries daily_summaries)
-    └──requires──> Sonnet content-angle generation
-    └──all three must complete──> weekly_sweeps INSERT
+### TABLE STAKES — Must Ship in v3.0
 
-Story virality compute
-    └──requires──> at least 7 days of daily_summaries rows with raw_sources_jsonb.gold_news
-    (implies: sweeper will return sparse/empty results if run before v2.0 has been live 7 days — already satisfied since v2.0 shipped 2026-05-06)
+| Feature | Why Expected | Complexity | Dependencies on v2.x |
+|---------|--------------|------------|----------------------|
+| **Defence-sector RSS ingestion** | Direct analog of Seva's gold-sector RSS — without it the funnel is empty | M | feedparser already present from v2.0; only new feed URLs needed |
+| **Defence-sector SerpAPI queries** | Direct analog of Seva's SerpAPI gold queries — covers what RSS misses (Bloomberg defence, niche outlets) | S | SerpAPI client already wired; new query strings only; ~$5-15/mo incremental cost inside existing $50/mo budget |
+| **Sonnet daily summary for defence** | Mirrors Seva's `SUM-01..06` pattern — produces the structured 3-section card for Juno's Tab 1 | M | Same `daily_summary.py` flow; new system prompt for defence voice; ~$5-10/mo Sonnet cost |
+| **Juno-scoped `daily_summary` cron** | Defence summary must fire 2x/day on the same 08:00 PT + 12:00 PT cadence as Seva (operator workflow consistency) | M | APScheduler — either fan-out from one daily_summary job per company, OR separate `juno_daily_summary` lock-id; respect OPS-02 |
+| **Tab 1 renders Juno daily summary** | Live feed UI for Juno — reuses `SummaryCard`, `SectionBlock`, react-markdown + XHandlePill stack | S | Pure reuse of v2.1 Phase 5 components; only the data source changes (queried by `company_id='juno'`) |
+| **30-day rolling retention for Juno** | Direct analog of Seva's 30-day prune — keeps Juno DB footprint bounded | S | Existing OPS-01 prune job extended to scope by `company_id` (or fans out per company) |
 
-Linear-style UI redesign
-    └──enhances──> Tab 1, Tab 2, Tab 3
-    └──conflicts with──> none (purely additive CSS/component layer)
-```
+### Defence News Section — Feed Catalog
 
----
+Concrete feed list assembled from research (these are the named sources to ingest, not abstract "defence news"):
 
-## REDDIT INGESTION — Detailed Findings
+| Source | URL | Coverage | Tier | Notes |
+|--------|-----|----------|------|-------|
+| **Janes Defence News** | janes.com/osint-insights/defence-news | Global defence intelligence — equipment, capabilities, geopolitics | T1 | Industry gold standard; structured intelligence framing |
+| **Breaking Defense** | breakingdefense.com | US defence tech + policy + procurement | T1 | High-signal columnists; Pentagon-adjacent |
+| **Defense News** | defensenews.com | Global politics/business/tech of defence | T1 | Senior decision-maker audience — matches Juno's analyst voice |
+| **Defense One** | defenseone.com | National security futures + analysis | T1 | Long-form analysis layer |
+| **DefenseScoop** | defensescoop.com | US military tech | T2 | Breaking-news tier |
+| **Defense Daily** | defensedaily.com | Defence business / market intel — land/sea/air/space | T2 | Contract/business-lead density |
+| **National Defense Magazine** | nationaldefensemagazine.org | NDIA — business + tech trends | T2 | Industrial-base coverage |
+| **Inside Defense** | insidedefense.com | Pentagon-inside reporting | T2 | Free weekly Defense Business Briefing |
+| **Defense Industry Daily** | defenseindustrydaily.com | Procurement + military systems analysis | T2 | Daily contract/program coverage |
+| **Shephard Media** | shephardmedia.com | Global defence tech + business | T2 | Strong on aviation/digital-battlespace |
 
-### Auth Pattern (HIGH confidence)
+**Tier 1 = always ingest. Tier 2 = ingest, then Haiku-filter for signal (mirrors Seva's NRCan filter pattern).**
 
-Read-only script application: provide only `client_id`, `client_secret`, `user_agent`. PRAW defaults to read-only mode when no `username`/`password` is given.
+### Canadian Defence Procurement Section — Source Catalog
 
-```python
-import asyncpraw
+This is Juno's "Ontario Law" analog — Canada-specific procurement/policy signal:
 
-reddit = asyncpraw.Reddit(
-    client_id=settings.reddit_client_id,
-    client_secret=settings.reddit_client_secret,
-    user_agent=settings.reddit_user_agent,  # e.g. "SevaMiningSweeper/1.0 by seva_mining"
-)
-reddit.read_only = True  # defensive assertion
-```
+| Source | URL Pattern | Type | Notes |
+|--------|-------------|------|-------|
+| **Canada.ca DND announcements** | canada.ca/en/department-national-defence/news.html | News listing (no clean RSS — scrape or SerpAPI) | DND official procurement announcements; F-35, P-8A, Defence Investment Agency news lives here |
+| **Public Services and Procurement Canada (PSPC)** | canada.ca/en/public-services-procurement.html | News listing | Contract awards, RFP outcomes |
+| **Canadian Defence Review** | canadiandefencereview.com/procurements-projects/ | Editorial coverage | Procurement program tracking |
+| **Philippe Lagassé Substack** | philippelagasse.substack.com | Analyst commentary | Subject-matter expert; canonical Canadian defence-policy voice |
+| **Atlantic Council — Canada defence briefs** | atlanticcouncil.org | Think-tank analysis | NATO/Canada strategic context |
+| **SerpAPI Canadian defence queries** | (no URL — query layer) | News search | Catches Globe and Mail, National Post, CBC, CTV coverage that RSS misses |
 
-Three env vars needed: `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `REDDIT_USER_AGENT`. Setup: reddit.com/prefs/apps → "create app" → type "script" → redirect URI `http://localhost:8080` (unused).
+**Filter strategy (mirrors Seva's Haiku NRCan filter):** Haiku evaluates each item with prompt "Is this Canadian defence procurement, policy, or industrial-base news? Reject consumer/lifestyle/sports content." Same architecture as Seva's Ontario-law filter — Sonnet-class judgment at Haiku price.
 
-### API Call Pattern (HIGH confidence — praw stable docs)
+### Differentiator: Defence Procurement Signal Specificity
 
-```python
-async for submission in reddit.subreddit("gold").top(time_filter="week", limit=10):
-    post = {
-        "title": submission.title,
-        "score": submission.score,  # net upvotes (ups - downs)
-        "url": submission.url,
-        "permalink": f"https://reddit.com{submission.permalink}",
-        "subreddit": submission.subreddit.display_name,
-        "num_comments": submission.num_comments,
-        "is_self": submission.is_self,  # True = text post
-    }
-```
+| Event Category | Why It Matters to a Defence Analyst | Source Hint |
+|----------------|-----------------------------|-------------|
+| **Major contract awards** ($100M+ Canadian; $1B+ global) | Industrial-base movement; supplier opportunities | Defense News + DND + PSPC |
+| **Treaty signings / sanctions** | Reshape supply chains and end-customer markets | Defense One + Janes + Atlantic Council |
+| **Defence-budget legislation / appropriations** | Forward-looking demand signal | National Defense Magazine + Lagassé |
+| **NATO common-funding decisions** | Allied procurement convergence | nato.int + Janes |
+| **Defence-tech program milestones** (F-35 delivery, F/A-XX selection, GCAP, FCAS, NGAD) | Program-of-record state | Breaking Defense + Defense News |
+| **Supplier/contractor announcements** (Lockheed, BAE, Bombardier, CAE, Magellan, MDA) | Industrial-base health | Defense Daily + Defense Industry Daily |
+| **Export-control actions (US ITAR/EAR, EU dual-use)** | Market access constraints | CSIS + Congress.gov + Defense One |
 
-`time_filter='week'` is the correct parameter name. Valid values: `"hour"`, `"day"`, `"week"`, `"month"`, `"year"`, `"all"`. Use `"week"` — aligns exactly with the Sunday sweep window.
+### Daily Summary System-Prompt Differences (Seva → Juno)
 
-**Sort order recommendation:** `top(time_filter='week')` over `hot()`. Hot ranks by a decay-weighted score that heavily favors recent posts — a post from Tuesday may outrank a more-engaged post from Monday. `top(time_filter='week')` uses net score as the ranking signal with no time decay, so it surfaces the most-voted content from the past 7 days regardless of day.
+| Dimension | Seva (gold) | Juno (defence) |
+|-----------|-------------|----------------|
+| Voice | Senior gold analyst; Bloomberg commodities desk energy | Senior defence-industry analyst; Janes/CSIS desk energy |
+| Hard prohibitions | No financial advice; no Seva mentions | No investment advice; no Juno mentions; no classified speculation; no advocacy for/against specific weapons programs |
+| Output frame | Bull thesis on gold sector | Strategic landscape — what's moving, who's contracting, what supply chains shifted, what conflicts changed the demand picture |
+| Specifics required | Cite ticker, price, ounce, % | Cite contract value, country, program designator, vendor, dollar amount |
+| Anti-pattern | "Gold went up today" (no specifics) | "Tensions rose in [region]" (no specifics) — Sonnet must cite the event, the dollar figure, the program, the contracting authority |
 
-**Engagement metric recommendation:** Use `submission.score` directly. Do not use `num_comments` as primary ranking; it inflates controversial posts. Secondary signal: `score / max(num_comments, 1)` as a quality filter to exclude low-score high-comment flamewars, but don't rank by it.
+### DIFFERENTIATORS — Worth Considering in v3.0
 
-**Post type:** Ingest both text posts (`is_self=True`) and link posts.
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **Tier-1 vs Tier-2 source weighting** | Prioritize Janes/Defense News/Breaking Defense/Defense One over secondary outlets in summary citations | S | Tag each feed with a `tier` in config; Sonnet system prompt instructed to weight T1 sources more heavily |
+| **Contract-value extraction** | Where a story names a dollar amount, surface it explicitly ("Lockheed wins $850M PAC-3 contract") | S | Sonnet prompt instruction; no NER required |
+| **NATO/G7/AUKUS tag** | Flag stories where these alliance frameworks appear — high signal for Canadian-defence relevance | S | Sonnet prompt instruction; renders as small badge in `SectionBlock` |
 
-**Comments:** Do NOT ingest top comments in v2.1.
+### ANTI-FEATURES — Never Ship in v3.0
 
-### Rate limits (HIGH confidence)
-
-Free tier: 100 authenticated requests per minute. A Sunday sweep calling 5 subreddits × 10 posts each = 5 API calls plus ~5 for auth/metadata = well under 100 QPM. Zero rate-limit risk.
-
-### Subreddit Viability Assessment
-
-| Subreddit | Est. Subscribers | Activity Profile | Verdict | Notes |
-|-----------|-----------------|-----------------|---------|-------|
-| r/gold | ~50K–80K | Moderate posting, mix of prices/charts/news | **VIABLE** | Primary macro-gold community; quality signal |
-| r/Wallstreetsilver | ~160K | High posting volume; silver-heavy; anti-establishment framing | **VIABLE** | Largest precious metals sub; silver overlaps with gold narrative |
-| r/silverbugs | ~50K | Collector-hobbyist tone; lower virality for strategic content | **MARGINAL** | Drops easily if limit forces a cut; physical stacking focus |
-| r/Gold_and_Silver | ~15K–30K | Low volume; combined PMs focus | **MARGINAL** | Smaller community; likely redundant with r/gold + r/Wallstreetsilver |
-| r/Gold_Silver_Crypto | ~5K–15K | Very low activity | **NOT VIABLE** | Too small; crypto framing dilutes gold-specific signal |
-| r/wallstreetbets (filtered) | ~15M | Massive but gold/mining mentions are rare (<1% of posts) | **NOT VIABLE AS A SUBREDDIT** | Flair filtering in WSB is unreliable; gold tickers ($GLD, $GDX) appear in comments not titles; too noisy for a weekly sweep at `limit=10` |
-| r/investing | ~2M | Broad investing; gold mentioned sporadically | **MARGINAL** | Would need keyword post-filter to surface gold content; not worth the complexity |
-
-**Recommended subreddit list (4 subreddits):**
-
-```python
-SWEEP_SUBREDDITS = ["gold", "Wallstreetsilver", "silverbugs", "Gold_and_Silver"]
-```
-
-Keep r/silverbugs and r/Gold_and_Silver despite MARGINAL rating because the sweep fetches `limit=10` per sub and the total API cost is 4 calls. Drop r/Gold_Silver_Crypto entirely (too small) and skip r/wallstreetbets (noise-to-signal ratio unacceptable).
+| Feature | Why Avoid | What to Do Instead |
+|---------|-----------|-------------------|
+| **Classified-source ingestion** | Out of scope, legally fraught, not the product | Open-source intelligence only — Janes, public news, .gov press releases |
+| **Position-taking on defence policy** | Voice is analyst, not advocate; no editorial stances on weapons programs or military doctrine | Cite, don't endorse; report contract activity and strategic shifts, not opinions on whether they're good |
+| **Stock-price / equity signals on defence primes** | Mirrors Seva's "no financial advice" prohibition; Juno is not a Lockheed-stock newsletter | Cover contract awards as industrial signal, not investment thesis |
+| **Operational/tactical intelligence** | Out of scope; tool is strategic/industry-level | No order-of-battle, no specific unit deployments, no force posture commentary |
+| **Real-time conflict updates** | The 2x-daily summary cadence is intentional; this is a digest tool, not a wire service | Roll-up format only; "today's strategic moves" not "minute-by-minute Ukraine updates" |
+| **Defence-stats third section (Seva-style StatCan analog)** | No clean defence-stats API analog to StatCan WDS; defence "stats" are spread across SIPRI annual reports, GAO releases, NATO budget docs — too sparse for a daily section | Replace with World Events section (Category 3 below) |
 
 ---
 
-## STORY VIRALITY COMPUTE — Detailed Findings
+## CATEGORY 3 — WORLD-EVENTS-RELEVANT-TO-DEFENCE
 
-### Data Source
+This is the **defining differentiator** of Juno's News Funnel vs a generic Google News defence feed. The question is: how do you filter generic world news for defence relevance without producing either (a) noise (everything is "geopolitically relevant" in some sense) or (b) too-narrow signal (only stories with "defence" in the headline)?
 
-`daily_summaries.raw_sources_jsonb.gold_news` is an array of objects, each with shape:
-```python
-{"title": str, "link": str, "source_name": str, "score": float, "published_at": str}
-```
-This is confirmed from `_build_gold_news_section()` in `daily_summary.py` lines 203–217. The `link` field is the canonical story URL.
+### The Relevance Heuristic (RECOMMENDED — for roadmap discussion-phase)
 
-### Query Strategy (HIGH confidence — directly from codebase)
+Sonnet relevance filter with explicit inclusion categories. A world-event item is "defence-relevant" if it fits any of these categories:
 
-Pull `raw_sources_jsonb` from all `daily_summaries` rows in the past 7 days, flatten the `gold_news` arrays, then group and count.
+| Category | Examples | Why Defence-Relevant |
+|----------|----------|----------------------|
+| **Active armed conflict / war/peace transitions** | Ukraine offensives; Gaza developments; Sudan civil war; Taiwan Strait incidents | Direct demand-side signal for defence industrial base; reshapes treaty/alliance posture |
+| **Geopolitical alignment shifts** | New mutual-defence agreements; BRICS expansion; alliance withdrawals; basing decisions | Reshapes contracting markets and export-control regimes |
+| **Defence-spending policy actions** | National budget passages (US NDAA, Canadian DND vote, EU EDF allocations, NATO 2%-of-GDP commitments) | Forward demand signal; SIPRI 2024 data shows military expenditure at $2.7T, up 10th consecutive year |
+| **Sanctions / export controls (defence-relevant)** | US BIS entity-list updates; EU dual-use revisions; ITAR enforcement actions; semiconductor export controls (advanced chips for hypersonic/AI weapons) | Direct market-access impact; supplier exclusions |
+| **Energy / critical-mineral supply disruptions** | Strait of Hormuz incidents; rare-earth export controls (China); pipeline sabotage; uranium-supply shifts | Defence supply chains depend on critical minerals + secure energy; supply shock = procurement risk |
+| **Semiconductor supply chain events** | TSMC announcements; CHIPS Act actions; ASML export controls; China SMIC progress | Modern precision weapons depend on advanced AI chips (per CSIS/RAND analysis); Taiwan disruption = US military capability impact |
+| **Space-launch / orbital events with military application** | Starshield contracts; Chinese ASAT tests; reusable-launch program milestones; satellite-constellation deployments | Increasingly central to defence-tech roadmaps |
+| **Hypersonic / AI / autonomy program announcements** | DARPA milestones; PLA hypersonic tests; AI-targeting program reveals | Next-generation defence-tech demand drivers |
+| **Major treaty/sanctions events affecting NATO/G7/AUKUS** | New Five Eyes intel-sharing; ITAR carve-outs for AUKUS partners; Australia–Korea–Japan trilaterals | Alliance contracting and tech-transfer implications |
 
-```python
-# Pseudo-SQL
-SELECT raw_sources_jsonb->'gold_news' AS stories
-FROM daily_summaries
-WHERE generated_at >= NOW() - INTERVAL '7 days'
-  AND status IN ('completed', 'partial')
-```
+### The Anti-Relevance Heuristic (what Sonnet should REJECT)
 
-In Python: unnest the JSONB arrays, extract `link` and `title` per story, then group.
+| Category | Why Reject |
+|----------|------------|
+| **Consumer tech** unless export-controlled (chips) | iPhone launches are not defence news |
+| **Sports / entertainment / celebrity** | Pure noise |
+| **General finance / equities** unless defence-prime stocks during contract event | Generic market moves are not defence signal |
+| **Generic domestic politics** without defence-policy linkage | Healthcare debates, immigration unless defence-recruiting linked |
+| **Climate news** without defence-supply-chain or basing-impact angle | Climate matters to defence in some ways, but generic climate reports are not Juno-relevant |
+| **Tech-industry news** unless export-controlled or defence-program adjacent | Most SaaS funding rounds are noise |
 
-### Dedup Strategy Recommendation (HIGH confidence)
+### TABLE STAKES — Must Ship in v3.0
 
-**Use URL canonicalization, not SequenceMatcher on URLs.** Reason: URL SequenceMatcher at 0.85 would conflate `kitco.com/2026/01/article.html` with `kitco.com/2026/02/article.html` if they share 87% of URL characters — a false positive. URL strings are structured identifiers, not prose. The right dedup for URLs is canonical normalization:
+| Feature | Why Expected | Complexity | Dependencies on v2.x |
+|---------|--------------|------------|----------------------|
+| **World-events ingestion (general news → Sonnet filter)** | The defining differentiator vs raw RSS — without the filter, the section is noise | M | Reuse SerpAPI client with broader news queries (geopolitics, conflicts, sanctions); pass through a Sonnet relevance pre-filter before inclusion |
+| **Sonnet defence-relevance filter** | The intelligence layer — Haiku-or-Sonnet-class judgment on what counts as defence-relevant world news | M | Same architecture as Seva's Haiku Ontario-law filter; system prompt encoding the inclusion/exclusion categories above |
+| **World Events section in daily summary** | The third section of Juno's `SummaryCard`, parallel to Seva's Ontario Stats | S | Reuse `SectionBlock`; new label + content from the relevance-filtered pool |
+| **Source diversity in World Events** | A defence analyst expects coverage across Reuters/AP/FT/Bloomberg/Economist/CSIS/RUSI/Atlantic Council, not just one outlet | S | SerpAPI default already diverse; system prompt instruction to cite ≥3 sources per major item |
 
-```python
-from urllib.parse import urlparse, urlunparse, parse_qs
+### DIFFERENTIATORS — Worth Considering in v3.0
 
-def canonical_url(url: str) -> str:
-    """Strip tracking params, lowercase hostname, remove trailing slash."""
-    parsed = urlparse(url.lower().strip())
-    STRIP_PARAMS = {"utm_source","utm_medium","utm_campaign","utm_content",
-                    "utm_term","fbclid","gclid","ref","source","_ga"}
-    qs = {k: v for k, v in parse_qs(parsed.query).items() if k not in STRIP_PARAMS}
-    clean = parsed._replace(
-        query="&".join(f"{k}={v[0]}" for k, v in sorted(qs.items())),
-        fragment=""
-    )
-    path = clean.path.rstrip("/") or "/"
-    return urlunparse(clean._replace(path=path))
-```
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **Inclusion-category tags** | Show "Why defence-relevant: [category]" inline — operator instantly sees the relevance reason | S | Sonnet emits category tag per item; render as small badge in `SectionBlock` |
+| **SIPRI / NATO / IISS structured-data pulls** | Higher-signal than news scraping for spending data | L | Could add annual/quarterly SIPRI database polls; defer to v3.1+ — too sparse for daily |
+| **Geographic concentration index** | At-a-glance "today's geopolitical center of gravity" — e.g. 3 of 5 items concern Indo-Pacific | M | Sonnet prompt instruction; renders as a one-line header on the section |
 
-After canonicalization, group by canonical URL. For stories that share a canonical URL across multiple daily_summaries rows, count distinct `daily_summaries` rows (not total occurrences). A story appearing in 2 fires per day × 7 days = 14 occurrences should count as 7 distinct days, not 14.
+### ANTI-FEATURES — Never Ship in v3.0
 
-**Cross-source virality vs. frequency:** Use **distinct source_name count** as the primary virality signal. A story covered by bloomberg.com + northernminer.com + goldswitzerland.com = 3 distinct sources = highly viral. A story that appeared only on fxstreet.com 7 times in 7 fires = 1 distinct source = not viral. Formula:
-
-```python
-virality_score = len(set(story["source_name"] for story in story_group))
-```
-
-Output shape: list of `(canonical_title, canonical_url, distinct_source_count, latest_seen_at)`, sorted by `distinct_source_count` descending, top 5.
-
----
-
-## SONNET CONTENT-ANGLE GENERATION — Recommended Prompt
-
-**Model:** `claude-sonnet-4-6` (consistent with `SONNET_MODEL` in daily_summary.py)
-**Max tokens:** 1000 (3 angles × ~300 tokens each)
-**Timeout:** 60.0 seconds (consistent with post-ii6 pattern)
-
-### System Prompt
-
-```
-You are a tactical content strategist for a gold-sector social media account. Your reader is a solo operator who monitors the gold market and publishes 4-5 times per week. You receive two signals: top Reddit posts from gold/silver communities this week, and the most cross-referenced news stories from the past 7 days.
-
-Your job: identify 3 specific content angles the operator should consider this week.
-
-Each angle must:
-- Connect a Reddit signal (what investors are actually discussing) with a mainstream/institutional signal (what the news is covering)
-- Identify the gap or narrative tension between them — that gap is where the interesting content lives
-- Suggest a concrete framing or hook, not a generic topic
-- Stay within the operator's voice: senior analyst, data-driven, cites specifics, Bloomberg commodities desk energy
-- Never mention Seva Mining. Never give financial advice (no buy/sell signals).
-
-Output format:
-**Angle 1: [Short title]**
-Reddit signal: [what the community is talking about and why it's getting traction]
-Mainstream signal: [what the news coverage is saying]
-Your angle: [specific framing or hook the operator could use]
-
-**Angle 2: [Short title]**
-[same structure]
-
-**Angle 3: [Short title]**
-[same structure]
-
-No preamble. No postamble. Three angles only.
-```
-
-### User Prompt Template
-
-```python
-def build_sweeper_user_prompt(
-    reddit_posts: list[dict],
-    viral_stories: list[dict],
-) -> str:
-    reddit_block = "\n".join(
-        f"- [{p['subreddit']}] {p['title']} (score: {p['score']})"
-        for p in reddit_posts[:10]
-    )
-    viral_block = "\n".join(
-        f"- {s['title']} (covered by {s['source_count']} sources: {', '.join(s['sources'][:3])})"
-        for s in viral_stories[:5]
-    )
-    return (
-        f"TOP REDDIT POSTS THIS WEEK (gold/silver communities):\n{reddit_block}\n\n"
-        f"MOST CROSS-REFERENCED NEWS STORIES (past 7 days):\n{viral_block}\n\n"
-        "Generate 3 content angles."
-    )
-```
-
-**Rationale:** Mirrors the `GOLD_NEWS_SYSTEM_PROMPT` bull-thesis framing philosophy (every output must connect to a concrete insight) but reframed as "tactical content strategy." The "gap between Reddit and mainstream" instruction is the key differentiator — it forces Sonnet to produce angles based on narrative tension rather than restating the top headline.
+| Feature | Why Avoid | What to Do Instead |
+|---------|-----------|-------------------|
+| **Live conflict map / dashboard** | Out of scope — this is a digest tool, not OSINT mapping | Cite events in prose; no maps |
+| **ACLED / SIPRI live integration** | ACLED's value is structured-data API at scale; overkill for 5-item daily digest | Cite SIPRI as a source; don't ingest live |
+| **Generic geopolitical news firehose** | Without the relevance filter this becomes a noisy world-news page; user can already get that elsewhere | The Sonnet filter IS the product — keep it tight |
+| **Editorial / opinion takes from outlets** | Bias risk; analyst voice should be Juno's own, not borrowed | Cite factual reporting; synthesize analysis ourselves |
+| **Predictive scoring ("conflict X likely to escalate")** | Quantitative geopolitical forecasting is a research discipline, not a digest feature | Report developments, don't forecast |
 
 ---
 
-## CONTENT CALENDAR UX — Detailed Findings
+## FEATURE DEPENDENCIES (cross-category)
 
-### Week start: Monday (ISO/EU convention)
-
-Recommendation: **Mon–Sun**. Rationale: content planning for a professional operator aligns naturally with the ISO business week (Mon = start of work cycle). Most professional content tools (Notion calendar, Linear) default to Mon start.
-
-### Today highlighting
-
-Both a bold border (`ring-2 ring-amber-500`) and a subtle background tint (`bg-amber-500/5`) on the current day cell.
-
-### Items per day
-
-No hard cap in DB, but visually clip at 3 items with a "+N more" overflow badge. Handle overflow in the render layer only.
-
-### Tag color-coding
-
-Fixed color map per tag slug. Recommended initial set:
-
-```typescript
-const TAG_COLORS: Record<string, string> = {
-  thread:   "bg-blue-500/20 text-blue-300",
-  video:    "bg-red-500/20 text-red-300",
-  podcast:  "bg-purple-500/20 text-purple-300",
-  image:    "bg-green-500/20 text-green-300",
-  article:  "bg-amber-500/20 text-amber-300",
-  idea:     "bg-zinc-500/20 text-zinc-300",
-};
-const DEFAULT_TAG_COLOR = "bg-zinc-700/40 text-zinc-400";
 ```
+Multi-tenancy plumbing (Category 1)
+    └── companies table + company_id column migration
+        └──required by──> Juno News Funnel daily_summary writes (Cat 2)
+        └──required by──> Tab 1 query scoping (Cat 2)
+        └──required by──> 30-day prune scoped by company (Cat 2)
+    └── company switcher in AppHeader
+        └──required by──> User reaching Juno's Tab 1 at all
+    └── URL routing /{company}/...
+        └──required by──> Switcher state persistence
+        └──required by──> Deep-linking back into Juno after page reload
 
-### Empty cells
+Juno News Funnel (Category 2)
+    └── defence-sector RSS + SerpAPI ingestion
+        └──feeds──> Defence News section
+        └──feeds──> Canadian Procurement section (with Haiku filter)
+    └── World Events ingestion (broader queries)
+        └──requires──> Sonnet defence-relevance filter (Cat 3)
+        └──feeds──> World Events section
+    └── Sonnet daily summary (Juno system prompt)
+        └──requires──> all three section data pools above
+        └──writes──> daily_summaries WHERE company_id='juno'
+    └── Juno cron registration
+        └──must respect──> OPS-02 advisory-lock uniqueness
+        └──must scope writes by──> company_id='juno'
 
-Show a "+ Add" hint button on hover only (`opacity-0 group-hover:opacity-100 transition-opacity`).
-
-### Drag-and-drop vs. date dropdown
-
-**Recommendation: Ship date-dropdown reschedule in v2.1. Defer DnD to v2.2.**
-
-`@dnd-kit/core` for a calendar grid requires implementing custom `DragOverlay`, collision detection across a 7-column grid with overflow handling, touch vs. mouse event differences, and keyboard accessibility. ~300–500 lines of plumbing for a single-user tool where the user rarely reschedules more than 1–2 items per session. A date `<select>` dropdown on the edit modal achieves the same reschedule outcome in ~20 lines.
-
-If DnD is added in v2.2, `@dnd-kit/core` is the correct library.
-
-### Click-to-edit
-
-Click any calendar item → open an inline popover or slide-over panel with: title (text input), date (date picker), tag (dropdown), markdown notes (textarea with basic MD preview toggle). Do not use a full-page modal.
-
----
-
-## SUNDAY CRON DESIGN — Recommendation
-
-**Recommendation: Separate cron at 08:00 PT Sunday.**
-
-Rationale:
-- 08:00 PT — gives Reddit a full week of posts to accumulate through Saturday.
-- Do NOT tie the sweeper to the 08:00 daily summary as a side-effect. Coupling them means a sweeper timeout could delay the daily summary, and a failed daily summary would suppress the sweeper output. Separate cron jobs = independent failure domains.
-
-APScheduler registration:
-
-```python
-scheduler.add_job(
-    run_weekly_sweep,
-    CronTrigger(day_of_week="sun", hour=8, minute=0, timezone="America/Los_Angeles"),
-    id="weekly_sweep",
-    max_instances=1,
-    misfire_grace_time=1800,
-)
+World Events relevance filter (Category 3)
+    └── feeds World Events section directly
+    └── parallel to Seva's Haiku NRCan filter — same architectural slot
 ```
-
-This mirrors the `_make_daily_summary_job` pattern in `worker.py`. The sweep should have its own idempotency check (60-minute window pattern) to guard against misfire double-fires.
-
----
-
-## WHATSAPP FOR SWEEPER
-
-**Recommendation: No WhatsApp for the sweeper in v2.1.**
-
-The user did not mention WhatsApp for the sweeper. The sweeper is a Sunday morning read, not a real-time alert. The web feed is the primary surface. Defer to v2.2 if the user requests it after using v2.1.
 
 ---
 
 ## FEATURE PRIORITIZATION MATRIX
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Tab navigation | HIGH | LOW | P1 |
-| Calendar CRUD + DB | HIGH | MEDIUM | P1 |
-| Reddit ingestion (asyncpraw) | HIGH | MEDIUM | P1 |
-| Story virality compute | HIGH | MEDIUM | P1 |
-| Sonnet content-angle generation | HIGH | LOW | P1 |
-| Weekly sweep card UI | HIGH | MEDIUM | P1 |
-| Linear UI redesign | HIGH | MEDIUM | P1 |
-| Tag color-coding | MEDIUM | LOW | P2 |
-| Today highlight | MEDIUM | LOW | P2 |
-| Day hover "+ Add" hint | MEDIUM | LOW | P2 |
-| Reddit post score badge | MEDIUM | LOW | P2 |
-| Week history picker (Tab 3) | MEDIUM | MEDIUM | P2 |
-| Drag-and-drop calendar | MEDIUM | HIGH | P3 (v2.2) |
-| WhatsApp sweeper delivery | LOW | LOW | P3 (v2.2) |
+| Feature | User Value | Impl. Cost | Priority | Category |
+|---------|------------|------------|----------|----------|
+| `companies` table + `company_id` migration | HIGH | MEDIUM | P1 | Multi-tenancy |
+| Company switcher in AppHeader (dropdown) | HIGH | MEDIUM | P1 | Multi-tenancy |
+| URL routing `/{company}/...` | HIGH | MEDIUM | P1 | Multi-tenancy |
+| Per-company API scoping (company_id in all queries) | HIGH | MEDIUM | P1 | Multi-tenancy |
+| Defence-sector RSS ingestion (T1 feeds) | HIGH | MEDIUM | P1 | Juno News |
+| Defence-sector SerpAPI queries | HIGH | LOW | P1 | Juno News |
+| Sonnet daily summary for Juno (system prompt) | HIGH | MEDIUM | P1 | Juno News |
+| Juno daily_summary cron + lock-id | HIGH | MEDIUM | P1 | Juno News |
+| Tab 1 renders Juno daily summary | HIGH | LOW | P1 | Juno News |
+| Sonnet defence-relevance world-events filter | HIGH | MEDIUM | P1 | World Events |
+| World Events section in daily summary | HIGH | LOW | P1 | World Events |
+| Canadian Procurement section (Haiku filter) | HIGH | MEDIUM | P1 | Juno News |
+| 30-day prune extended to scope by company | HIGH | LOW | P1 | Multi-tenancy |
+| Cmd+1 / Cmd+2 keyboard shortcuts | MEDIUM | LOW | P2 | Multi-tenancy |
+| Visual company accent strip | MEDIUM | LOW | P2 | Multi-tenancy |
+| T1 vs T2 source weighting | MEDIUM | LOW | P2 | Juno News |
+| Inclusion-category tags on World Events items | MEDIUM | LOW | P2 | World Events |
+| Contract-value extraction in summary | MEDIUM | LOW | P2 | Juno News |
+| SIPRI / ACLED structured-data pulls | LOW | HIGH | P3 (v3.1+) | World Events |
+| Per-company branding | LOW | MEDIUM | P3 (v3.1+) | Multi-tenancy |
 
 ---
 
-## DEPENDENCY SEQUENCING FOR ROADMAP
+## OPEN QUESTIONS / GAPS FOR DISCUSSION-PHASE
 
-The roadmapper should sequence phases as follows based on dependencies:
+1. **Data-isolation strategy** — Row-level `company_id` column (simpler queries, single table) vs schema-per-company (cleaner isolation, harder migrations) vs separate tables (`juno_daily_summaries`)? PROJECT.md lists this as the hardest decision. **Research recommendation: row-level `company_id`** — matches v2.x table structure with minimal churn; backfill in single Alembic migration; SQLAlchemy queries gain a `.where(model.company_id == active_company)` clause. Schema-per-company would force duplicate Alembic histories per company.
 
-**Phase 1: DB foundation + tab shell**
-- `weekly_sweeps` table (Alembic migration)
-- `calendar_items` table (Alembic migration)
-- shadcn `Tabs` shell in App.tsx (Tab 1 = existing feed, Tab 2 = placeholder, Tab 3 = placeholder)
-- All existing v2.0 routes preserved; Tab 1 wraps existing `SummaryFeedPage` component
+2. **Cron topology** — One `daily_summary` job that fans out per company (preferred — single OPS-02 lock ID), or N jobs (Juno gets its own lock-id `juno_daily_summary`)? **Research recommendation: fan-out from one job** — OPS-02 lock-ID space stays small; per-company-failure semantics preserved by per-company DB writes inside the job; failure of Juno doesn't block Seva because they run in the same job sequentially with try/except scoping.
 
-**Phase 2: Content Calendar (Tab 2)**
-- REST CRUD endpoints for `calendar_items`
-- Weekly grid view component (Mon–Sun, today highlight, tag colors, hover hints)
-- Click-to-edit panel with date dropdown reschedule
-- TanStack Query optimistic mutations
+3. **DND/PSPC RSS gap** — Research confirms there is NO clean public RSS feed for DND or PSPC procurement announcements; coverage must come from Canada.ca scrape, SerpAPI, and editorial sources (Canadian Defence Review, Lagassé). Roadmapper should plan for SerpAPI-heavier Canadian-procurement ingestion than Seva's Ontario-law section.
 
-**Phase 3: Weekly Viral Sweeper (Tab 3)**
-- asyncpraw integration (Reddit ingestion function, Sunday cron registration)
-- Story virality compute (SQL query + URL canonicalization + distinct-source count)
-- Sonnet content-angle call
-- `weekly_sweeps` INSERT with idempotency check
-- Sweep card UI component
+4. **Defence "stats" section** — Seva has StatCan WDS direct-poll for monthly Ontario gold production. Defence has no equivalent daily/weekly structured-data feed. **Decision: replace third section with World Events** (per recommendation above) — this is the actual structural difference between Seva's and Juno's News Funnel. Confirm with operator during discussion-phase.
 
-**Phase 4: UI polish**
-- Linear-style redesign applied globally (dark + amber-500, Inter, whitespace tokens)
-- shadcn component audit — replace any ad-hoc form elements
+5. **Voice calibration for defence** — Seva's "Bloomberg commodities desk" voice maps to a "Janes/CSIS analyst desk" voice for Juno. System-prompt iteration during the build phase will be necessary; recommend including a voice-validation step in the Juno-side Phase 1.
 
-This sequencing works because: Phase 1 provides the structural shell needed by Phases 2 and 3 independently; Phase 2 and 3 can be developed in parallel if bandwidth allows; Phase 4 is a pure CSS/component layer that does not affect logic.
-
----
-
-## OPEN QUESTIONS / GAPS
-
-1. **r/Gold subscriber count:** Confirm actual subscriber count by visiting reddit.com/r/gold before finalizing the subreddit list.
-
-2. **`REDDIT_USER_AGENT` string format:** Reddit requires a descriptive user agent. Convention: `"<platform>:<app_id>:<version> (by /u/<reddit_username>)"`. For non-commercial read-only use: `"SevaMiningSweeper/1.0 by sevabot"` is sufficient.
-
-3. **`r/wallstreetbets` gold-tagged posts:** If the user wants WSB exposure in v2.2, a keyword post-filter (`"gold" in submission.title.lower()`) after fetching `limit=100` from r/investing or r/stocks would be a cleaner approach than targeting WSB directly.
-
-4. **`weekly_sweeps` idempotency key:** Should be `week_start` (the Sunday of the swept week), not `generated_at`. The idempotency check is: "does a `weekly_sweeps` row already exist with `week_start = this_sunday`?"
+6. **Switcher placement specifics** — Phase 5 froze `AppHeader.tsx`. Need surgical placement: left of tabs nav, right of brand-mark, OR below header in a sub-bar? **Research recommendation: between brand-mark and tabs nav** — matches Linear/Notion top-left placement and is the highest-visibility location without restructuring.
 
 ---
 
 ## Sources
 
-- PRAW stable documentation — authentication: https://praw.readthedocs.io/en/stable/getting_started/authentication.html (HIGH confidence)
-- PRAW quick start — subreddit listing methods: https://praw.readthedocs.io/en/stable/getting_started/quick_start.html (HIGH confidence)
-- Reddit API free tier rate limits 2026: https://octolens.com/blog/reddit-api-pricing (MEDIUM confidence)
-- Reddit API app creation guide 2026: https://redaccs.com/reddit-api-guide/ (MEDIUM confidence)
-- URL deduplication / canonicalization best practices: https://potentpages.com/web-crawler-development/web-crawlers-and-hedge-funds/deduplication-canonicalization-preventing-double-counts-and-phantom-signals (MEDIUM confidence)
-- shadcn Tabs component: https://ui.shadcn.com/docs/components/radix/tabs (HIGH confidence)
-- shadcn dark mode + amber theme: https://ui.shadcn.com/docs/theming and https://www.shadcn.io/theme/amber-minimal (HIGH confidence)
-- dnd-kit React drag-and-drop complexity: https://www.blog.brightcoding.dev/2025/08/21/the-ultimate-drag-and-drop-toolkit-for-react-a-deep-dive-into-dnd-kit/ (MEDIUM confidence)
-- r/WallStreetSilver ~160K subscribers: https://subredditstats.com/r/Wallstreetsilver (MEDIUM confidence)
-- Silver Gold Bull precious metals Reddit communities: https://silvergoldbull.com/education/5-best-precious-metals-communities-on-reddit/ (MEDIUM confidence)
+- Linear workspace switcher (top-left dropdown pattern): https://linear.app/docs/workspaces (HIGH confidence)
+- Notion workspace switcher + account dropdown: https://www.notion.com/help/create-delete-and-switch-workspaces (HIGH confidence)
+- Slack workspace switcher sidebar pattern + Cmd+number shortcuts: https://slack.com/help/articles/1500002200741-Switch-between-workspaces (HIGH confidence)
+- Vercel multi-tenant routing — custom subpaths via middleware: https://vercel.com/platforms/docs/multi-tenant-platforms/custom-subpaths (HIGH confidence)
+- Vercel multi-tenant template (Next.js patterns): https://vercel.com/platforms/docs/examples/multi-tenant-template (HIGH confidence)
+- Vercel-Labs multi-tenant preview URLs: https://github.com/vercel-labs/multi-tenant-preview-urls (MEDIUM confidence)
+- Command palette UX patterns + when-to-use: https://medium.com/design-bootcamp/command-palette-ux-patterns-1-d6b6e68f30c1 (MEDIUM confidence)
+- Multi-tenant SaaS routing tradeoffs (subdomain vs path-prefix vs query): https://workos.com/blog/developers-guide-saas-multi-tenant-architecture (MEDIUM confidence)
+- Multi-tenant routing strategies on AWS: https://aws.amazon.com/blogs/networking-and-content-delivery/tenant-routing-strategies-for-saas-applications-on-aws/ (MEDIUM confidence)
+- Janes Defence News: https://www.janes.com/osint-insights/defence-news (HIGH confidence)
+- Breaking Defense: https://breakingdefense.com/ (HIGH confidence)
+- Defense News: https://www.defensenews.com/ (HIGH confidence)
+- Defense One: https://www.defenseone.com/ (HIGH confidence)
+- DefenseScoop: https://defensescoop.com/ (MEDIUM confidence)
+- Defense Daily: https://www.defensedaily.com/ (MEDIUM confidence)
+- National Defense Magazine (NDIA): https://www.nationaldefensemagazine.org/ (MEDIUM confidence)
+- Inside Defense: https://insidedefense.com/ (MEDIUM confidence)
+- Defense Industry Daily: https://www.defenseindustrydaily.com/ (MEDIUM confidence)
+- Canada DND F-35 + P-8A procurement context: https://canadiandefencereview.com/procurements-projects/ (MEDIUM confidence)
+- 2026-27 DND Departmental Plan ($50B+ allocation): https://www.canada.ca/en/department-national-defence/corporate/reports-publications/departmental-plans/departmental-plan-2026-27.html (HIGH confidence)
+- Philippe Lagassé Substack (Canadian defence analyst): https://philippelagasse.substack.com/ (MEDIUM confidence)
+- NATO July 2025 procurement-policy update: https://www.nato.int/en/news-and-events/articles/news/2025/07/22/nato-allies-agree-new-procurement-policy (HIGH confidence)
+- Atlantic Council on Canadian defence + NATO Hague commitments: https://www.atlanticcouncil.org/in-depth-research-reports/issue-brief/how-to-equip-canadas-defense-industrial-base-to-meet-natos-hague-summit-commitments/ (MEDIUM confidence)
+- SIPRI 2024 military expenditure ($2.7T, 10th consecutive year of growth): https://www.sipri.org/media/press-release/2026/global-military-spending-rise-continues-european-and-asian-expenditures-surge (HIGH confidence)
+- SIPRI Military Expenditure Database: https://www.sipri.org/databases (HIGH confidence)
+- ACLED conflict-event tracking (context only — not for daily ingestion): https://libguides.princeton.edu/politics/conflict (MEDIUM confidence)
+- CSIS on AI/semiconductor export controls + national security: https://www.csis.org/analysis/blocking-chinas-access-ai-chips-matters-us-national-security (HIGH confidence)
+- CSIS on China's defence-tech pursuit + export-control implications: https://www.csis.org/analysis/chinas-pursuit-defense-technologies-implications-us-and-multilateral-export-control-and (HIGH confidence)
+- RAND on advanced chips + national security: https://www.rand.org/pubs/commentary/2025/02/dont-be-fooled-advanced-chips-are-important-for-national.html (HIGH confidence)
+- Shephard Media on China's use of US AI chips for hypersonic weapon engines: https://www.shephardmedia.com/news/digital-battlespace/china-turns-to-us-made-ai-chips-to-boost-hypersonic-weapon-performance/ (MEDIUM confidence)
+- US Congress.gov on advanced semiconductor export controls (CRS R48642): https://www.congress.gov/crs-product/R48642 (HIGH confidence)
+- IBISWorld on US-China tech competition + global defence: https://www.ibisworld.com/blog/us-china-tech-war/1/1126/ (MEDIUM confidence)
