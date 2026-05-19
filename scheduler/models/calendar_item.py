@@ -11,6 +11,8 @@ class CalendarItem(Base):
     __tablename__ = "calendar_items"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # v3.0 Phase 9 — TENANT-01 — multi-tenant column (per 09-CONTEXT.md D-03).
+    company_id = Column(String(20), nullable=False, server_default="seva")
     date = Column(Date, nullable=False)
     title = Column(Text, nullable=True)
     notes_md = Column(Text, nullable=True)
@@ -19,6 +21,9 @@ class CalendarItem(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
     __table_args__ = (
-        Index("ix_calendar_items_date", "date"),
-        UniqueConstraint("date", name="uq_calendar_items_date"),
+        # v3.0 Phase 9 — TENANT-02 — composite UNIQUE matches migration 0014.
+        Index("ix_calendar_items_company_date", "company_id", "date"),
+        UniqueConstraint(
+            "company_id", "date", name="uq_calendar_items_company_date"
+        ),
     )

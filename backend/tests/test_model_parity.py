@@ -115,21 +115,12 @@ def test_weekly_sweep_uses_date_for_week_boundaries(scheduler_path):
 
 
 def test_daily_summary_parity(scheduler_path):
-    """Phase 9 Wave 0 RED — DailySummary parity across backend + scheduler.
+    """v3.0 Phase 9 Wave 1 — DailySummary parity across backend + scheduler.
 
     Asserts both DailySummary models share the same __tablename__, column
     names, and column types — including the v3.0 Phase 9 addition of
     `company_id VARCHAR(20) NOT NULL DEFAULT 'seva'`.
     """
-    pytest.skip(
-        "DailySummary parity requires company_id column — lands in Wave 1 "
-        "(09-02-PLAN.md). Remove this line in Wave 1 Task 2 step 7 to turn "
-        "this test GREEN.",
-        allow_module_level=False,
-    )
-    # The body below is currently unreachable (skip above).
-    # Wave 1 removes the skip line so this body runs.
-
     from app.models.daily_summary import DailySummary as BackendDS
 
     from models.daily_summary import DailySummary as SchedulerDS

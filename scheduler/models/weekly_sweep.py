@@ -11,6 +11,8 @@ class WeeklySweep(Base):
     __tablename__ = "weekly_sweeps"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # v3.0 Phase 9 — TENANT-01 — multi-tenant column (per 09-CONTEXT.md D-03).
+    company_id = Column(String(20), nullable=False, server_default="seva")
     generated_at = Column(DateTime(timezone=True), nullable=False)
     week_start = Column(Date, nullable=False)
     week_end = Column(Date, nullable=False)
@@ -27,5 +29,10 @@ class WeeklySweep(Base):
     )
 
     __table_args__ = (
-        Index("ix_weekly_sweeps_generated_at", text("generated_at DESC")),
+        # v3.0 Phase 9 — composite index matches migration 0014.
+        Index(
+            "ix_weekly_sweeps_company_generated",
+            "company_id",
+            text("generated_at DESC"),
+        ),
     )
