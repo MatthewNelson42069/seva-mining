@@ -289,7 +289,7 @@ Keeping Phase 7 as a single phase is recommended (scheduler + frontend in one ex
 - [x] 08-01-PLAN.md — Wave 0 validation scaffolding: vitest test stubs (XHandlePill, MarkdownContent, rehypeHandleMentions) + index.css token test + 4 grep scripts (UI-02/03/04 + pre-strip safety)
 - [x] 08-02-PLAN.md — Wave 1 UI polish: add 3 semantic amber tokens to index.css; apply hover:border-zinc-700 transition-colors to SummaryCard + SweeperCard; verify DayCell + SectionBlock (UI-01 / UI-02 / UI-03 / UI-04)
 - [x] 08-03-PLAN.md — Wave 2 UI-05 X-handle pill: create XHandlePill + rehypeHandleMentions + MarkdownContent; wire into SweeperCard (3 sections) + SectionBlock; rephrase REQUIREMENTS UI-05; human-verify UI-07 visual QA checkpoint (UI-05 / UI-07) (completed 2026-05-19)
-- [ ] 08-04-PLAN.md — Wave 3 UI-06 dead-code strip: update test_worker.py assertions, shrink JOB_LOCK_IDS to 4 keys, delete 6 sub-agent source + 8 test files, remove scheduler/agents/content/ directory; runs LAST per D-09 (UI-06)
+- [x] 08-04-PLAN.md — Wave 3 UI-06 dead-code strip: update test_worker.py assertions, shrink JOB_LOCK_IDS to 4 keys, delete 6 sub-agent source + 8 test files, remove scheduler/agents/content/ directory; runs LAST per D-09 (UI-06)
 
 **UI hint**: yes
 
