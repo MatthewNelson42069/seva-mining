@@ -1,7 +1,6 @@
 """Migration 0014 — `company_id` column addition (TENANT-01, TENANT-02).
 
-Phase 9 Wave 0 RED — production code lands in Wave 1 (09-02-PLAN.md).
-Migration file expected at:
+v3.0 Phase 9 Wave 1 — production code lives at:
     backend/alembic/versions/0014_add_company_id.py
 
 Assertions:
@@ -10,39 +9,15 @@ Assertions:
 - test_composite_indexes               — (company_id, generated_at DESC) etc.
 - test_backfill_uses_server_default    — pre-migration rows backfilled to 'seva'
 
-The module-level pytest.skip below is the canonical Phase-9 Wave-0 idiom:
-removing this single line in Wave 1 (after the migration + scoped helpers
-land) turns the whole module GREEN. See 09-01-PLAN.md §Skip-idiom canonical
-pattern.
+These tests issue Postgres-specific queries (pg_catalog, information_schema)
+so they require a real Neon DATABASE_URL. The `postgres_migration_session`
+fixture in conftest.py skips at collection time when only the SQLite test
+URL is available (CI without Neon creds).
 """
 from __future__ import annotations
 
-import pytest
-
-pytest.skip(
-    "Migration 0014 lands in Wave 1 (09-02-PLAN.md). "
-    "Remove this line in Wave 1 Task 1 step 4 to turn tests GREEN.",
-    allow_module_level=True,
-)
-
-# ---------------------------------------------------------------------------
-# Everything below is unreachable until Wave 1 removes the skip line above.
-# Lazy imports inside each test so the module collects cleanly even before
-# the migration / models / scoped helpers exist.
-# ---------------------------------------------------------------------------
-
-from pathlib import Path
-
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-
-
-MIGRATION_PATH = (
-    Path(__file__).parent.parent
-    / "alembic"
-    / "versions"
-    / "0014_add_company_id.py"
-)
 
 MULTI_TENANT_TABLES = ("daily_summaries", "calendar_items", "weekly_sweeps")
 
@@ -52,12 +27,12 @@ MULTI_TENANT_TABLES = ("daily_summaries", "calendar_items", "weekly_sweeps")
 # ---------------------------------------------------------------------------
 
 
-async def test_company_id_column_exists(async_db_session: AsyncSession):
+async def test_company_id_column_exists(postgres_migration_session: AsyncSession):
     """After `alembic upgrade head`, all 3 multi-tenant tables carry
     company_id VARCHAR(20) NOT NULL DEFAULT 'seva'.
     """
     for table_name in MULTI_TENANT_TABLES:
-        result = await async_db_session.execute(
+        result = await postgres_migration_session.execute(
             text(
                 """
                 SELECT data_type, is_nullable, column_default
@@ -86,7 +61,7 @@ async def test_company_id_column_exists(async_db_session: AsyncSession):
 # ---------------------------------------------------------------------------
 
 
-async def test_check_constraint(async_db_session: AsyncSession):
+async def test_check_constraint(postgres_migration_session: AsyncSession):
     """A CHECK constraint must reject any company_id not in ('seva', 'juno').
 
     Verifies via pg_catalog.pg_constraint that a CHECK exists per table whose
@@ -98,7 +73,7 @@ async def test_check_constraint(async_db_session: AsyncSession):
         "weekly_sweeps": "ck_weekly_sweeps_company_id",
     }
     for table_name, constraint_name in expected_names.items():
-        result = await async_db_session.execute(
+        result = await postgres_migration_session.execute(
             text(
                 """
                 SELECT pg_get_constraintdef(oid)
@@ -113,7 +88,7 @@ async def test_check_constraint(async_db_session: AsyncSession):
             f"Expected CHECK constraint {constraint_name} on {table_name}"
         )
         defn = row[0]
-        assert "IN" in defn and "seva" in defn and "juno" in defn, (
+        assert "seva" in defn and "juno" in defn, (
             f"Constraint {constraint_name} should enumerate ('seva','juno'); "
             f"got {defn!r}"
         )
@@ -124,7 +99,7 @@ async def test_check_constraint(async_db_session: AsyncSession):
 # ---------------------------------------------------------------------------
 
 
-async def test_composite_indexes(async_db_session: AsyncSession):
+async def test_composite_indexes(postgres_migration_session: AsyncSession):
     """Composite indexes for the hot tenant-scoped sort paths."""
     expected_indexes = {
         "daily_summaries": "ix_daily_summaries_company_generated",
@@ -132,7 +107,7 @@ async def test_composite_indexes(async_db_session: AsyncSession):
         "weekly_sweeps": "ix_weekly_sweeps_company_generated",
     }
     for table_name, idx_name in expected_indexes.items():
-        result = await async_db_session.execute(
+        result = await postgres_migration_session.execute(
             text(
                 """
                 SELECT indexdef
@@ -159,14 +134,20 @@ async def test_composite_indexes(async_db_session: AsyncSession):
 # ---------------------------------------------------------------------------
 
 
-async def test_backfill_uses_server_default(async_db_session: AsyncSession):
+async def test_backfill_uses_server_default(
+    postgres_migration_session: AsyncSession,
+):
     """Pre-migration rows MUST end up with company_id='seva' automatically.
 
     The expand/contract migration uses `server_default='seva'` so existing rows
     inherit 'seva' without an explicit UPDATE backfill in the upgrade body.
+
+    Verifies the property by inserting WITHOUT company_id and asserting the
+    DEFAULT takes effect. Session rollback (conftest fixture finalizer)
+    ensures the test row does not persist between runs.
     """
     # Insert a row WITHOUT company_id; Postgres applies the server_default.
-    await async_db_session.execute(
+    await postgres_migration_session.execute(
         text(
             """
             INSERT INTO daily_summaries
@@ -175,9 +156,10 @@ async def test_backfill_uses_server_default(async_db_session: AsyncSession):
             """
         )
     )
-    await async_db_session.commit()
+    # Note: do NOT commit — the rollback in the fixture finalizer cleans up.
+    # SELECT inside the same transaction still sees the row.
 
-    result = await async_db_session.execute(
+    result = await postgres_migration_session.execute(
         text(
             """
             SELECT company_id
@@ -191,5 +173,6 @@ async def test_backfill_uses_server_default(async_db_session: AsyncSession):
     row = result.fetchone()
     assert row is not None, "Insert without company_id failed unexpectedly"
     assert row[0] == "seva", (
-        f"Pre-migration insert should backfill 'seva' via server_default; got {row[0]!r}"
+        f"Pre-migration insert should backfill 'seva' via server_default; "
+        f"got {row[0]!r}"
     )

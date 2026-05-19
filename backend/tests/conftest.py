@@ -2,10 +2,31 @@
 Shared test fixtures for backend tests.
 """
 import os
+from pathlib import Path as _Path
 
 import bcrypt
 import pytest
 import pytest_asyncio
+
+# ---------------------------------------------------------------------------
+# STEP 0: Capture the real DATABASE_URL (Neon Postgres) BEFORE override.
+#         The migration-test fixture (postgres_migration_session) needs the
+#         real PG URL to run Postgres-specific queries (pg_catalog,
+#         information_schema with PG-specific columns) against the
+#         already-migrated Neon DB. v3.0 Phase 9 (TENANT-01/02 migration
+#         verification tests).
+# ---------------------------------------------------------------------------
+_REAL_DATABASE_URL = os.environ.get("DATABASE_URL")
+if not _REAL_DATABASE_URL:
+    # Fall back to reading backend/.env directly (uv run alembic loads this
+    # automatically, but pytest does not unless pydantic-settings dotenv is
+    # invoked, which happens AFTER conftest imports here).
+    _env_path = _Path(__file__).resolve().parents[1] / ".env"
+    if _env_path.exists():
+        for _line in _env_path.read_text().splitlines():
+            if _line.startswith("DATABASE_URL="):
+                _REAL_DATABASE_URL = _line.split("=", 1)[1].strip().strip('"').strip("'")
+                break
 
 # ---------------------------------------------------------------------------
 # STEP 1: Set environment variables BEFORE any app imports
@@ -91,6 +112,46 @@ async def async_db_session():
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:
         yield session
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def postgres_migration_session():
+    """Async DB session against the REAL Neon Postgres for migration tests.
+
+    v3.0 Phase 9 — TENANT-01/02 migration verification tests issue
+    Postgres-specific queries (pg_catalog.pg_constraint, information_schema
+    with PG-specific column_default shape) that SQLite cannot satisfy.
+
+    Skips at collection time if no real DATABASE_URL is available (CI without
+    Neon creds). When present, connects via asyncpg + ssl=True (Neon idiom).
+
+    Wraps every test in a ROLLBACK so pg_constraint checks see the migrated
+    schema but no test data leaks between runs.
+    """
+    if not _REAL_DATABASE_URL or "sqlite" in _REAL_DATABASE_URL:
+        pytest.skip(
+            "postgres_migration_session requires DATABASE_URL pointing at a "
+            "real Postgres (Neon). Found: "
+            f"{_REAL_DATABASE_URL!r}"
+        )
+
+    # asyncpg does not accept sslmode=require in URL; pass ssl=True via
+    # connect_args (Neon idiom — matches backend/alembic/env.py).
+    url = _REAL_DATABASE_URL.replace("?sslmode=require", "").replace(
+        "&sslmode=require", ""
+    )
+    connect_args = {"ssl": True} if "neon.tech" in url else {}
+
+    engine = _real_create_async_engine(url, connect_args=connect_args)
+    session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    async with session_factory() as session:
+        try:
+            yield session
+        finally:
+            await session.rollback()
     await engine.dispose()
 
 
