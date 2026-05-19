@@ -51,6 +51,11 @@ from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.daily_summary import DailySummary
 from models.weekly_sweep import WeeklySweep
+# v3.0 Phase 9 (TENANT-03) — scheduler-side scoped helpers. The CI grep gate
+# at scripts/verify-tenant-isolation.sh requires every multi-tenant select to
+# route through this module; lines 131 (DailySummary virality scan) + 320
+# (WeeklySweep idempotency) below have been rewritten accordingly.
+from queries.scoped import scoped_summaries, scoped_weekly_sweeps
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +132,12 @@ async def _compute_virality(session: AsyncSession) -> list[dict]:
         List of up to 5 dicts (may be empty on no data or all-NULL rows).
     """
     cutoff = datetime.now(timezone.utc) - timedelta(days=VIRALITY_LOOKBACK_DAYS)
+    # v3.0 Phase 9 (TENANT-03): scope to Seva. Weekly Viral Sweeper is a
+    # Seva-only job in v3.0 — D-01 reserves lock ID 1021 for juno_weekly_sweeper
+    # but defers its registration to v3.1+ (slot-only). When Juno Sweeper
+    # ships, this helper becomes parameterized on company_id.
     stmt = (
-        select(DailySummary)
+        scoped_summaries("seva")
         .where(DailySummary.generated_at >= cutoff)
         .where(DailySummary.status.in_(["completed", "partial"]))
     )
@@ -313,11 +322,17 @@ def _sunday_of_this_week(now_utc: datetime) -> date:
 
 
 async def _idempotency_skip(session: AsyncSession, now_utc: datetime) -> bool:
-    """SWEEP-10 — return True if a recent row already exists in 60-min window."""
+    """SWEEP-10 — return True if a recent Seva row already exists in 60-min window.
+
+    v3.0 Phase 9 (TENANT-03): tenant-scoped to 'seva' via scoped_weekly_sweeps.
+    The Juno Weekly Sweeper (D-01: lock 1021 slot-only) lands in v3.1+ and
+    will get its own per-company idempotency check independently.
+    """
     sunday = _sunday_of_this_week(now_utc)
     cutoff = now_utc - timedelta(minutes=IDEMPOTENCY_WINDOW_MIN)
     stmt = (
-        select(WeeklySweep.id)
+        scoped_weekly_sweeps("seva")
+        .with_only_columns(WeeklySweep.id)
         .where(WeeklySweep.week_start == sunday)
         .where(WeeklySweep.generated_at >= cutoff)
         .where(WeeklySweep.status.in_(["running", "completed"]))
@@ -459,6 +474,8 @@ async def run_weekly_sweeper() -> None:
 
         async with AsyncSessionLocal() as session:
             sweep_row = WeeklySweep(
+                # v3.0 Phase 9 (TENANT-01) — explicit Seva tenant on every write.
+                company_id="seva",
                 generated_at=now_utc,
                 week_start=week_start,
                 week_end=week_end,
@@ -480,6 +497,8 @@ async def run_weekly_sweeper() -> None:
         try:
             async with AsyncSessionLocal() as session:
                 failure_row = WeeklySweep(
+                    # v3.0 Phase 9 (TENANT-01) — explicit Seva tenant.
+                    company_id="seva",
                     generated_at=now_utc,
                     week_start=week_start,
                     week_end=week_end,

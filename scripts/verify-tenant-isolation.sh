@@ -32,10 +32,14 @@ TARGETS=(
 )
 
 # The scoped_*() helpers are the ONLY allowed sites for raw select(Model)
-# at phase-close. (Wave 1 creates these files.)
+# at phase-close. (Wave 1 created the backend pair; Wave 2 created the
+# scheduler-side pair so scheduler/agents/*.py can route through scoped
+# helpers without violating the CI grep gate.)
 ALLOWED=(
   "backend/app/queries/scoped.py"
   "backend/app/queries/__init__.py"
+  "scheduler/queries/scoped.py"
+  "scheduler/queries/__init__.py"
 )
 
 # v3.0 Phase 9 Wave 0 temporary whitelist — Wave 2 REMOVES these entries
@@ -64,7 +68,9 @@ for path in "${ALLOWED[@]}"; do
 done
 
 # Strip Wave-0 pre-Wave-2 whitelist entries (TODO refactor sites).
-for path in "${PRE_WAVE_2_WHITELIST[@]}"; do
+# Use ${arr[@]+"${arr[@]}"} idiom — under `set -u` an empty array reference
+# would trip 'unbound variable'. After Wave 2 close the whitelist is empty.
+for path in ${PRE_WAVE_2_WHITELIST[@]+"${PRE_WAVE_2_WHITELIST[@]}"}; do
   filtered=$(echo "$filtered" | grep -v "^$path:" || true)
 done
 

@@ -42,6 +42,11 @@ from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.daily_summary import DailySummary
+# v3.0 Phase 9 (TENANT-03) — scheduler-side scoped helpers. The CI grep gate
+# at scripts/verify-tenant-isolation.sh requires every multi-tenant select to
+# route through this module; the prior raw select-of-DailySummary call sites
+# below have been rewritten to use scoped_summaries('seva').
+from queries.scoped import scoped_summaries
 from services.market_snapshot import fetch_market_snapshot
 from services.whatsapp import (
     deliver_summary_failure_alert,
@@ -140,10 +145,21 @@ def _derive_period_label(now_la: datetime) -> str:
 
 
 async def _idempotency_skip(session: AsyncSession, now_utc: datetime) -> bool:
-    """CRIT-3 / SUM-03 — return True if a recent run already wrote a row."""
+    """CRIT-3 / SUM-03 — return True if a recent Seva run already wrote a row.
+
+    v3.0 Phase 9 (TENANT-03): tenant-scoped to 'seva' via scoped_summaries.
+    This keeps the existing Seva-only behaviour byte-equivalent — when Juno
+    fires its own daily_summary at hour="8,12", minute=5, the per-company
+    idempotency check inside run_juno_daily_summary uses scoped_summaries('juno')
+    independently.
+    """
     cutoff = now_utc - timedelta(minutes=IDEMPOTENCY_WINDOW_MIN)
+    # Wrap the scoped Select to add the recency + status filters. The
+    # `with_only_columns(DailySummary.id)` keeps the original column-select
+    # optimization (avoid hydrating the whole row just to test existence).
     stmt = (
-        select(DailySummary.id)
+        scoped_summaries("seva")
+        .with_only_columns(DailySummary.id)
         .where(DailySummary.generated_at >= cutoff)
         .where(DailySummary.status.in_(["running", "completed"]))
         .limit(1)
@@ -517,8 +533,13 @@ async def run_daily_summary() -> None:
     previous_stats_release_time: str | None = None
     try:
         async with AsyncSessionLocal() as session:
+            # v3.0 Phase 9 (TENANT-03): route through scoped_summaries('seva')
+            # so the previous-summary read for LAW-04 continuity + Phase 3 stats
+            # snapshot is tenant-scoped. The CI grep gate at
+            # scripts/verify-tenant-isolation.sh blocks raw select-of-DailySummary.
             stmt = (
-                select(DailySummary.raw_sources_jsonb)
+                scoped_summaries("seva")
+                .with_only_columns(DailySummary.raw_sources_jsonb)
                 .order_by(DailySummary.generated_at.desc())
                 .limit(1)
             )
@@ -600,6 +621,10 @@ async def run_daily_summary() -> None:
         # Persist daily_summaries row.
         async with AsyncSessionLocal() as session:
             summary_row = DailySummary(
+                # v3.0 Phase 9 (TENANT-01) — explicit Seva tenant on every write.
+                # server_default='seva' would cover the omission too, but
+                # being explicit makes the per-company contract grep-able.
+                company_id="seva",
                 generated_at=now_utc,
                 period_label=period_label,
                 gold_news_md=gold_news_md,
@@ -631,6 +656,8 @@ async def run_daily_summary() -> None:
         try:
             async with AsyncSessionLocal() as session:
                 failure_row = DailySummary(
+                    # v3.0 Phase 9 (TENANT-01) — explicit Seva tenant.
+                    company_id="seva",
                     generated_at=now_utc,
                     period_label=period_label,
                     gold_news_md=None,
@@ -718,3 +745,124 @@ async def run_daily_summary() -> None:
                     await session.commit()
         except Exception:
             logger.exception("daily_summary agent_runs telemetry update failed")
+
+
+# ---------------------------------------------------------------------------
+# v3.0 Phase 9 — Juno daily_summary stub entry point (TENANT-08).
+#
+# Registered as an APScheduler job in scheduler/worker.py at
+# CronTrigger(hour="8,12", minute=5, timezone="America/Los_Angeles") — 5-min
+# stagger from the Seva run_daily_summary() above (D-01a). Writes a
+# status='partial' daily_summaries row with all section markdown NULL so the
+# Juno tab in the v3.0 dashboard renders an empty-state. Phase 10 (DEF-01..10)
+# replaces this stub with the real Defence-News Funnel pipeline (Canadian
+# procurement contracts + defence-industry headlines + Sonnet synthesis).
+# ---------------------------------------------------------------------------
+
+async def run_juno_daily_summary() -> None:
+    """Juno daily_summary entry point (Phase 9 stub — TENANT-08).
+
+    Mirrors run_daily_summary() shape but skips the gold/ontario sections.
+    For Phase 9, the goal is "one APScheduler fire produces both a Seva
+    completed row and a Juno partial row" so the multi-tenant cron topology
+    is wired end-to-end before any real Juno content lands.
+
+    Idempotency: per-company check via scoped_summaries('juno') — a second
+    call within the 30-minute window does NOT create a second Juno row.
+    Seva's idempotency check (in run_daily_summary) is independent because
+    each scoped_summaries() Select filters by company_id.
+
+    Status:
+      - completed: writing the partial row succeeded (stub completes
+        successfully — writing the placeholder IS the v3.0 success criterion).
+      - failed:    DB write raised; agent_run.errors records exception text.
+    """
+    now_utc = datetime.now(timezone.utc)
+    now_la = now_utc.astimezone(LA_TZ)
+    period_label = _derive_period_label(now_la)
+
+    # Idempotency — per-company check (uses scoped_summaries('juno')).
+    async with AsyncSessionLocal() as session:
+        cutoff = now_utc - timedelta(minutes=IDEMPOTENCY_WINDOW_MIN)
+        stmt = (
+            scoped_summaries("juno")
+            .with_only_columns(DailySummary.id)
+            .where(DailySummary.generated_at >= cutoff)
+            .where(DailySummary.status.in_(["running", "completed"]))
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        if result.scalar_one_or_none() is not None:
+            logger.info(
+                "juno_daily_summary idempotency_skip period=%s — recent Juno "
+                "row exists in %dmin window",
+                period_label,
+                IDEMPOTENCY_WINDOW_MIN,
+            )
+            return
+
+    # Insert agent_runs row (status='running'). reconcile_stale_runs will
+    # sweep this row back to 'failed' if the worker is hard-killed mid-job.
+    agent_run = AgentRun(
+        agent_name="juno_daily_summary",
+        started_at=now_utc,
+        items_found=0,
+        items_queued=0,
+        items_filtered=0,
+        status="running",
+        notes=json.dumps({"company_id": "juno", "phase_10_pending": True}),
+    )
+    async with AsyncSessionLocal() as session:
+        session.add(agent_run)
+        await session.commit()
+        await session.refresh(agent_run)
+
+    try:
+        # Write the Juno daily_summaries row with empty sections + partial
+        # status. Phase 10 will populate gold_news_md (defence_news_md
+        # semantically), ontario_law_md (canadian_procurement_md semantically),
+        # and ontario_stats_md (world_events_md semantically) per DEF-08.
+        async with AsyncSessionLocal() as session:
+            summary_row = DailySummary(
+                company_id="juno",
+                generated_at=now_utc,
+                period_label=period_label,
+                gold_news_md=None,
+                ontario_law_md=None,
+                ontario_stats_md=None,
+                raw_sources_jsonb={
+                    "company_id": "juno",
+                    "phase_10_pending": True,
+                    "note": "Juno Defence News Funnel ships in Phase 10",
+                },
+                status="partial",
+                error_text="Juno content pipeline pending — Phase 10",
+                agent_run_id=agent_run.id,
+            )
+            session.add(summary_row)
+            await session.commit()
+
+        # Update agent_run to completed (writing the partial row IS success
+        # for the Phase 9 stub).
+        async with AsyncSessionLocal() as session:
+            fresh = await session.get(AgentRun, agent_run.id)
+            if fresh is not None:
+                fresh.status = "completed"
+                fresh.ended_at = datetime.now(timezone.utc)
+                fresh.notes = json.dumps(
+                    {"company_id": "juno", "phase_10_pending": True}
+                )
+                await session.commit()
+
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("juno_daily_summary failed: %s", exc)
+        async with AsyncSessionLocal() as session:
+            fresh = await session.get(AgentRun, agent_run.id)
+            if fresh is not None:
+                fresh.status = "failed"
+                fresh.ended_at = datetime.now(timezone.utc)
+                fresh.errors = [
+                    f"{type(exc).__name__}: {str(exc)[:200]}"
+                ]
+                await session.commit()
+
