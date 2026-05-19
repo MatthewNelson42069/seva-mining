@@ -26,7 +26,9 @@ Partial multi-tenancy is worse than none — every TENANT-* requirement ships as
 
 ### Scheduler Topology (Disagreement 1 — RESOLVED)
 - **D-01:** **Per-company jobs with explicit lock IDs (Approach B from research SUMMARY.md).** Add two entries to `JOB_LOCK_IDS` in `scheduler/worker.py`: `juno_daily_summary=1020` AND `juno_weekly_sweeper=1021`. Both slots reserved in Phase 9; `juno_daily_summary` is **registered** as an APScheduler job in Phase 9; `juno_weekly_sweeper` is the **slot only** (registered later in v3.1+ when Juno Sweeper lands). Each Juno job gets its own `add_job(..., args=[company_id])` factory mirroring `_make_daily_summary_job`. OPS-02 advisory-lock uniqueness assertion preserved and unchanged in structure.
-- **D-01a:** **5-minute stagger between Seva and Juno fires.** Seva `daily_summary` stays at 07:00 PT (existing). Juno `daily_summary` fires at 07:05 PT. Rationale: spreads Anthropic API rate-limit pressure (PITFALLS.md §3 — Anthropic rate-limit collision); avoids simultaneous Sonnet calls; both finish well before the operator's morning. APScheduler `CronTrigger(day_of_week='mon-sun', hour=7, minute=5, timezone='America/Los_Angeles')` for Juno.
+- **D-01a:** **5-minute stagger between Seva and Juno fires, applied to both daily slots.** Seva `daily_summary` stays at `hour="8,12"` (existing — 08:00 + 12:00 PT, twice daily). Juno `daily_summary` fires at `hour="8,12", minute=5` (08:05 + 12:05 PT). Rationale: spreads Anthropic API rate-limit pressure (PITFALLS.md §3 — Anthropic rate-limit collision); avoids simultaneous Sonnet calls; preserves Seva's existing twice-daily cadence. APScheduler `CronTrigger(hour="8,12", minute=5, timezone="America/Los_Angeles")` for Juno.
+
+  **Correction note:** An earlier draft of this CONTEXT.md said "Seva 07:00 PT, Juno 07:05 PT" — that was wrong. The existing Seva schedule is `hour="8,12"` (twice daily) per `scheduler/worker.py:387-394`. The 5-min stagger principle still applies.
 - **D-01b:** **Per-company independent failure mode.** A Seva failure does NOT block Juno from firing (and vice versa). Each tenant's job has its own try/except + its own `agent_runs` row + its own `daily_summaries` row write. Result: one APScheduler fire writes 0, 1, or 2 `daily_summaries` rows depending on per-company success.
 
 ### AppHeader Freeze Treatment (Disagreement 2 — RESOLVED)
@@ -140,7 +142,7 @@ None — no pending todos matched Phase 9 scope.
 <specifics>
 ## Specific Ideas
 
-- **5-min stagger** between Seva (07:00 PT) and Juno (07:05 PT) daily_summary fires. Future Juno Weekly Viral Sweeper (Phase 11+) will use Sunday 08:05 PT (5-min stagger from Seva's 08:00 PT).
+- **5-min stagger** between Seva (`hour="8,12"`, i.e. 08:00 + 12:00 PT) and Juno (`hour="8,12", minute=5`, i.e. 08:05 + 12:05 PT) daily_summary fires. Future Juno Weekly Viral Sweeper (Phase 11+) will use Sunday 08:05 PT (5-min stagger from Seva's existing Sunday 08:00 PT).
 - **Lock ID slot reservation** — `juno_weekly_sweeper=1021` reserved in Phase 9's `JOB_LOCK_IDS` even though the Sweeper job is not registered until v3.1+. Saves a future surgical edit; preserves OPS-02 inventory clarity.
 - **CompanySwitcher segmented control** matches the existing Linear-style amber/zinc design language (Phase 8 D-05 semantic tokens). NOT a dropdown, NOT a Cmd+K palette — segmented is the visually-cleanest pattern for N=2.
 - **Tab preservation on switch** — switching from `/seva/calendar` → Juno preserves the calendar tab (lands on `/juno/calendar` empty-state), not Juno's index. Operator's mental model stays "I'm on the calendar tab; just different company now."
