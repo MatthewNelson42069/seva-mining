@@ -53,7 +53,7 @@ export function SweeperCard({ sweep, className }: SweeperCardProps) {
   return (
     <div
       className={cn(
-        'w-full rounded-lg border bg-card shadow-sm',
+        'w-full rounded-lg border bg-card shadow-sm hover:border-zinc-700 transition-colors',
         className,
       )}
     >
