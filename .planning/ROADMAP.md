@@ -376,7 +376,7 @@ Plans:
 - [x] 09-01-PLAN.md — Wave 0 RED-tests-first scaffolding (12 Wave 0 test files + CI grep gate `scripts/verify-tenant-isolation.sh` per VALIDATION.md)
 - [x] 09-02-PLAN.md — Wave 1 DB foundation (Alembic 0014 with `server_default='seva'` + dual-model parity + `backend/app/queries/scoped.py` helpers + `get_current_company` FastAPI dep)
 - [x] 09-03-PLAN.md — Wave 2 backend routers + scheduler (3 routers under `/api/{company}` + per-company cron with `juno_daily_summary=1020` lock ID + `juno_weekly_sweeper=1021` slot reserved + `run_juno_daily_summary` stub writes `status='partial'` row)
-- [ ] 09-04-PLAN.md — Wave 3 frontend routing + switcher + queryKeys (`<Route path=':company'>` wrapper + bookmark grace redirects + `CompanySwitcher` segmented control inside formally freeze-lifted AppHeader + Zustand persist for `lastVisitedCompany` + centralized TanStack key factory + per-page Juno empty-state short-circuits)
+- [x] 09-04-PLAN.md — Wave 3 frontend routing + switcher + queryKeys (`<Route path=':company'>` wrapper + bookmark grace redirects + `CompanySwitcher` segmented control inside formally freeze-lifted AppHeader + Zustand persist for `lastVisitedCompany` + centralized TanStack key factory + per-page Juno empty-state short-circuits)
 - [ ] 09-05-PLAN.md — Wave 4 cross-tenant integration verification + human-verify checkpoint at 1440×900 (populates `test_multitenant_isolation.py` parametrized matrix; runs full 3-layer test suite + CI grep gate; reproduces verbatim 50+ item UI-SPEC QA checklist; smoke-tests one scheduler fire produces both tenants' rows; documents AppHeader freeze-lift in PROJECT.md Key Decisions per D-02 third documentation location)
 
 **UI hint**: yes
