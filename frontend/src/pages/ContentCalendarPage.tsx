@@ -39,6 +39,20 @@ export default function ContentCalendarPage() {
     setWeekAnchor(new Date())
   }, [])
 
+  // v3.0 Phase 9 — Juno short-circuit per CONTEXT D-09. Render the
+  // v3.1 empty-state BEFORE <WeeklyGrid> mounts so neither useCalendar
+  // nor any of the mutation hooks fire (avoids a wasted /api/juno/calendar
+  // round-trip that would only ever return an empty array in v3.0).
+  if (companyId === 'juno') {
+    return (
+      <div className="max-w-[720px] mx-auto py-8 px-4">
+        <p className="text-sm text-muted-foreground">
+          Coming in v3.1 — Juno Calendar not yet enabled.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="px-4 py-6">
       <WeekNav

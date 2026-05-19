@@ -60,6 +60,18 @@ export function SummaryFeedPage() {
   const summaries = data?.summaries ?? []
 
   if (summaries.length === 0) {
+    if (companyId === 'juno') {
+      // v3.0 Phase 9 — Juno News Funnel empty-state. Phase 10 (DEF-01..10)
+      // populates real defence-sector content; until then this copy renders
+      // when the cron writes zero rows or hasn't fired yet for Juno.
+      return (
+        <div className="max-w-[720px] mx-auto py-8 px-4">
+          <p className="text-sm text-muted-foreground">
+            Coming in Phase 10 — Defence-sector ingestion not yet enabled.
+          </p>
+        </div>
+      )
+    }
     const nextFire = nextCronFireLabelPT()
     return (
       <div className="max-w-[720px] mx-auto py-8 px-4">

@@ -35,10 +35,35 @@ function nextSundayLabel(now: Date = new Date()): string {
  * - Empty state (total: 0): SWEEP-14 copy
  *   "Sweeper has not run yet — first fire scheduled for Sunday {next_sunday} 08:00 PT."
  */
+/**
+ * Outer wrapper component — picks tenant and dispatches to either the Juno
+ * empty-state OR the Seva implementation. Two distinct components keep the
+ * rules-of-hooks straight (Seva calls useWeeklySweeps + useState; Juno
+ * calls neither — they MUST live in separate function bodies).
+ */
 export default function WeeklyViralSweeperPage() {
   const { company } = useParams<{ company: string }>()
   const companyId = company as CompanyId  // narrowed by CompanyScopedRoute
-  const { data, isLoading, error } = useWeeklySweeps(companyId, 12)
+
+  if (companyId === 'juno') {
+    // v3.0 Phase 9 — Juno Sweeper short-circuit per CONTEXT D-09 +
+    // 09-UI-SPEC §Juno empty-state canonical contract. The Seva
+    // implementation below never mounts, so /api/juno/weekly-sweeps is
+    // never requested.
+    return (
+      <div className="max-w-[720px] mx-auto py-8 px-4">
+        <p className="text-sm text-muted-foreground">
+          Coming in v3.1 — Juno Sweeper not yet enabled.
+        </p>
+      </div>
+    )
+  }
+
+  return <SevaWeeklyViralSweeperPage />
+}
+
+function SevaWeeklyViralSweeperPage() {
+  const { data, isLoading, error } = useWeeklySweeps('seva', 12)
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   if (isLoading) {
