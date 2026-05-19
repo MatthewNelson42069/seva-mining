@@ -765,3 +765,169 @@ async def test_build_scheduler_registers_weekly_sweeper(monkeypatch):
     finally:
         if sched.running:
             sched.shutdown(wait=False)
+
+
+# ---------------------------------------------------------------------------
+# v3.0 Phase 9 Wave 0 RED — Juno per-company scheduler (TENANT-08)
+#
+# Each NEW test below uses per-function pytest.skip until Wave 2 (09-03-PLAN.md)
+# registers juno_daily_summary in build_scheduler. This is the documented
+# EXCEPTION to the Iteration-2 Warning-1 module-level idiom: this file has
+# pre-existing GREEN tests (test_lock_ids_unique_after_v2_additions,
+# test_daily_summary_lock_id_is_1017, etc.) that MUST keep running. A
+# module-level skip would falsely skip those.
+#
+# Wave 2 (09-03) removes the per-function skip line on each test below AND
+# updates test_scheduler_registers_3_jobs_after_v1_deregistration above to
+# expect 4 jobs (or adds juno_daily_summary to its allowlist).
+# ---------------------------------------------------------------------------
+
+
+def test_juno_lock_ids_present():
+    """JOB_LOCK_IDS gains juno_daily_summary=1020 + juno_weekly_sweeper=1021.
+
+    D-01: per-company jobs with explicit lock IDs. 1020 is registered as an
+    APScheduler job in Phase 9; 1021 is the slot ONLY (registration deferred
+    to v3.1+ when Juno Weekly Sweeper lands).
+    """
+    pytest.skip(
+        "juno_* lock IDs land in Wave 2 (09-03-PLAN.md). "
+        "Remove this line in Wave 2 Task 2 step 3 to turn this test GREEN.",
+        allow_module_level=False,
+    )
+    assert JOB_LOCK_IDS.get("juno_daily_summary") == 1020, (
+        "v3.0 Phase 9 D-01: juno_daily_summary must be 1020"
+    )
+    assert JOB_LOCK_IDS.get("juno_weekly_sweeper") == 1021, (
+        "v3.0 Phase 9 D-01: juno_weekly_sweeper slot reserved at 1021"
+    )
+    # OPS-02 invariant must still hold after the two additions.
+    assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS), (
+        f"Duplicate lock IDs: {JOB_LOCK_IDS}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_juno_daily_summary_registered():
+    """build_scheduler() registers juno_daily_summary with hour="8,12", minute=5.
+
+    D-01a 5-min stagger: Seva fires at 08:00 + 12:00 PT; Juno fires at
+    08:05 + 12:05 PT (same twice-daily cadence, 5-min offset). Both use
+    America/Los_Angeles timezone.
+    """
+    pytest.skip(
+        "juno_daily_summary registration lands in Wave 2 (09-03-PLAN.md). "
+        "Remove this line in Wave 2 Task 2 step 5 to turn this test GREEN.",
+        allow_module_level=False,
+    )
+    from apscheduler.triggers.cron import CronTrigger
+
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(mock_engine)
+    try:
+        job = scheduler.get_job("juno_daily_summary")
+        assert job is not None, "juno_daily_summary job must be registered (Phase 9)"
+        trigger = job.trigger
+        assert isinstance(trigger, CronTrigger), (
+            f"juno_daily_summary trigger must be CronTrigger, got {type(trigger).__name__}"
+        )
+
+        hour_field = next((f for f in trigger.fields if f.name == "hour"), None)
+        minute_field = next((f for f in trigger.fields if f.name == "minute"), None)
+        assert hour_field is not None and minute_field is not None
+        assert "8" in str(hour_field) and "12" in str(hour_field), (
+            f"juno_daily_summary hour must include 8 and 12 (D-01a), got {hour_field}"
+        )
+        assert str(minute_field) == "5", (
+            f"juno_daily_summary minute must be 5 (5-min stagger, D-01a), "
+            f"got {minute_field}"
+        )
+        tz_name = str(getattr(trigger, "timezone", ""))
+        assert "Los_Angeles" in tz_name, (
+            f"juno_daily_summary tz must be America/Los_Angeles, got {tz_name!r}"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_scheduler_registers_4_jobs_after_juno_add():
+    """v3.0 Phase 9 — juno_daily_summary added; juno_weekly_sweeper slot
+    reserved but NOT registered. Total jobs: 3 + 1 = 4.
+
+    Existing 3 (Phase 7): daily_summary, daily_summary_prune, weekly_sweeper.
+    Phase 9 adds: juno_daily_summary (registered).
+    NOT registered in Phase 9: juno_weekly_sweeper (slot-only per D-01).
+
+    When this test is unblocked in Wave 2, the existing
+    test_scheduler_registers_3_jobs_after_v1_deregistration test must ALSO
+    be updated to expect 4 jobs (or its assertion adjusted to a >= check).
+    """
+    pytest.skip(
+        "juno_daily_summary registration lands in Wave 2 (09-03-PLAN.md). "
+        "Remove this line in Wave 2 Task 2 step 5 to turn this test GREEN. "
+        "Also update test_scheduler_registers_3_jobs_after_v1_deregistration "
+        "above to expect 4 jobs.",
+        allow_module_level=False,
+    )
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(mock_engine)
+    try:
+        jobs = scheduler.get_jobs()
+        ids = sorted(j.id for j in jobs)
+        expected = sorted(
+            [
+                "daily_summary",        # Phase 1 Plan 05
+                "daily_summary_prune",  # Phase 4 Plan 01 (OPS-01)
+                "weekly_sweeper",       # Phase 7 Plan 05 (SWEEP-09)
+                "juno_daily_summary",   # v3.0 Phase 9 — juno_daily_summary added
+                                        # (juno_weekly_sweeper slot reserved but not registered)
+            ]
+        )
+        assert ids == expected, f"expected {expected}, got {ids}"
+        assert len(jobs) == 4, (
+            f"Expected exactly 4 jobs after Phase 9 juno_daily_summary add, "
+            f"got {len(jobs)}: {ids}"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_juno_weekly_sweeper_NOT_registered():
+    """Defensive — juno_weekly_sweeper is a SLOT-ONLY reservation in v3.0.
+
+    D-01 explicitly says "1021 is RESERVED only — registration deferred to
+    v3.1+ when Juno Weekly Sweeper lands". This test guards against an
+    accidental Phase 9 registration of the sweeper.
+    """
+    pytest.skip(
+        "juno_weekly_sweeper guard lands in Wave 2 (09-03-PLAN.md) when the "
+        "juno additions ship. Remove this line in Wave 2 Task 2 step 5.",
+        allow_module_level=False,
+    )
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ):
+        scheduler = await build_scheduler(mock_engine)
+    try:
+        job = scheduler.get_job("juno_weekly_sweeper")
+        assert job is None, (
+            "juno_weekly_sweeper must NOT be registered in v3.0 (D-01 slot-only). "
+            f"Got: {job}"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
