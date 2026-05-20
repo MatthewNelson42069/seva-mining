@@ -35,6 +35,7 @@ import serpapi
 
 from agents.content_agent import fetch_stories
 from agents.ontario_law import fetch_ontario_law_hits
+from anthropic_client import get_anthropic_client
 from agents.ontario_stats import (
     fetch_ontario_stats_snapshot,
     format_error_markdown,
@@ -580,9 +581,8 @@ async def run_daily_summary() -> None:
     # status=partial when Sonnet's WRITE call hit timeout. 60s gives headroom
     # for heavy-news days without being reckless (cron is daily, so 2-min wall
     # time is still well under any misfire concern).
-    anthropic_client = AsyncAnthropic(
-        api_key=settings.anthropic_api_key, timeout=60.0,
-    )
+    # v3.1 Phase 12 — Seva Sonnet routes through per-tenant resolver (D-07, D-09).
+    anthropic_client = get_anthropic_client("seva", timeout=60.0)
 
     # Construct SerpAPI client if credentials are available (mirrors content_agent pattern)
     serpapi_client: "serpapi.Client | None" = (
@@ -1223,9 +1223,8 @@ async def run_juno_daily_summary() -> None:
     settings = get_settings()
     # Per Phase 7 D-11 baseline: 60s timeout (3-section synthesis x ~1500
     # tokens = ~5-7s actual; 60s leaves wide headroom for refusal-retry).
-    anthropic_client = AsyncAnthropic(
-        api_key=settings.anthropic_api_key, timeout=JUNO_SONNET_TIMEOUT,
-    )
+    # v3.1 Phase 12 — Juno Sonnet routes through per-tenant resolver (D-07, D-09).
+    anthropic_client = get_anthropic_client("juno", timeout=JUNO_SONNET_TIMEOUT)
     # SerpAPI client: instantiated on BOTH fires per CLEANUP-01. The
     # `_build_juno_canadian_procurement_section` no longer short-circuits
     # at noon; the only remaining skip path is "no API key configured".

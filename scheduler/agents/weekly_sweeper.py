@@ -21,7 +21,7 @@ Manual escape hatch (P13):
 
 Pitfall mitigations bundled here:
   P3  (NULL raw_sources_jsonb)  — _compute_virality guards (row.raw_sources_jsonb or {}).get("gold_news", [])
-  P6  (Sonnet timeout missing)   — AsyncAnthropic(timeout=60.0)
+  P6  (Sonnet timeout missing)   — anthropic_client constructed with timeout=60.0
   P7  (token-budget overflow)    — each X post text truncated to [:500] before Sonnet
   P8  (bearish gold angles)      — system prompt enforces gold bull thesis bias
   P10 (URL canonicalization)     — canonical_url() strips UTM/fbclid/gclid/ref/source/_ga
@@ -46,7 +46,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.content_agent import deduplicate_stories
 from agents.x_ingest import fetch_top_x_posts
-from config import get_settings
+from anthropic_client import get_anthropic_client
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
 from models.daily_summary import DailySummary
@@ -395,11 +395,9 @@ async def run_weekly_sweeper() -> None:
     run_status = "failed"
     error_text: str | None = None
 
-    settings = get_settings()
-    anthropic_client = AsyncAnthropic(
-        api_key=settings.anthropic_api_key,
-        timeout=SONNET_TIMEOUT_S,  # P6 — 60s
-    )
+    # v3.1 Phase 12 — Seva sweeper Sonnet routes through per-tenant resolver (D-07, D-09).
+    # Resolver internally calls get_settings(); no need to load it here.
+    anthropic_client = get_anthropic_client("seva", timeout=SONNET_TIMEOUT_S)
 
     try:
         # --- Section 1: X ingest ---

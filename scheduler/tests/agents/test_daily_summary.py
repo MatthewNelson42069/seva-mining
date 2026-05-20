@@ -593,7 +593,7 @@ async def test_run_daily_summary_writes_telemetry_notes_with_required_keys():
 
     with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
          patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
-         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client_instance), \
+         patch("agents.daily_summary.get_anthropic_client", return_value=mock_client_instance), \
          patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
          patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
          patch("agents.daily_summary.deliver_summary_teaser", AsyncMock(return_value=None)), \
@@ -788,7 +788,7 @@ async def test_run_failure_triggers_failure_alert():
 
     with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
          patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
-         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.daily_summary.get_anthropic_client", return_value=mock_client), \
          patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
          patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
          patch("agents.daily_summary.deliver_summary_failure_alert", mock_failure_alert):
@@ -853,7 +853,7 @@ async def test_deliver_summary_teaser_called_on_success():
 
     with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
          patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
-         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.daily_summary.get_anthropic_client", return_value=mock_client), \
          patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
          patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
          patch("agents.daily_summary.deliver_summary_teaser", mock_teaser), \
@@ -1026,7 +1026,7 @@ async def test_telemetry_has_all_4_new_law_keys():
 
     with patch("agents.daily_summary.AsyncSessionLocal", FakeSessionCM), \
          patch("agents.daily_summary.fetch_stories", AsyncMock(return_value=stories)), \
-         patch("agents.daily_summary.AsyncAnthropic", return_value=mock_client), \
+         patch("agents.daily_summary.get_anthropic_client", return_value=mock_client), \
          patch("agents.ontario_law._fetch_serpapi_candidates", return_value=[]), \
          patch("agents.ontario_law._fetch_nrcan_candidates", return_value=[]), \
          patch("agents.daily_summary.deliver_summary_teaser", AsyncMock(return_value=None)), \
@@ -1392,7 +1392,7 @@ def test_gold_section_counts_has_last_error_key_on_success():
 
 
 def test_anthropic_client_timeout_is_60_seconds():
-    """quick-260514-ii6: AsyncAnthropic construction in run_daily_summary must use
+    """quick-260514-ii6: Anthropic client construction in run_daily_summary must use
     a 60-second per-request timeout.
 
     The 2026-05-14 12:00 PT fire fell back to status=partial because Sonnet's
@@ -1402,26 +1402,27 @@ def test_anthropic_client_timeout_is_60_seconds():
     4-sub-section structural ask. 60s gives headroom without being reckless.
 
     Regression guard: if anyone reverts the timeout, this test catches it.
+
+    v3.1 Phase 12 update: the construction moved from `AsyncAnthropic(...)` to
+    `get_anthropic_client('seva', timeout=...)` (the per-tenant resolver). The
+    timeout literal still lives at the call site; this test now asserts on the
+    Seva resolver call signature in run_daily_summary's scope.
     """
     import inspect
     import agents.daily_summary as ds_module
 
-    source = inspect.getsource(ds_module)
-    # The exact construction must use timeout=60.0 (not 30.0, not 45.0)
-    assert "timeout=60.0" in source, (
-        "AsyncAnthropic in run_daily_summary must use timeout=60.0 "
-        "(quick-260514-ii6 bumped from 30s to absorb bull-thesis prompt size)"
-    )
-    # The legacy 30s ceiling must NOT linger in daily_summary's anthropic_client
-    # construction. (Other modules — content_agent's fetch_stories — still use
-    # 30s and that's intentional; this test is scoped to daily_summary only.)
-    # Check by ensuring the run_daily_summary scope contains 60.0 and the AsyncAnthropic
-    # construction inside it does NOT mention timeout=30.0
-    construction_block = source[source.find("anthropic_client = AsyncAnthropic"):]
+    source = inspect.getsource(ds_module.run_daily_summary)
+    # The Seva resolver call must use timeout=60.0 (not 30.0, not 45.0)
+    construction_block = source[source.find("anthropic_client = get_anthropic_client"):]
     construction_block = construction_block[:construction_block.find(")") + 1]
     assert "timeout=60.0" in construction_block, (
-        f"AsyncAnthropic construction must use timeout=60.0; got: {construction_block}"
+        f"get_anthropic_client('seva', ...) must use timeout=60.0; got: {construction_block}"
     )
     assert "timeout=30.0" not in construction_block, (
-        "Legacy 30s timeout in daily_summary's AsyncAnthropic must be removed"
+        "Legacy 30s timeout in daily_summary's Seva resolver call must be removed"
+    )
+    # Confirm tenant routing is Seva at this call site (D-07 hardcoded literal).
+    assert '"seva"' in construction_block or "'seva'" in construction_block, (
+        "Seva daily summary must route through resolver with company_id='seva' "
+        "(D-07 hardcoded literal at instantiation site)"
     )

@@ -259,7 +259,7 @@ async def test_run_weekly_sweeper_insufficient_signal(monkeypatch):
     anthropic_inst = MagicMock()
     anthropic_inst.messages = MagicMock()
     anthropic_inst.messages.create = AsyncMock()
-    monkeypatch.setattr(weekly_sweeper, "AsyncAnthropic", lambda **kw: anthropic_inst)
+    monkeypatch.setattr(weekly_sweeper, "get_anthropic_client", lambda *a, **kw: anthropic_inst)
 
     await weekly_sweeper.run_weekly_sweeper()
 
@@ -315,7 +315,7 @@ async def test_run_weekly_sweeper_happy_path(monkeypatch):
     fake_resp = MagicMock()
     fake_resp.content = [MagicMock(text="### Angle 1: foo\n\n* X signal: hello")]
     anthropic_inst.messages.create = AsyncMock(return_value=fake_resp)
-    monkeypatch.setattr(weekly_sweeper, "AsyncAnthropic", lambda **kw: anthropic_inst)
+    monkeypatch.setattr(weekly_sweeper, "get_anthropic_client", lambda *a, **kw: anthropic_inst)
 
     await weekly_sweeper.run_weekly_sweeper()
 
@@ -369,7 +369,7 @@ async def test_run_weekly_sweeper_sonnet_fails(monkeypatch):
     anthropic_inst = MagicMock()
     anthropic_inst.messages = MagicMock()
     anthropic_inst.messages.create = AsyncMock(side_effect=TimeoutError("sonnet hung"))
-    monkeypatch.setattr(weekly_sweeper, "AsyncAnthropic", lambda **kw: anthropic_inst)
+    monkeypatch.setattr(weekly_sweeper, "get_anthropic_client", lambda *a, **kw: anthropic_inst)
 
     await weekly_sweeper.run_weekly_sweeper()
 
