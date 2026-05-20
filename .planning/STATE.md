@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0
-milestone_name: — Multi-Tenant Dashboards (Juno Industries Onboarding)
-status: Phase complete — ready for verification (Phase 10 final wave shipped; v3.0 milestone ready to close)
-stopped_at: Completed 10-05-PLAN.md (Wave 4 cron-enable + integration smoke + visual QA APPROVED; DEF-09 closed; all DEF-01..10 closed end-to-end; production Juno cron operational; v3.0 milestone ready to close after orchestrator final regression gate)
-last_updated: "2026-05-19T22:00:00.000Z"
-last_activity: 2026-05-19
+milestone: v2.1
+milestone_name: — Three-Tab Content Engine + UI Polish
+status: Milestone complete
+stopped_at: Completed 10-05-PLAN.md — Wave 4 cron-enable + integration smoke + visual QA APPROVED. Phase 10 complete pending verifier. All DEF-01..10 closed end-to-end. v3.0 milestone (TENANT-01..10 + DEF-01..10) ready to close. Production Juno cron operationally enabled in local-dev; Railway env-var flip is sole remaining operator action.
+last_updated: "2026-05-20T03:36:08.847Z"
+last_activity: 2026-05-20
 progress:
   total_phases: 6
   completed_phases: 6
-  total_plans: 31
-  completed_plans: 31
+  total_plans: 30
+  completed_plans: 32
 ---
 
 # Project State
@@ -24,8 +24,8 @@ See: .planning/PROJECT.md (updated 2026-05-19) + .planning/ROADMAP.md (extended 
 
 ## Current Position
 
-Phase: 10 (juno-defence-news-funnel) — COMPLETE PENDING VERIFICATION
-Plan: 5 of 5 (last plan)
+Phase: 10
+Plan: Not started
 Milestone v3.0 status: FINAL PHASE SHIPPED — ready for orchestrator regression gate to close milestone
 
 ### v3.0 Roadmap Summary
@@ -425,7 +425,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-05-19T22:00:00.000Z
-Last activity: 2026-05-19
+Last activity: 2026-05-20
 Stopped At: Completed 10-05-PLAN.md — Wave 4 cron-enable + integration smoke + visual QA APPROVED. Phase 10 complete pending verifier. All DEF-01..10 closed end-to-end. v3.0 milestone (TENANT-01..10 + DEF-01..10) ready to close. Production Juno cron operationally enabled in local-dev; Railway env-var flip is sole remaining operator action.
 
 Prior activity: 2026-04-22 — Completed quick-260422-mfg (full rename `sub_video_clip` → `sub_gold_media` across scheduler + backend + frontend + DB). **Origin:** follow-up (b) from the zid debug session — `scheduler/agents/content/video_clip.py` hard-coded `CONTENT_TYPE="video_clip"` and `AGENT_NAME="sub_video_clip"` while `frontend/src/config/agentTabs.ts` L32 already showed `label: 'Gold Media'` and CLAUDE.md enumerated "gold media" as a canonical content type; the split wasted cycles in the zid debug session (debugger hunted for a `gold_media.py` file that didn't exist). Ran via `/gsd:quick --discuss` workflow; user responded "All clear" to the 3 gray-area AskUserQuestion batch, locking 8 decisions (D-01 through D-08) to Recommended paths: D-01 full rename, D-02 Alembic migration (auditable, vs one-off railway-run UPDATE), D-03 test file renamed, D-04 frontend component file renamed, D-05 worker.py "Gold Media" display unchanged, D-06 lock value 1015 preserved, D-07 `VIDEO_ACCOUNTS` → `GOLD_MEDIA_ACCOUNTS`, D-08 no backward-compat aliases. **Changes:** 3 git-renamed files (history preserved — `scheduler/agents/content/gold_media.py` 88% similarity `git log --follow` reaches vxg 68b21d1 + eoe 762b08b, `scheduler/tests/test_gold_media.py` 61%, `frontend/src/components/content/GoldMediaPreview.tsx` 90%) + 16 modified files across all 4 layers + 1 new Alembic migration `0008_rename_video_clip_to_gold_media.py` (single-headed chain confirmed via `alembic heads` = `0008 (head)`; upgrade updates `content_bundles.content_type` then `agent_runs.agent_name`; downgrade symmetric reverse). Planner extended rename scope for zero-grep hygiene consistency: internal helpers `_search_video_clips` → `_search_gold_media_clips`, `_draft_video_caption` → `_draft_gold_media_caption`, constant `VIDEO_CLIP_SCORE` → `GOLD_MEDIA_SCORE` (value 7.5 unchanged; only symbol moves). **Gates all 9 green:** scheduler 109/109 pytest + ruff clean; backend 69 passed + 5 skipped + ruff clean + alembic heads = 0008; frontend 52/52 vitest + tsc + lint + build all clean. **Zero-grep:** 0 matches for `video_clip`, `sub_video_clip`, `VideoClipPreview`, `VIDEO_ACCOUNTS`, `VIDEO_CLIP_SCORE`, `_search_video_clips`, `_draft_video_caption` across `scheduler/` + `backend/app/` + `frontend/src/` (0008 migration is sole permitted location for old strings by design). 2 commits on main: `e835b61` (refactor) + `69efac1` (SUMMARY). **Five of five zid follow-ups now addressed at the code level:** zid + krz + l40 + lbb + mfg. **Remaining:** (a) sub_gold_media (post-rename) consistent 0-items behavior — deferred as separate `/gsd:debug` investigation path (probe X API quota, `GOLD_MEDIA_ACCOUNTS` availability, analyst-quality-gate rejection rate from vxg). This rename was purely cosmetic/structural; 0-items is a distinct investigation.
