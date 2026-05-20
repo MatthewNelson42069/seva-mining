@@ -1,5 +1,20 @@
 # Milestones
 
+## v3.0.1 v3.0 Audit Cleanup Bundle (Shipped: 2026-05-20)
+
+**Phases completed:** 1 phase (11), 5 plans
+
+**Audit:** Phase verifier 5/5 PASS — `.planning/phases/11-audit-cleanup-bundle/11-VERIFICATION.md`. All preserved invariants confirmed: fail-closed contract, backwards-compat signature, SerpAPI cap headroom, worker.py lazy import resolution, exactly-one `run_juno_daily_summary` definition.
+
+**Key accomplishments:**
+
+- **Phase 11 (Audit Cleanup Bundle):** 5 non-blocking v3.0 audit follow-ups closed atomically in 2 waves. Wave 1 (3 parallel, file-disjoint): CLEANUP-01 removed morning-only SerpAPI cost gate so both daily Juno fires execute 7 Canadian-procurement queries (budget $5.25→$8-9/mo inside $50/mo cap); CLEANUP-02 refreshed `milestones/v3.0-REQUIREMENTS.md` DEF-01..07 traceability rows from "Scaffolded" → "Complete" matching DEF-08..10 format; CLEANUP-04 flipped `nyquist_compliant: true` + `wave_0_complete: true` in both `09-VALIDATION.md` + `10-VALIDATION.md` frontmatters. Wave 2 (2 parallel after 11-01, both touching `daily_summary.py` in disjoint line ranges): CLEANUP-03 removed stale Phase 9 stub section-divider comment block (Phase 10 had already replaced stub body inline — planner correctly scoped to comment, not function); CLEANUP-05 wired Haiku 4.5 `pydantic.ValidationError` observability via caller-owned `validation_errors: list[dict] | None = None` keyword-only accumulator in `juno_relevance.py::classify_story` + plumbed through to `agent_runs.notes['haiku_validation_errors']` with `{input_excerpt, error_type, error_msg}` shape — fail-closed contract preserved verbatim; 3 new RED→GREEN tests; backwards-compat verified via `inspect.signature`.
+- **Tests at milestone close:** backend 184 pass (no change vs v3.0 baseline) / scheduler 331 pass (+3 from CLEANUP-05's new ValidationError observability tests) / frontend 168 pass (no change). Zero regressions across all suites.
+- **Production action completed:** `JUNO_CRON_ENABLED=true` flipped in Railway env-vars on 2026-05-20 immediately post-merge. Scheduler service successfully redeployed; APScheduler logged `juno_daily_summary cron ENABLED via JUNO_CRON_ENABLED=true env var` on boot. First real Juno production brief expected 2026-05-21 08:05 PT America/Los_Angeles.
+- **GSD CLI hang workaround:** `phase complete 11` hung in TUI spinner loop emitting only ANSI escape sequences with no progress. Killed process and applied artifact updates manually (REQUIREMENTS.md / ROADMAP.md / STATE.md) — same edits the CLI would have made. Worth filing upstream if recurrence pattern emerges.
+
+---
+
 ## v3.0 Multi-Tenant Dashboards — Juno Industries Onboarding (Shipped: 2026-05-19)
 
 **Phases completed:** 2 phases (9-10), 10 plans, ~30 tasks

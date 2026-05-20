@@ -1,46 +1,49 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.0.1
-milestone_name: — v3.0 Audit Cleanup Bundle
-status: Phase 11 complete — milestone shipped
-stopped_at: Phase 11 complete (5/5 plans). Verifier 5/5 PASS. Regression gates all GREEN — scheduler 331 (+3 from 11-05's new tests), backend 184, frontend 168. v3.0.1 milestone shipped 2026-05-20.
-last_updated: "2026-05-20T16:50:00.000Z"
+milestone: v3.1
+milestone_name: — Juno Feature Parity + Branding
+status: Defining requirements
+stopped_at: v3.1 milestone scoped 2026-05-20. Scope confirmed: JUNO-CAL-v31 + JUNO-SWEEP-v31 + TENANT-BRAND-v31 + TENANT-KEY-v31. Next step → research decision, then requirements.
+last_updated: "2026-05-20T17:00:00.000Z"
 last_activity: 2026-05-20
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-19 — v3.0.1 milestone scoped)
+See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 **Core value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno.
-**Current focus:** Phase 11 — audit-cleanup-bundle
+**Current focus:** v3.1 — Juno Feature Parity + Branding (defining requirements)
 
 ## Current Position
 
-Phase: 11 (audit-cleanup-bundle) — COMPLETE
-Plan: 5 of 5 (verifier PASS — `.planning/phases/11-audit-cleanup-bundle/11-VERIFICATION.md`)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-20 — Milestone v3.1 started
 
-### v3.0.1 Roadmap Summary
+### v3.1 Target Features (to be split into phases by roadmapper)
 
-- **Phase 11: v3.0 Audit Cleanup Bundle** (CLEANUP-01..05) — single bundle phase closing 5 non-blocking v3.0 audit follow-ups; complexity S; estimated 1-2 hours; depends on v3.0 shipped (✓ 2026-05-19)
+- **JUNO-CAL-v31** — Juno Content Calendar (Tab 2 paper-planner UI, port of v2.1 Phase 6 behind multi-tenant helpers)
+- **JUNO-SWEEP-v31** — Juno Weekly Viral Sweeper (Sunday 08:00 PT cron at lock 1021; defence-sector X queries; Sonnet 4.6 angles)
+- **TENANT-BRAND-v31** — Per-company branding (Juno logo + wordmark + color palette; semantic-token resolution by `:company` route)
+- **TENANT-KEY-v31** — Per-tenant Anthropic API key (`SEVA_ANTHROPIC_API_KEY` + `JUNO_ANTHROPIC_API_KEY`; cost-attribution split; fallback to shared key when unset)
+
+### v3.0.1 Roadmap Summary (archived — shipped 2026-05-20)
+
+- **Phase 11: Audit Cleanup Bundle** (CLEANUP-01..05) — single bundle phase closing 5 non-blocking v3.0 audit follow-ups. Verifier 5/5 PASS. Production `JUNO_CRON_ENABLED=true` flipped in Railway 2026-05-20.
 
 ### v3.0 Roadmap Summary (archived — shipped 2026-05-19)
 
-- **Phase 9: Multi-Tenant Foundation** (TENANT-01..10) — single atomic deploy; partial multi-tenancy worse than none; depends on v2.1 Phase 8
-- **Phase 10: Juno Defence News Funnel** (DEF-01..10) — config-only after Phase 9; depends on Phase 9 merged + verified
-
-### Discuss-phase 9 agenda (3 operator decisions BEFORE plan-phase)
-
-1. **Scheduler topology** — single-cron-fanout (D-02 Option 1, zero new lock IDs) vs explicit per-company jobs (STACK, +2 IDs at 1020/1021) vs per-tenant 100-ID blocks (PITFALLS §3.4, Juno 1100-1199)
-2. **AppHeader freeze treatment** — Path A formal lift with re-baselined visual QA (ARCHITECTURE D-04) vs Path B sibling `CompanyBar.tsx` component (PITFALLS §5, lower-risk launch)
-3. **`companies` DB table vs hardcoded CHECK** — STACK creates table with FK; ARCHITECTURE D-05 keeps config in Python only; PITFALLS accepts hardcoded `('seva', 'juno')` CHECK as v3.0 tech debt
+- **Phase 9: Multi-Tenant Foundation** (TENANT-01..10) — single atomic deploy; partial multi-tenancy worse than none
+- **Phase 10: Juno Defence News Funnel** (DEF-01..10) — config-only build on Phase 9 infra
 
 ## Performance Metrics
 
