@@ -1,16 +1,39 @@
-# Seva Mining — AI Social Media Agency
+# Seva Mining — Multi-Tenant AI Intelligence Platform
 
 ## What This Is
 
-A 2x-daily AI gold-intelligence digest. Twice a day (08:00 PT + 12:00 PT) a cron job ingests gold-sector news, Ontario/Canadian mining-favourable legislation, and Ontario gold-production statistics; produces a structured 3-section summary card; persists it to Postgres; surfaces it on a web feed at `/` for the operator to read; and delivers a teaser via WhatsApp with a link back to the feed. 30-day rolling retention. No drafting, no approval flow, no posting.
+A **multi-tenant AI intelligence platform** producing 2x-daily defence/sector intelligence briefs for a Canadian operator. Twice daily (08:00/12:00 PT for Seva; 08:05/12:05 PT for Juno — 5-min stagger), per-tenant cron jobs ingest sector-specific news + regulatory/policy signals + relevant world events; produce a structured 3-section summary card per tenant; persist to Postgres with `company_id` row-level isolation; surface on the React dashboard at `/seva/*` and `/juno/*` (operator toggles via segmented switcher in `AppHeader`); and deliver WhatsApp teasers with deep links back to the feed. 30-day rolling retention. No drafting, no approval flow, no autoposting.
 
-(Originally designed as a 6-sub-agent approval-dashboard product; pivoted to the digest model in v2.0 — see Evolution.)
+**Active tenants (v3.0):**
+- **Seva Mining** — gold-sector daily digest (gold news + Ontario/Canadian mining law + Ontario gold-production stats)
+- **Juno Industries** — defence-tech daily intelligence brief (Tier-1 defence press + Canadian procurement via SerpAPI + World Events Relevant to Defence via Haiku 4.5 relevance classifier; Janes/CSIS desk voice with anti-tactical framing)
+
+(Originally designed as a 6-sub-agent approval-dashboard product for Seva; pivoted to the digest model in v2.0; expanded to multi-tenant in v3.0 — see Evolution.)
 
 ## Core Value
 
-Every piece of intelligence the digest surfaces must be genuinely useful to a senior gold analyst — a data point, an insight, a connection no one else made. If a bullet wouldn't make that analyst stop scrolling, it shouldn't be in the summary.
+Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno. If a bullet wouldn't make a senior analyst in that company's domain stop scrolling, it shouldn't be in the summary.
 
-## Current Milestone: v3.0 Multi-Tenant Dashboards — Juno Industries Onboarding
+## Current State
+
+✅ **v3.0 shipped 2026-05-19** — multi-tenant platform live. Seva + Juno toggle operational. Backend 184 pass / scheduler 328 pass / frontend 168 pass. Production cron operationally enabled in local dev; **flip `JUNO_CRON_ENABLED=true` in Railway env-vars** for the next 08:05 PT cron to write the first real Juno defence intelligence brief against the production DB.
+
+Audit verdict: `tech_debt` — 20/20 requirements satisfied, 0 critical blockers, 8 non-blocking follow-ups filed for v3.0.1/v3.1+. See [`milestones/v3.0-MILESTONE-AUDIT.md`](milestones/v3.0-MILESTONE-AUDIT.md).
+
+## Next Milestone
+
+Not yet scoped. Run `/gsd:new-milestone` to start the next cycle. Candidate themes from the v3.0 audit + deferred items:
+
+- **v3.0.1 cleanup bundle** (recommended quick close — 4-5 short tasks): traceability table refresh for DEF-01..07; VALIDATION.md frontmatter `nyquist_compliant: true` flips for Phase 9 + 10; `run_juno_daily_summary` double-definition cleanup; Skydio Pydantic ValidationError logging; 12:05 PT Canadian Procurement UX decision (operator preference: re-run SerpAPI for full briefs both fires, +$1/mo)
+- **v3.1 Juno expansion**: Juno Content Calendar (JUNO-CAL-v31, Tab 2) + Juno Weekly Viral Sweeper (JUNO-SWEEP-v31, Tab 3) + per-company branding (TENANT-BRAND-v31, Juno gets own wordmark/colors) + last-visited tenant for bare `/` redirect + per-tenant Anthropic API key
+- **v3.2+ N-tenant scaling**: `companies` DB table (TENANT-N-v32, replacing hardcoded CHECK constraint)
+
+## Past Milestones
+
+Collapsed milestone details — see `milestones/v3.0-ROADMAP.md` (snapshot at v3.0 close, includes v2.1 phase details) and `milestones/v2.0-ROADMAP.md` for full context.
+
+<details>
+<summary>v3.0 Multi-Tenant Dashboards — Juno Industries Onboarding (shipped 2026-05-19)</summary>
 
 **Goal:** Transform the single-tenant Seva Mining dashboard (shipped through v2.1) into a multi-tenant platform supporting per-company dashboards under one UI, with a company switcher in the header. Onboard **Juno Industries** (defence tech, Canada) as the second tenant, starting with the News Funnel — ingesting defence-industry news plus world events that relate to defence (geopolitical shifts, conflicts, military spending, defence tech announcements).
 
@@ -41,6 +64,8 @@ Every piece of intelligence the digest surfaces must be genuinely useful to a se
 - Mobile-responsive UI (still single-user desktop, same constraint as v2.x)
 - Cross-company analytics / unified dashboards
 - Per-company user permissions (single-operator model continues; the operator sees all companies they can switch into)
+
+</details>
 
 ## Requirements
 
@@ -222,4 +247,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 — v3.0 milestone COMPLETE. Multi-tenant platform live. Phase 9 (Multi-Tenant Foundation) + Phase 10 (Juno Defence News Funnel) both shipped. Juno renders live 3-section daily intelligence brief (Defence News + Canadian Procurement + World Events Relevant to Defence) in Janes/CSIS voice with operator-approved voice calibration. Backend 184 pass / scheduler 328 pass / frontend 168 pass. Production-cron operationally enabled in local-dev; Railway env-var flip is the sole remaining operator action.*
+*Last updated: 2026-05-19 — after v3.0 milestone COMPLETE. Multi-tenant platform shipped (Seva + Juno toggle). v3.0 archived to `milestones/v3.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. REQUIREMENTS.md cleared (fresh for next milestone). Next: `/gsd:new-milestone` to scope v3.0.1 cleanup or v3.1 Juno expansion.*

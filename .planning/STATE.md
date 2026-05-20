@@ -1,32 +1,32 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.1
-milestone_name: — Three-Tab Content Engine + UI Polish
-status: Milestone complete
-stopped_at: Completed 10-05-PLAN.md — Wave 4 cron-enable + integration smoke + visual QA APPROVED. Phase 10 complete pending verifier. All DEF-01..10 closed end-to-end. v3.0 milestone (TENANT-01..10 + DEF-01..10) ready to close. Production Juno cron operationally enabled in local-dev; Railway env-var flip is sole remaining operator action.
-last_updated: "2026-05-20T03:36:08.847Z"
-last_activity: 2026-05-20
+milestone: null
+milestone_name: (no active milestone — v3.0 closed 2026-05-19; ready for next milestone scope)
+status: Between milestones
+stopped_at: v3.0 milestone complete + archived (Phase 9 + Phase 10 shipped 2026-05-19; audit `tech_debt` with 20/20 reqs satisfied; ROADMAP collapsed; REQUIREMENTS.md cleared; PROJECT.md evolved). Ready to scope next milestone.
+last_updated: "2026-05-19T20:30:00.000Z"
+last_activity: 2026-05-19
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 30
-  completed_plans: 32
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-19) + .planning/ROADMAP.md (extended 2026-05-19 with v3.0 Phases 9-10)
+See: .planning/PROJECT.md (updated 2026-05-19 after v3.0 milestone complete)
 
 **Core value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno.
-**Current focus:** Phase 10 — juno-defence-news-funnel
+**Current focus:** Between milestones — ready to scope v3.0.1 cleanup OR v3.1 Juno expansion. Run `/gsd:new-milestone` to start.
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
-Milestone v3.0 status: FINAL PHASE SHIPPED — ready for orchestrator regression gate to close milestone
+Phase: Not started (no active milestone)
+Plan: —
+Status: Awaiting next milestone scope
 
 ### v3.0 Roadmap Summary
 
