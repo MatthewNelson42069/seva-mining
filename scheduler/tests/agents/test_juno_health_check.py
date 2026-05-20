@@ -24,13 +24,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Wave 2 (10-03-PLAN.md) removes this skip line to turn the module GREEN.
-pytest.skip(
-    "Wave 0 RED — Juno health-check helper lands in Wave 2 (10-03-PLAN.md). "
-    "Remove this skip line in that wave's task to turn tests GREEN.",
-    allow_module_level=True,
-)
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 

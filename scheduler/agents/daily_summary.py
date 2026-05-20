@@ -19,10 +19,13 @@ Pitfall mitigations bundled here:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+import feedparser
 
 from anthropic import AsyncAnthropic
 from sqlalchemy import select
@@ -38,6 +41,23 @@ from agents.ontario_stats import (
     format_fresh_markdown,
     format_no_new_data_markdown,
 )
+# v3.0 Phase 10 (DEF-04..07) — Juno defence news funnel imports. Module-level
+# imports (rather than symbol-level) so test patches on
+# `companies.juno.feeds.JUNO_DEFENCE_FEEDS` etc. take effect at call time.
+from agents import juno_health_check as juno_hc
+from agents.juno_refusal_detector import (
+    call_with_refusal_guard,
+    SECTION_UNAVAILABLE_COPY,
+)
+from agents.juno_relevance import (
+    classify_story,
+    survives_threshold,
+    DefenceRelevance,
+    HAIKU_MODEL,
+)
+from companies.juno import feeds as juno_feeds
+from companies.juno import serpapi as juno_serpapi_cfg
+from companies.juno.prompts import DEFENCE_NEWS_SYSTEM_PROMPT
 from config import get_settings
 from database import AsyncSessionLocal
 from models.agent_run import AgentRun
@@ -61,6 +81,34 @@ GOLD_TOP_N = 20                 # quick-260518-fyq — bumped 12→20; analyst c
 SONNET_MODEL = "claude-sonnet-4-6"  # locked — Sonnet for the WRITE call only
 SONNET_MAX_TOKENS = 1500        # quick-260512-of1 — bumped from 800; bull-thesis brief is structurally larger
 IDEMPOTENCY_WINDOW_MIN = 30     # CRIT-3 — match misfire_grace_time
+
+# v3.0 Phase 10 (DEF-04..07) — Juno synthesis token budget per section.
+# Token math: 3 sections × ~1500 tokens × ~$3/M output = ~$0.01/fire ≈ $0.60/mo
+# at 60 fires/month (08:05 + 12:05 PT each day). Inside the ~$30-50/mo Anthropic
+# budget per CLAUDE.md.
+JUNO_SONNET_MODEL = "claude-sonnet-4-6"
+JUNO_SONNET_MAX_DEFENCE = 1500     # 7-bullet Defence News output (raised from 1000 per CONTEXT)
+JUNO_SONNET_MAX_PROCUREMENT = 1000
+JUNO_SONNET_MAX_WORLD = 1500
+JUNO_SONNET_TIMEOUT = 60.0         # Phase 7 D-11 baseline
+
+# World Events RSS feeds — generic world news passes through Haiku classifier
+# filter (CONTEXT D-08). Distinct from JUNO_DEFENCE_FEEDS — only items at
+# confidence >= 0.7 AND is_relevant=True flow to Sonnet synthesis.
+# Phase-0 verification may have flagged some endpoints; runtime per-feed
+# health-check (DEF-04) downgrades to status='partial' if 3+ flag in one fire.
+JUNO_WORLD_EVENTS_FEEDS: list[tuple[str, str]] = [
+    (
+        "reuters_world",
+        "https://www.reutersagency.com/feed/?best-topics=world&post_type=best",
+    ),
+    ("ap_world", "https://feeds.apnews.com/rss/apf-worldnews"),
+    ("bbc_world", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+]
+# Cap classifier calls per fire — bounds cost and latency. 100 entries × Haiku
+# 4.5 (~$0.50/M input + $2.50/M output) × 400-token responses ≈ $0.10/fire =
+# $6/mo at 60 fires/month.
+JUNO_WORLD_EVENTS_CLASSIFIER_CAP = 100
 
 # GOLD-02 prompt template — quick-260512-of1 refactored from "1-3 headline-grouped
 # stories" to a curated bull-thesis brief with 4 labeled sub-sections (Top Gold
@@ -142,6 +190,21 @@ def _derive_period_label(now_la: datetime) -> str:
     Robust to misfire_grace_time skew: any hour < 11 maps to '08:00 PT'.
     """
     return "08:00 PT" if now_la.hour < 11 else "12:00 PT"
+
+
+def _is_juno_morning_fire(now_la: datetime) -> bool:
+    """Return True for the 08:05 PT Juno fire (SerpAPI runs only on this fire).
+
+    Per RESEARCH §Open Question 1 — SerpAPI dispatched once per day on the
+    morning fire (saves ~$2-4/mo). The 12:05 PT fire passes is_morning_fire
+    =False; the procurement section returns ('', {'skipped_reason':
+    'non_morning_fire'}, 0) so the row's `ontario_law_md` from the morning
+    fire's idempotency-window write is the source-of-truth.
+
+    Implemented as a module-level function so tests can monkeypatch it to
+    force the morning-fire path regardless of wall-clock time.
+    """
+    return now_la.hour < 10
 
 
 async def _idempotency_skip(session: AsyncSession, now_utc: datetime) -> bool:
@@ -759,36 +822,372 @@ async def run_daily_summary() -> None:
 # procurement contracts + defence-industry headlines + Sonnet synthesis).
 # ---------------------------------------------------------------------------
 
+
+async def _fetch_7day_avg_for_feed(
+    session: AsyncSession, source_name: str
+) -> float:
+    """Query agent_runs.notes JSONB for last 7-day avg entry count.
+
+    CONTEXT D-12 — recent-history threshold helper. Reads
+    `defence_feed_entry_counts` (preferred) OR `feed_entry_counts` (graceful
+    fallback per research) from each `agent_runs.notes` row for
+    `juno_daily_summary` runs in the last 7 days with status in
+    ('completed', 'partial').
+
+    Returns 0.0 when no history is available (treats as no-history baseline;
+    `flag_feed()` still applies the bozo/empty rules independently).
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    try:
+        stmt = (
+            select(AgentRun.notes)
+            .where(AgentRun.agent_name == "juno_daily_summary")
+            .where(AgentRun.started_at >= cutoff)
+            .where(AgentRun.status.in_(["completed", "partial"]))
+        )
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+    except Exception as exc:  # noqa: BLE001 — fail-closed, no history is fine
+        logger.warning(
+            "juno: _fetch_7day_avg_for_feed query raised (%s); treating as no-history",
+            type(exc).__name__,
+        )
+        return 0.0
+
+    counts: list[int] = []
+    try:
+        iterable = list(rows)
+    except TypeError:
+        return 0.0
+    for notes_raw in iterable:
+        if notes_raw is None:
+            continue
+        try:
+            notes = (
+                json.loads(notes_raw)
+                if isinstance(notes_raw, str)
+                else notes_raw
+            )
+            if not isinstance(notes, dict):
+                continue
+            fec = (
+                notes.get("defence_feed_entry_counts")
+                or notes.get("feed_entry_counts")
+                or {}
+            )
+            if isinstance(fec, dict) and source_name in fec:
+                counts.append(int(fec[source_name]))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+    return sum(counts) / len(counts) if counts else 0.0
+
+
+async def _run_juno_health_check(
+    session: AsyncSession,
+    feeds: list[tuple[str, str]],
+) -> tuple[list[dict], dict[str, int], list[str]]:
+    """Per-feed bozo + recent-history health-check per CONTEXT D-12.
+
+    Returns:
+      all_entries: flat list of entry dicts (source-tagged)
+      feed_entry_counts: dict {source_name: int}
+      flagged_feeds: list of source_names that failed bozo OR empty OR
+        <30% of 7d avg
+
+    Status decision (per D-12) is made by caller via
+    `juno_hc.derive_run_status(...)`:
+      - all_entries == [] → 'failed' (triggers WHA-03)
+      - len(flagged) >= 3 → 'partial'
+      - else → 'completed'
+    """
+    loop = asyncio.get_event_loop()
+    feed_entry_counts: dict[str, int] = {}
+    flagged_feeds: list[str] = []
+    all_entries: list[dict] = []
+
+    for source_name, feed_url in feeds:
+        try:
+            feed = await loop.run_in_executor(None, feedparser.parse, feed_url)
+        except Exception as exc:  # noqa: BLE001 — fail-closed per-feed
+            logger.warning(
+                "juno: feedparser raised on %s (%s) — flagging",
+                source_name,
+                type(exc).__name__,
+            )
+            flagged_feeds.append(source_name)
+            feed_entry_counts[source_name] = 0
+            continue
+
+        entries = list(getattr(feed, "entries", []) or [])
+        n_entries = len(entries)
+        feed_entry_counts[source_name] = n_entries
+
+        avg_7d = await _fetch_7day_avg_for_feed(session, source_name)
+        flagged = juno_hc.flag_feed(
+            source_name=source_name, feed=feed, history_avg=avg_7d
+        )
+        if flagged:
+            flagged_feeds.append(source_name)
+            if n_entries == 0:
+                # Empty or bozo-error → skip entry collection.
+                continue
+            # n_entries > 0 but history-low — still ingest (informational flag).
+
+        for entry in entries:
+            all_entries.append({
+                "source_name": source_name,
+                "title": str(getattr(entry, "title", ""))[:500],
+                "summary": str(getattr(entry, "summary", ""))[:1500],
+                "link": str(getattr(entry, "link", "")),
+                "published": str(getattr(entry, "published", "")),
+            })
+    return all_entries, feed_entry_counts, flagged_feeds
+
+
+async def _build_juno_defence_news_section(
+    client: AsyncAnthropic,
+    entries: list[dict],
+) -> tuple[str | None, dict]:
+    """Call Sonnet 4.6 for the Defence News section.
+
+    Returns (markdown_or_None, diagnostic). On refusal: markdown=None,
+    diagnostic carries refusal flags. Caller writes SECTION_UNAVAILABLE_COPY
+    as the fallback.
+    """
+    bullets = "\n\n".join(
+        f"- **{e.get('source_name','?')}**: {e.get('title','')}\n  "
+        f"{(e.get('summary','') or '')[:500]}"
+        for e in entries[:30]  # cap input to bound token count
+    )
+    user_prompt = (
+        "Synthesize the following defence-industry stories into a Defence News "
+        "section. Output 3-7 bullets in markdown, each ending with "
+        "`(Source Name)` attribution. Use the section header "
+        f"`### 🛡️ Defence News`.\n\n{bullets or '(no stories ingested this fire)'}"
+    )
+    return await call_with_refusal_guard(
+        client,
+        model=JUNO_SONNET_MODEL,
+        max_tokens=JUNO_SONNET_MAX_DEFENCE,
+        system=DEFENCE_NEWS_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        section_name="defence_news",
+    )
+
+
+async def _build_juno_canadian_procurement_section(
+    client: AsyncAnthropic,
+    serpapi_client: "serpapi.Client | None",
+    is_morning_fire: bool,
+) -> tuple[str | None, dict, int]:
+    """Call SerpAPI for Canadian procurement queries (morning fire only) +
+    Sonnet 4.6 synthesis with refusal-guard.
+
+    Per RESEARCH Open Question 1 — only the 08:05 PT morning fire runs
+    SerpAPI; the 12:05 PT fire passes is_morning_fire=False and the section
+    returns ('', {'skipped_reason': 'non_morning_fire'}, 0) so the caller
+    can re-use the morning fire's section via the idempotency window.
+
+    Returns (markdown_or_None, diagnostic, serpapi_count).
+    """
+    if not is_morning_fire:
+        return ("", {"skipped_reason": "non_morning_fire"}, 0)
+    if serpapi_client is None:
+        return ("", {"skipped_reason": "no_serpapi_client"}, 0)
+
+    queries = list(getattr(juno_serpapi_cfg, "JUNO_SERPAPI_QUERIES", []) or [])
+    loop = asyncio.get_event_loop()
+
+    async def _one_query(q: str) -> list[dict]:
+        def _call() -> object:
+            return serpapi_client.search({
+                "engine": "google_news",
+                "q": q,
+                "tbs": "qdr:d",  # last 24h (matches Ontario Law pattern)
+                "num": 10,
+            })
+        try:
+            results = await loop.run_in_executor(None, _call)
+        except Exception as exc:  # noqa: BLE001 — per-query fail-closed
+            logger.warning(
+                "juno_serpapi: query '%s' failed (%s)",
+                q,
+                type(exc).__name__,
+            )
+            return []
+        try:
+            hits = results.get("news_results") if hasattr(results, "get") else None
+        except Exception:  # noqa: BLE001
+            hits = None
+        if not isinstance(hits, list):
+            return []
+        return hits
+
+    try:
+        all_hits = await asyncio.gather(*[_one_query(q) for q in queries])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("juno_serpapi: gather raised (%s)", type(exc).__name__)
+        all_hits = []
+    flat = [item for batch in all_hits for item in batch]
+    serpapi_count = len(queries)
+
+    # Synthesize even when SerpAPI returned no hits — Sonnet writes a
+    # "no signal today" Canadian Procurement section. This keeps the section
+    # shape consistent (always 1+ bullets via Sonnet) and lets the
+    # refusal-detector wrap a real call instead of writing a hard-coded
+    # empty-state.
+    bullets = "\n\n".join(
+        f"- {h.get('title','')}\n  "
+        f"{(h.get('snippet','') or '')[:300]} "
+        f"({(h.get('source') or {}).get('name','SerpAPI')})"
+        for h in flat[:20]
+    )
+    bullets_or_empty = bullets or (
+        "(no SerpAPI hits this fire — write a 1-bullet no-signal-today section)."
+    )
+    user_prompt = (
+        "Synthesize the following Canadian defence procurement signals into a "
+        "Canadian Procurement section. Output 3-5 bullets in markdown, each "
+        "ending with `(Source Name)` attribution. Extract contract values "
+        "where present. Use the section header "
+        "`### 🇨🇦 Canadian Procurement`.\n\n"
+        f"{bullets_or_empty}"
+    )
+    text, diagnostic = await call_with_refusal_guard(
+        client,
+        model=JUNO_SONNET_MODEL,
+        max_tokens=JUNO_SONNET_MAX_PROCUREMENT,
+        system=DEFENCE_NEWS_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        section_name="canadian_procurement",
+    )
+    diagnostic["serpapi_hit_count"] = len(flat)
+    return (text, diagnostic, serpapi_count)
+
+
+async def _build_juno_world_events_section(
+    client: AsyncAnthropic,
+    session: AsyncSession,
+) -> tuple[str | None, dict]:
+    """Ingest world-events RSS → Haiku classifier filter → Sonnet 4.6.
+
+    Returns (markdown_or_None, diagnostic). diagnostic carries:
+      - world_events_total_seen
+      - world_events_survived (confidence >= 0.7 AND is_relevant AND
+        category != not_relevant)
+      - world_events_categories: dict of category → count
+      - refusal_detected / first_attempt_excerpt (from call_with_refusal_guard)
+    """
+    all_entries, _ec, _ff = await _run_juno_health_check(
+        session, JUNO_WORLD_EVENTS_FEEDS
+    )
+    if not all_entries:
+        return (
+            "",
+            {
+                "reason": "no_world_events_ingested",
+                "world_events_total_seen": 0,
+                "world_events_survived": 0,
+                "world_events_categories": {},
+            },
+        )
+
+    survived: list[tuple[dict, DefenceRelevance]] = []
+    categories: dict[str, int] = {}
+    for entry in all_entries[:JUNO_WORLD_EVENTS_CLASSIFIER_CAP]:
+        try:
+            result = await classify_story(
+                client,
+                title=entry.get("title", ""),
+                snippet=entry.get("summary", ""),
+            )
+        except Exception as exc:  # noqa: BLE001 — fail-closed per entry
+            logger.warning(
+                "juno_world_events: classify_story raised (%s)",
+                type(exc).__name__,
+            )
+            continue
+        if survives_threshold(result):
+            survived.append((entry, result))  # type: ignore[arg-type]
+            categories[result.category] = categories.get(result.category, 0) + 1
+
+    if not survived:
+        return (
+            "",
+            {
+                "world_events_total_seen": len(all_entries),
+                "world_events_survived": 0,
+                "world_events_categories": {},
+            },
+        )
+
+    bullets = "\n\n".join(
+        f"- **{rel.category}** ({rel.confidence:.2f}): {e.get('title','')}\n"
+        f"  {(e.get('summary','') or '')[:400]} ({e.get('source_name','?')})"
+        for (e, rel) in survived[:25]
+    )
+    user_prompt = (
+        "Synthesize the following defence-relevant world-events stories "
+        "(pre-filtered by relevance classifier) into a World Events Relevant "
+        "to Defence section. Output 5-7 bullets in markdown, each ending with "
+        "`(Source Name)`. Use the section header "
+        f"`### 🌐 World Events Relevant to Defence`.\n\n{bullets}"
+    )
+    text, diagnostic = await call_with_refusal_guard(
+        client,
+        model=JUNO_SONNET_MODEL,
+        max_tokens=JUNO_SONNET_MAX_WORLD,
+        system=DEFENCE_NEWS_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        section_name="world_events",
+    )
+    diagnostic["world_events_total_seen"] = len(all_entries)
+    diagnostic["world_events_survived"] = len(survived)
+    diagnostic["world_events_categories"] = categories
+    return (text, diagnostic)
+
+
 async def run_juno_daily_summary() -> None:
-    """Juno daily_summary entry point (Phase 9 stub — TENANT-08).
+    """Juno daily_summary entry point — v3.0 Phase 10 real synthesis.
 
-    Mirrors run_daily_summary() shape but skips the gold/ontario sections.
-    For Phase 9, the goal is "one APScheduler fire produces both a Seva
-    completed row and a Juno partial row" so the multi-tenant cron topology
-    is wired end-to-end before any real Juno content lands.
+    Fires at 08:05 PT + 12:05 PT (5-min stagger from Seva, per Phase 9 D-01a).
+    Synthesizes the 3-section Defence News Funnel:
 
-    Idempotency: per-company check via scoped_summaries('juno') — a second
-    call within the 30-minute window does NOT create a second Juno row.
-    Seva's idempotency check (in run_daily_summary) is independent because
-    each scoped_summaries() Select filters by company_id.
+      1. Defence News      — Tier-1 defence RSS feeds (DEF-01) + Sonnet 4.6
+      2. Canadian Procurement — SerpAPI google_news queries (DEF-05; morning
+                                fire only per RESEARCH §Open Q 1) + Sonnet
+      3. World Events Relevant to Defence — Reuters/AP/BBC World RSS → Haiku
+                                4.5 relevance classifier (DEF-06) → Sonnet
 
-    Status:
-      - completed: writing the partial row succeeded (stub completes
-        successfully — writing the placeholder IS the v3.0 success criterion).
-      - failed:    DB write raised; agent_run.errors records exception text.
+    Each Sonnet call is wrapped by `call_with_refusal_guard` (DEF-07) which
+    retries once with a framing nudge on the first refusal and falls back to
+    SECTION_UNAVAILABLE_COPY on the second refusal. Per-feed bozo +
+    recent-history health-check (DEF-04) downgrades the row to
+    `status='partial'` when 3+ feeds flag in one fire.
+
+    Idempotency (Phase 9 fix, PRESERVED): per-company check via
+    scoped_summaries('juno') filtered by status.in_(['running','completed',
+    'partial']). Phase 10 writes 'partial' rows frequently (refusal-detector
+    trips, health-check trips, classifier sparseness) so the 'partial'
+    inclusion is essential — without it, every Juno cron fire would write a
+    duplicate row inside the 30-min window.
+
+    Status mapping (CONTEXT D-12 + D-11):
+      - 'failed':    zero entries across all defence feeds (triggers WHA-03)
+      - 'partial':   >=1 section refused OR >=3 feeds flagged
+      - 'completed': all sections returned text + <3 flagged feeds
     """
     now_utc = datetime.now(timezone.utc)
     now_la = now_utc.astimezone(LA_TZ)
     period_label = _derive_period_label(now_la)
+    is_morning_fire = _is_juno_morning_fire(now_la)
 
     # Idempotency — per-company check (uses scoped_summaries('juno')).
-    # NOTE: Juno's run always writes status='partial' in v3.0 (Phase 10 will
-    # fill the real content). The Seva-side _idempotency_skip excludes
-    # 'partial'/'failed' so a flaky run can be retried — but Juno's
-    # successful run IS partial in Phase 9, so 'partial' MUST be treated
-    # as an idempotency hit here. Otherwise back-to-back fires within the
-    # window write duplicate Juno rows. (v3.0 Phase 9 Wave 4 — bug found
-    # during 09-05 smoke-test; Rule 1 auto-fix.)
+    # CRITICAL: status.in_(['running', 'completed', 'partial']) is the Phase 9
+    # D-01b correction. Phase 10 writes 'partial' rows often (refusal-detector
+    # trips, 3+ flagged feeds, classifier sparseness). Without 'partial' in
+    # the filter, back-to-back fires would duplicate rows in the 30-min
+    # window. See Phase 9 09-05 smoke-test bug for the failure mode.
     async with AsyncSessionLocal() as session:
         cutoff = now_utc - timedelta(minutes=IDEMPOTENCY_WINDOW_MIN)
         stmt = (
@@ -817,48 +1216,178 @@ async def run_juno_daily_summary() -> None:
         items_queued=0,
         items_filtered=0,
         status="running",
-        notes=json.dumps({"company_id": "juno", "phase_10_pending": True}),
+        notes=json.dumps({"company_id": "juno"}),
     )
     async with AsyncSessionLocal() as session:
         session.add(agent_run)
         await session.commit()
         await session.refresh(agent_run)
 
+    settings = get_settings()
+    # Per Phase 7 D-11 baseline: 60s timeout (3-section synthesis x ~1500
+    # tokens = ~5-7s actual; 60s leaves wide headroom for refusal-retry).
+    anthropic_client = AsyncAnthropic(
+        api_key=settings.anthropic_api_key, timeout=JUNO_SONNET_TIMEOUT,
+    )
+    # SerpAPI client: morning fire only (per RESEARCH §Open Q 1 — saves
+    # $2-4/mo by skipping 12:05 PT re-queries). Wrap instantiation in
+    # try/except so missing/invalid key on the 08:05 fire doesn't kill the
+    # whole run — section just skips with a diagnostic.
+    serpapi_client: "serpapi.Client | None" = None
+    if is_morning_fire:
+        try:
+            if settings.serpapi_api_key:
+                serpapi_client = serpapi.Client(api_key=settings.serpapi_api_key)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "juno: serpapi.Client instantiation failed (%s) — section will skip",
+                type(exc).__name__,
+            )
+            serpapi_client = None
+
+    # --- Section 1: Defence News (RSS + Sonnet) ---
+    defence_entries: list[dict] = []
+    defence_counts: dict[str, int] = {}
+    defence_flags: list[str] = []
+    defence_md: str | None = None
+    defence_diag: dict = {}
     try:
-        # Write the Juno daily_summaries row with empty sections + partial
-        # status. Phase 10 will populate gold_news_md (defence_news_md
-        # semantically), ontario_law_md (canadian_procurement_md semantically),
-        # and ontario_stats_md (world_events_md semantically) per DEF-08.
+        async with AsyncSessionLocal() as session:
+            defence_entries, defence_counts, defence_flags = (
+                await _run_juno_health_check(
+                    session,
+                    list(getattr(juno_feeds, "JUNO_DEFENCE_FEEDS", []) or []),
+                )
+            )
+        defence_md, defence_diag = await _build_juno_defence_news_section(
+            anthropic_client, defence_entries
+        )
+    except Exception as exc:  # noqa: BLE001 — per-section fail-closed
+        logger.exception(
+            "juno: defence news section raised — falling back to SECTION_UNAVAILABLE_COPY"
+        )
+        defence_md = None
+        defence_diag = {"exception": f"{type(exc).__name__}: {str(exc)[:200]}"}
+
+    # --- Section 2: Canadian Procurement (SerpAPI [morning only] + Sonnet) ---
+    procurement_md: str | None = None
+    procurement_diag: dict = {}
+    serpapi_count = 0
+    try:
+        procurement_md, procurement_diag, serpapi_count = (
+            await _build_juno_canadian_procurement_section(
+                anthropic_client, serpapi_client, is_morning_fire
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 — per-section fail-closed
+        logger.exception(
+            "juno: canadian procurement section raised — falling back to SECTION_UNAVAILABLE_COPY"
+        )
+        procurement_md = None
+        procurement_diag = {"exception": f"{type(exc).__name__}: {str(exc)[:200]}"}
+
+    # --- Section 3: World Events (RSS → Haiku classifier filter → Sonnet) ---
+    world_md: str | None = None
+    world_diag: dict = {}
+    try:
+        async with AsyncSessionLocal() as session:
+            world_md, world_diag = await _build_juno_world_events_section(
+                anthropic_client, session
+            )
+    except Exception as exc:  # noqa: BLE001 — per-section fail-closed
+        logger.exception(
+            "juno: world events section raised — falling back to SECTION_UNAVAILABLE_COPY"
+        )
+        world_md = None
+        world_diag = {"exception": f"{type(exc).__name__}: {str(exc)[:200]}"}
+
+    # --- Status mapping (CONTEXT D-12 + D-11) ---
+    # `None` returned from a section means: refusal-guard exhausted retries
+    # OR section raised an unhandled exception. Empty-string ("") means: section
+    # intentionally skipped (e.g., procurement on the 12:05 PT fire).
+    sections_refused = sum(
+        1 for md in (defence_md, procurement_md, world_md) if md is None
+    )
+    error_text: str | None = None
+    if not defence_entries:
+        overall_status = "failed"
+        error_text = (
+            "Defence News ingestion produced zero entries across all feeds"
+        )
+    elif sections_refused >= 1 or len(defence_flags) >= juno_hc.PARTIAL_FLAG_THRESHOLD:
+        overall_status = "partial"
+        error_text = (
+            f"{sections_refused} section(s) returned None (refusal/error); "
+            f"{len(defence_flags)} feed(s) flagged"
+        )
+    else:
+        overall_status = "completed"
+
+    # Markdown fallback for refused/errored sections. Empty-string ("") for
+    # intentionally-skipped sections (e.g., 12:05 PT procurement) flows
+    # through as-is so the SummaryCard renders a blank slot rather than the
+    # operator-facing fallback copy.
+    final_defence_md = (
+        defence_md if defence_md is not None else SECTION_UNAVAILABLE_COPY
+    )
+    final_procurement_md = (
+        procurement_md if procurement_md is not None else SECTION_UNAVAILABLE_COPY
+    )
+    final_world_md = (
+        world_md if world_md is not None else SECTION_UNAVAILABLE_COPY
+    )
+
+    # Telemetry — agent_runs.notes per CONTEXT D-12. The
+    # `defence_feed_entry_counts` key is the canonical history-lookback key
+    # consumed by _fetch_7day_avg_for_feed on the NEXT fire.
+    base_payload = juno_hc.build_notes_payload(
+        feed_entry_counts=defence_counts,
+        flagged_feeds=defence_flags,
+    )
+    notes_dict: dict = {
+        **base_payload,
+        # History-lookback key (CONTEXT D-12 + graceful fallback).
+        "defence_feed_entry_counts": dict(defence_counts),
+        "defence_diagnostic": defence_diag,
+        "procurement_diagnostic": procurement_diag,
+        "world_events_diagnostic": world_diag,
+        "serpapi_query_count": serpapi_count,
+        "is_morning_fire": is_morning_fire,
+        "overall_status": overall_status,
+    }
+
+    try:
+        # Write the daily_summaries row (semantic field-reuse per Phase 9 D-08).
+        # The 3 physical columns map to Juno's logical section names:
+        #   gold_news_md     → Defence News
+        #   ontario_law_md   → Canadian Procurement
+        #   ontario_stats_md → World Events Relevant to Defence
         async with AsyncSessionLocal() as session:
             summary_row = DailySummary(
                 company_id="juno",
                 generated_at=now_utc,
                 period_label=period_label,
-                gold_news_md=None,
-                ontario_law_md=None,
-                ontario_stats_md=None,
-                raw_sources_jsonb={
-                    "company_id": "juno",
-                    "phase_10_pending": True,
-                    "note": "Juno Defence News Funnel ships in Phase 10",
-                },
-                status="partial",
-                error_text="Juno content pipeline pending — Phase 10",
+                gold_news_md=final_defence_md,
+                ontario_law_md=final_procurement_md,
+                ontario_stats_md=final_world_md,
+                raw_sources_jsonb=notes_dict,
+                status=overall_status,
+                error_text=error_text,
                 agent_run_id=agent_run.id,
             )
             session.add(summary_row)
             await session.commit()
 
-        # Update agent_run to completed (writing the partial row IS success
-        # for the Phase 9 stub).
+        # Update agent_run status. 'failed' on the row maps to agent_run='failed';
+        # 'completed' and 'partial' both map to agent_run='completed' (the worker
+        # successfully wrote a row, even if the row carries partial markdown).
+        agent_run_status = "completed" if overall_status != "failed" else "failed"
         async with AsyncSessionLocal() as session:
             fresh = await session.get(AgentRun, agent_run.id)
             if fresh is not None:
-                fresh.status = "completed"
+                fresh.status = agent_run_status
                 fresh.ended_at = datetime.now(timezone.utc)
-                fresh.notes = json.dumps(
-                    {"company_id": "juno", "phase_10_pending": True}
-                )
+                fresh.notes = json.dumps(notes_dict, default=str)
                 await session.commit()
 
     except Exception as exc:  # noqa: BLE001

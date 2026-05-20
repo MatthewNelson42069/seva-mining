@@ -96,9 +96,16 @@ def _mock_session_factory(idempotency_returns_existing: bool = False):
 
 
 @pytest.mark.asyncio
-async def test_run_juno_daily_summary_writes_partial_row():
-    """After run_juno_daily_summary() returns, exactly 1 Juno daily_summaries
-    row and 1 agent_runs row were constructed with the expected fields.
+async def test_run_juno_daily_summary_writes_row(monkeypatch):
+    """v3.0 Phase 10 — after run_juno_daily_summary() returns, exactly 1 Juno
+    daily_summaries row and 1 agent_runs row were constructed with the
+    expected structural fields.
+
+    Replaces the Phase 9 stub-only assertions (phase_10_pending,
+    gold_news_md is None) — those described the empty-stub behavior that
+    Phase 10 deliberately replaces with real synthesis. The structural
+    invariants (1 row each, company_id='juno', agent_name correct,
+    notes.company_id='juno', status in valid set) are preserved.
     """
     from agents.daily_summary import run_juno_daily_summary
     from models.agent_run import AgentRun
@@ -108,7 +115,21 @@ async def test_run_juno_daily_summary_writes_partial_row():
         idempotency_returns_existing=False
     )
 
-    with patch("agents.daily_summary.AsyncSessionLocal", factory):
+    # Empty feed for every feedparser.parse call → defence ingestion produces
+    # zero entries → status='failed' for this synthetic test fire (no Sonnet
+    # call needed). This keeps the test offline + deterministic.
+    empty_feed = MagicMock(bozo=0, entries=[])
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
+        "feedparser.parse", return_value=empty_feed
+    ), patch("agents.daily_summary.AsyncAnthropic") as MockClient, patch(
+        "agents.daily_summary.serpapi.Client"
+    ) as MockSerp:
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock()  # never called in this test
+        mock_client.messages.parse = AsyncMock()
+        MockClient.return_value = mock_client
+        MockSerp.return_value.search = MagicMock(return_value={"news_results": []})
         await run_juno_daily_summary()
 
     # Find the AgentRun + DailySummary rows that were session.add()-ed.
@@ -124,24 +145,17 @@ async def test_run_juno_daily_summary_writes_partial_row():
 
     summary = summary_rows[0]
     assert summary.company_id == "juno", (
-        f"Juno stub must set company_id='juno', got {summary.company_id!r}"
+        f"Juno run must set company_id='juno', got {summary.company_id!r}"
     )
-    assert summary.status == "partial", (
-        f"Juno stub must write status='partial' (Phase 10 fills real content); "
+    # Phase 10 valid statuses: 'completed' | 'partial' | 'failed'. With empty
+    # defence feeds in this test, the orchestrator maps to 'failed'.
+    assert summary.status in {"completed", "partial", "failed"}, (
+        f"Juno status must be one of completed/partial/failed; "
         f"got {summary.status!r}"
     )
-    assert summary.gold_news_md is None, (
-        "Juno stub must NOT write gold_news_md (Seva-specific section)"
-    )
-    assert summary.ontario_law_md is None
-    assert summary.ontario_stats_md is None
-    error_text = (summary.error_text or "").lower()
-    assert (
-        "juno content pipeline pending" in error_text
-        or "phase 10" in error_text
-    ), (
-        "Juno stub must mark error_text with 'Juno content pipeline pending' "
-        f"or 'Phase 10'; got {summary.error_text!r}"
+    assert summary.status == "failed", (
+        f"Empty defence feeds → status='failed' (per D-12); "
+        f"got {summary.status!r}"
     )
 
     # AgentRun row carries the correct agent_name + notes JSON.
@@ -154,14 +168,12 @@ async def test_run_juno_daily_summary_writes_partial_row():
         f"agent_runs.notes must carry company_id='juno' (D-08 per-tenant "
         f"telemetry); got {notes_payload}"
     )
-    assert notes_payload.get("phase_10_pending") is True
 
-    # The mocked AgentRun returned by session.get() must have been
-    # transitioned to 'completed' (writing the partial row IS success).
-    assert agent_run_mock.status == "completed", (
-        f"juno_daily_summary agent_runs.status must be 'completed' "
-        f"(stub completes successfully — writing the partial row IS success); "
-        f"got {agent_run_mock.status!r}"
+    # On status='failed', the mocked AgentRun (session.get) must have been
+    # transitioned to 'failed' (matches overall row status mapping).
+    assert agent_run_mock.status == "failed", (
+        f"juno_daily_summary agent_run.status must be 'failed' when defence "
+        f"feeds produce zero entries; got {agent_run_mock.status!r}"
     )
 
 
@@ -224,11 +236,6 @@ async def test_run_juno_daily_summary_idempotency(caplog):
 @pytest.mark.asyncio
 async def test_defence_news_section():
     """Wave 2 (10-03-PLAN.md): JUNO_DEFENCE_FEEDS → Sonnet → 3 bullets in gold_news_md."""
-    pytest.skip(
-        "Defence News real-synthesis path lands in Wave 2 (10-03-PLAN.md). "
-        "Remove this skip line in that wave's task to turn the test GREEN."
-    )
-
     from agents.daily_summary import run_juno_daily_summary
     from models.daily_summary import DailySummary
 
@@ -279,11 +286,6 @@ async def test_defence_news_section():
 @pytest.mark.asyncio
 async def test_serpapi_canadian_procurement():
     """Wave 2 (10-03-PLAN.md): SerpAPI hits flow into ontario_law_md."""
-    pytest.skip(
-        "Canadian Procurement SerpAPI path lands in Wave 2 (10-03-PLAN.md). "
-        "Remove this skip line in that wave's task to turn the test GREEN."
-    )
-
     from agents.daily_summary import run_juno_daily_summary
     from models.daily_summary import DailySummary
 
@@ -314,7 +316,11 @@ async def test_serpapi_canadian_procurement():
         ["site:canada.ca defence", "site:war.gov defence"],
     ), patch(
         "serpapi.Client"
-    ) as MockSerp:
+    ) as MockSerp, patch(
+        # Force morning-fire path (SerpAPI dispatch) regardless of wall clock.
+        "agents.daily_summary._is_juno_morning_fire",
+        return_value=True,
+    ):
         mock_client = MagicMock()
         mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
         MockClient.return_value = mock_client
@@ -331,11 +337,6 @@ async def test_serpapi_canadian_procurement():
 @pytest.mark.asyncio
 async def test_canadian_procurement_section():
     """Wave 2 (10-03-PLAN.md): end-to-end Canadian Procurement section write."""
-    pytest.skip(
-        "Canadian Procurement end-to-end path lands in Wave 2 (10-03-PLAN.md). "
-        "Remove this skip line in that wave's task to turn the test GREEN."
-    )
-
     from agents.daily_summary import run_juno_daily_summary
     from models.daily_summary import DailySummary
 
@@ -357,7 +358,9 @@ async def test_canadian_procurement_section():
 
     with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
         "agents.daily_summary.AsyncAnthropic"
-    ) as MockClient:
+    ) as MockClient, patch(
+        "agents.daily_summary._is_juno_morning_fire", return_value=True
+    ):
         mock_client = MagicMock()
         mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
         MockClient.return_value = mock_client
@@ -374,11 +377,6 @@ async def test_canadian_procurement_section():
 @pytest.mark.asyncio
 async def test_world_events_section_with_haiku_filter():
     """Wave 2 (10-03-PLAN.md): Haiku classifier filter → Sonnet → ontario_stats_md."""
-    pytest.skip(
-        "World Events Haiku filter path lands in Wave 2 (10-03-PLAN.md). "
-        "Remove this skip line in that wave's task to turn the test GREEN."
-    )
-
     from agents.daily_summary import run_juno_daily_summary
     from agents.juno_relevance import DefenceRelevance
     from models.daily_summary import DailySummary
@@ -445,11 +443,6 @@ async def test_world_events_section_with_haiku_filter():
 @pytest.mark.asyncio
 async def test_idempotency_window_with_partial():
     """Wave 2 (10-03-PLAN.md): second call within 30 min returns without writing duplicate."""
-    pytest.skip(
-        "Partial-row idempotency assertion locked in Wave 2 (10-03-PLAN.md) "
-        "alongside real synthesis. Remove this skip line in that wave's task."
-    )
-
     from agents.daily_summary import run_juno_daily_summary
     from models.agent_run import AgentRun
     from models.daily_summary import DailySummary
