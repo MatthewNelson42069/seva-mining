@@ -93,13 +93,13 @@ Full roadmap detail: `milestones/v3.0-ROADMAP.md`. Audit verdict `tech_debt` (20
 4. Both `09-VALIDATION.md` + `10-VALIDATION.md` frontmatter show `nyquist_compliant: true` and `wave_0_complete: true`; no other frontmatter fields disturbed
 5. When a synthetic schema-violating payload is fed to `juno_relevance.py`, the Haiku `ValidationError` is now logged to `agent_runs.notes` under the `haiku_validation_errors` key with `input_excerpt` + `error_type` + `error_msg` populated; behavioral fail-closed contract preserved — the offending item is still excluded from Sonnet synthesis (NO change to the dual-use exclusion goal); `test_juno_relevance_classifier.py` regression test continues to pass
 
-**Plans:** 5 plans planned 2026-05-19 by `/gsd:plan-phase 11`. Two waves; wave 1 fully parallel.
+**Plans:** 2/5 plans executed
 
 Plans:
 - [ ] 11-01-PLAN.md — CLEANUP-01: remove morning-only SerpAPI gate in `daily_summary.py`; co-commit test refresh (Wave 1)
-- [ ] 11-02-PLAN.md — CLEANUP-02: refresh DEF-01..07 traceability rows in `milestones/v3.0-REQUIREMENTS.md` from Scaffolded → Complete (Wave 1)
+- [x] 11-02-PLAN.md — CLEANUP-02: refresh DEF-01..07 traceability rows in `milestones/v3.0-REQUIREMENTS.md` from Scaffolded → Complete (Wave 1)
 - [ ] 11-03-PLAN.md — CLEANUP-03: remove stale Phase-9-stub section-divider comment block in `daily_summary.py` (Wave 2, depends on 11-01 — same file)
-- [ ] 11-04-PLAN.md — CLEANUP-04: flip `nyquist_compliant` + `wave_0_complete` to `true` in 09-VALIDATION.md + 10-VALIDATION.md frontmatter (Wave 1)
+- [x] 11-04-PLAN.md — CLEANUP-04: flip `nyquist_compliant` + `wave_0_complete` to `true` in 09-VALIDATION.md + 10-VALIDATION.md frontmatter (Wave 1)
 - [ ] 11-05-PLAN.md — CLEANUP-05: Haiku ValidationError observability in `juno_relevance.py` via accumulator-based `agent_runs.notes['haiku_validation_errors']` write; fail-closed contract preserved (Wave 2, depends on 11-01 — same file)
 
 Wave 1 (parallel, file-disjoint): 11-01, 11-02, 11-04.
@@ -155,7 +155,7 @@ Note on CLEANUP-05 temperature tuning: the requirement makes Haiku `temperature`
 | 8. UI Polish + Dead-Code Strip | v2.1 | 4/4 | Complete | 2026-05-19 |
 | 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 10. Juno Defence News Funnel | v3.0 | 5/5 | Complete | 2026-05-19 |
-| 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 0/5 | Planned | - |
+| 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 2/5 | In Progress|  |
 
 ---
 
