@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str
     x_api_bearer_token: str
 
+    # v3.1 Phase 12 — per-tenant Anthropic API keys (D-01, D-02). Fallback to
+    # shared anthropic_api_key when per-tenant unset. STRICT=true raises in
+    # the resolver instead of falling back (operator safety net after the
+    # per-tenant keys are confirmed in Railway).
+    seva_anthropic_api_key: Optional[str] = None
+    juno_anthropic_api_key: Optional[str] = None
+    anthropic_resolver_strict: bool = False
+
     # Optional — agents that need these will fail gracefully if absent
     x_api_key: Optional[str] = None
     x_api_secret: Optional[str] = None
