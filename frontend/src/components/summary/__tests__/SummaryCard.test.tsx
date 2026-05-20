@@ -96,7 +96,7 @@ describe('SummaryCard', () => {
  * while skipped — catches mis-spelled field names or broken module path
  * before Wave 3 executes.
  */
-describe.skip('per-tenant section titles (DEF-08 — Wave 3 in 10-04-PLAN.md)', () => {
+describe('per-tenant section titles (DEF-08 — Wave 3 in 10-04-PLAN.md)', () => {
   function renderAtRoute(route: string, summary: SummaryCardData) {
     return render(
       <MemoryRouter initialEntries={[route]}>
