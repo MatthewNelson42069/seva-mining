@@ -11,6 +11,7 @@ Deliver the Juno Weekly Viral Sweeper — Tab 3 of the Juno dashboard. Every Sun
 After this phase + operator voice UAT + Railway env flip: Juno's first real weekly viral sweep fires next Sunday 08:00 PT.
 
 **In scope:**
+- **🆕 Extend Phase 10 Juno substrate writer (POST-RESEARCH D-03a)** — modify `scheduler/agents/daily_summary.py::_build_juno_defence_news_section` (+ `_build_juno_canadian_procurement_section` + `_build_juno_world_events_section` or whatever the actual function names are) to persist story-URL arrays alongside markdown into `raw_sources_jsonb` keys `defence_news` / `canadian_procurement` / `world_events`. Juno-only — Seva's `_build_seva_*_section` UNTOUCHED. Land in Wave 0 / first plan so virality substrate exists before Sweeper module consumes it.
 - New `scheduler/agents/juno_weekly_sweeper.py` module — `run_juno_weekly_sweeper()` orchestrator (~500-700 LOC; parallels Phase 10's `daily_summary.py::run_juno_daily_summary` shape)
 - New `JUNO_SWEEPER_SYSTEM_PROMPT` constant in `scheduler/companies/juno/prompts.py` alongside existing daily-summary prompt
 - New `JUNO_SWEEPER_X_QUERY` constant (the single combined query string) — likely in `scheduler/companies/juno/x_queries.py` (new file) or appended to existing juno/serpapi.py-style module
@@ -39,27 +40,32 @@ After this phase + operator voice UAT + Railway env flip: Juno's first real week
 ### X Query Strategy (JSWEEP-02)
 
 - **D-01 Single combined X query per Sunday cron.** Mirrors Seva sweeper pattern — one `tweepy.AsyncClient.search_recent_tweets` call with a combined query string. Top-10 engagement-ranked posts returned. Quota-friendly (1 query/week = ~4 queries/month, deep margin within X API Basic tier's ~10K-tweets/month and Seva's existing usage).
-- **D-02 Starter handle/tag set:**
+- **D-02 Starter handle/tag set (POST-RESEARCH REVISION 2026-05-20):**
   - **Think-tanks (3):** `@RUSI_org`, `@CSIS`, `@IISS_org`
-  - **Defence press (4):** `@DefenseNews`, `@BreakingDefense`, `@DefenseScoop`, `@JanesIntel`
-  - **Canadian-specific (2):** `@CDA_CDAI`, `@canadaforces`
+  - **Defence press (4) — corrected handles:** `@defense_news` (was `@DefenseNews`), `@BreakingDefense`, `@DefenseScoop`, `@JanesINTEL` (was `@JanesIntel`, official form)
+  - **Canadian original (2) — corrected handles:** `@CDAInstitute` (was `@CDA_CDAI`), `@CanadianForces` (was `@canadaforces`)
+  - **Canadian Tier-2 ADDED (2) per research:** `@DavePerryCGAI` (CGAI President — highest single-analyst signal), `@Murray_Brewster` (CBC senior defence reporter)
   - **Hashtags (2):** `#defence`, `#NATO`
   - **EXCLUDED (anti-feature):** Defence-prime cashtags (`$LMT`, `$RTX`, `$LDOS`, `$BAESY`, `$GD`, etc.) — equity/financial signals on defence primes are explicit anti-feature per PROJECT.md.
-  - **Constructed query** (planner refines exact handles + verifies existence during research; constants below are documentation-of-intent):
+  - **Final constructed query** (verified ~250 chars; well within X API Basic-tier 512-char limit per 15-RESEARCH.md correction):
     ```
-    (from:RUSI_org OR from:CSIS OR from:IISS_org OR from:DefenseNews OR
-     from:BreakingDefense OR from:DefenseScoop OR from:JanesIntel OR
-     from:CDA_CDAI OR from:canadaforces OR #defence OR #NATO)
-    -is:retweet lang:en
+    (from:RUSI_org OR from:CSIS OR from:IISS_org OR from:defense_news OR
+     from:BreakingDefense OR from:DefenseScoop OR from:JanesINTEL OR
+     from:CDAInstitute OR from:CanadianForces OR from:DavePerryCGAI OR
+     from:Murray_Brewster OR #defence OR #NATO) -is:retweet lang:en
     ```
-  - **Tunability path:** if first-fire signal is thin or returns 0 posts, plan-phase researcher (or future operator iteration) may tune the handle list. Treat the starter set as v1.0; not architectural.
+  - **Total: 11 handles + 2 hashtags = 13 query terms.**
+  - **Query-length limit FIX:** X API Basic-tier query length limit is **512 chars**, NOT 1024 (CONTEXT.md original cited the Academic Research tier limit by mistake — see 15-RESEARCH.md §3).
+  - **Tunability path:** Additional Tier-2 candidates `@CadsiCanada` (industry association) + `@NationalDefence` (DND official) are RESERVED — add if v1.0 signal proves thin. Mid-execution tunable.
 - **Storage:** Constant `JUNO_SWEEPER_X_QUERY` in a new file `scheduler/companies/juno/x_queries.py` (parallel to existing `scheduler/companies/juno/feeds.py`, `prompts.py`, `serpapi.py` modules). Planner decides exact file name.
 
 ### Virality Compute Substrate (JSWEEP-02 continued)
 
 - **D-03 Combine all 3 Juno sub-arrays into one URL set.** Sweeper reads `(row.raw_sources_jsonb or {}).get('defence_news', []) + .get('canadian_procurement', []) + .get('world_events', [])`, concatenates, dedupes by URL (canonical form per Seva pattern), treats as the week's news substrate. Equal weight per story regardless of source section.
+- **🔴 CRITICAL post-research correction (D-03a):** Research verified by reading `daily_summary.py:1336-1358` that Phase 10's Juno `raw_sources_jsonb` currently stores **diagnostic counts only**, NOT story-URL arrays. The keys `defence_news` / `canadian_procurement` / `world_events` do NOT yet exist on Juno rows. Phase 15 ADDS A NEW TASK to extend Phase 10's `_build_juno_*_section` writer functions to persist story-URL arrays alongside the markdown they already write. This is a Juno-only Phase 10 source change — Seva's `_build_seva_*_section` is UNTOUCHED (D-10 byte-identical contract held). Resolution path locked 2026-05-20 per operator decision.
+- **D-03b Backfill behavior:** Existing Juno rows (from yesterday's first production fire onward) have empty arrays. After the Phase 15 source extension lands + scheduler redeploys, NEW Juno rows have populated arrays. First Sweeper run sees a thin substrate until ~7 days of new Juno rows accumulate. Acceptable — `status='partial'` with diagnostic note "substrate accumulating from new schema" for the first 0-2 sweeps post-deploy.
 - **Phase 9 NULL-guard preserved (P3):** `(row.raw_sources_jsonb or {})` defensive read — failed rows may have NULL `raw_sources_jsonb`.
-- **Status mapping inherits Seva pattern verbatim:** `completed` / `partial` / `failed` per Seva sweeper's existing logic. `'partial'` triggers when (a) refusal detected on 2nd attempt, (b) X API returns 0 posts but synthesis succeeds, (c) virality compute returns 0 cross-references but synthesis succeeds.
+- **Status mapping inherits Seva pattern verbatim:** `completed` / `partial` / `failed` per Seva sweeper's existing logic. `'partial'` triggers when (a) refusal detected on 2nd attempt, (b) X API returns 0 posts but synthesis succeeds, (c) virality compute returns 0 cross-references but synthesis succeeds, (d) substrate is empty due to D-03b backfill window.
 
 ### Sonnet Synthesis (JSWEEP-04)
 
