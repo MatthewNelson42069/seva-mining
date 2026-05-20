@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: completed
-stopped_at: Completed 12-03-PLAN.md
-last_updated: "2026-05-20T19:43:04.323Z"
-last_activity: 2026-05-20 — Plan 12-03 landed (CI grep gate verify-anthropic-resolver.sh + worker.py boot env-var logging for SEVA_/JUNO_/STRICT; full scheduler suite 323/1 GREEN; ready for operator Railway env-var configuration per CONTEXT D-04)
+status: Phase 13 context gathered — ready to ui-phase or plan-phase
+stopped_at: Phase 13 (Per-company Branding) discuss-phase complete. 10 decisions locked across 4 gray areas (Juno visual identity navy/Juno Industries/letter-J + registry architecture + CSS token resolution via data-company attribute + 3 polish items folded in). Context captured at .planning/phases/13-per-company-branding/13-CONTEXT.md. Next step → `/gsd:ui-phase 13` (recommended for frontend phase) then `/gsd:plan-phase 13`.
+last_updated: "2026-05-20T20:00:00.000Z"
+last_activity: 2026-05-20 — Phase 13 discuss-phase complete; Juno palette = navy/oklch(0.55 0.15 240); registry pattern mirrors Phase 9 D-08; FOWB protection via :root[data-company='juno'] + RTL unit test; 3 polish items folded (tab title + favicon swap + bare-/ redirect)
 progress:
   total_phases: 4
   completed_phases: 1
