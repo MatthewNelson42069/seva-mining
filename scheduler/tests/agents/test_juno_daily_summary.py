@@ -122,7 +122,7 @@ async def test_run_juno_daily_summary_writes_row(monkeypatch):
 
     with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
         "feedparser.parse", return_value=empty_feed
-    ), patch("agents.daily_summary.AsyncAnthropic") as MockClient, patch(
+    ), patch("agents.daily_summary.get_anthropic_client") as MockClient, patch(
         "agents.daily_summary.serpapi.Client"
     ) as MockSerp:
         mock_client = MagicMock()
@@ -267,7 +267,7 @@ async def test_defence_news_section():
     with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
         "feedparser.parse", return_value=fake_feed
     ), patch(
-        "agents.daily_summary.AsyncAnthropic"
+        "agents.daily_summary.get_anthropic_client"
     ) as MockClient, patch(
         "companies.juno.feeds.JUNO_DEFENCE_FEEDS",
         [(f"src{i}", f"https://example.com/feed{i}") for i in range(5)],
@@ -311,7 +311,7 @@ async def test_serpapi_canadian_procurement():
     )
 
     with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
-        "agents.daily_summary.AsyncAnthropic"
+        "agents.daily_summary.get_anthropic_client"
     ) as MockClient, patch(
         "companies.juno.serpapi.JUNO_SERPAPI_QUERIES",
         ["site:canada.ca defence", "site:war.gov defence"],
@@ -357,7 +357,7 @@ async def test_canadian_procurement_section():
     )
 
     with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
-        "agents.daily_summary.AsyncAnthropic"
+        "agents.daily_summary.get_anthropic_client"
     ) as MockClient:
         # CLEANUP-01 (Phase 11): morning-fire mock no longer required —
         # _build_juno_canadian_procurement_section runs on both fires.
@@ -424,7 +424,7 @@ async def test_world_events_section_with_haiku_filter():
     with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
         "feedparser.parse", return_value=fake_feed
     ), patch(
-        "agents.daily_summary.AsyncAnthropic"
+        "agents.daily_summary.get_anthropic_client"
     ) as MockClient:
         mock_client = MagicMock()
         mock_client.messages.create = AsyncMock(return_value=sonnet_resp)

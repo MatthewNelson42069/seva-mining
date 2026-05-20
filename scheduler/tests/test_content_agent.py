@@ -1,18 +1,21 @@
-"""Tests for content_agent — review-service-only module (post quick-260421-eoe).
+"""Tests for content_agent — ingestion + helpers module (post quick-260421-eoe).
 
 The pre-split test_content_agent.py covered the monolithic ContentAgent class
 (run/_run_pipeline, every _draft_* helper, whatsapp handoff, etc). Those
 tests were retired alongside the methods they covered. This file now covers
-only the public surface the 7 content sub-agents depend on:
+only the public surface the 6 content sub-agents depend on:
 
 - ``fetch_stories()``: 30-min TTL cache + fetch-failure handling.
-- ``review(draft)``: Haiku compliance gate return shape.
 - ``classify_format_lightweight(story, *, client)``: fixed string set.
 
 Per-format drafting and pipeline behavior is covered in the per-agent test
-files (test_breaking_news.py, test_threads.py, ...). Scoring / dedup / gold
-gate helpers are covered inline here because they remain module-level in
-content_agent.py and have no sub-agent-specific equivalent.
+files (test_breaking_news.py, test_threads.py, ...). Scoring / dedup helpers
+are covered inline here because they remain module-level in content_agent.py
+and have no sub-agent-specific equivalent.
+
+v3.1 Phase 12 (12-02): The review/check_compliance/is_gold_relevant_or_systemic_shock
+tests were surgically excised alongside their production functions — the
+functions had no production callers after the 260420-sn9 / 260423-k8n purges.
 """
 
 import asyncio
@@ -411,42 +414,6 @@ async def test_fetch_stories_coalesce_concurrent_callers_issue_one_fetch():
 
 
 # ---------------------------------------------------------------------------
-# review(draft) — Haiku compliance gate
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_review_pass_returns_compliance_passed_true():
-    """When check_compliance passes, review returns compliance_passed=True."""
-    draft = {"format": "breaking_news", "tweet": "Gold at $2400."}
-    with patch.object(content_agent, "check_compliance", new=AsyncMock(return_value=True)):
-        result = await content_agent.review(draft)
-    assert result["compliance_passed"] is True
-    assert "rationale" in result
-
-
-@pytest.mark.asyncio
-async def test_review_fail_returns_compliance_passed_false():
-    """When check_compliance fails, review returns compliance_passed=False + rationale."""
-    draft = {"format": "breaking_news", "tweet": "You should buy gold now."}
-    with patch.object(content_agent, "check_compliance", new=AsyncMock(return_value=False)):
-        result = await content_agent.review(draft)
-    assert result["compliance_passed"] is False
-    assert result["rationale"]
-
-
-@pytest.mark.asyncio
-async def test_review_empty_draft_treated_as_pass():
-    """Drafts with no extractable text short-circuit to compliance_passed=True."""
-    # A draft with no known format and no checkable text → _extract_check_text = ""
-    # review() must treat empty text as pass (no compliance issue to flag).
-    draft = {"format": "unknown_format"}
-    with patch.object(content_agent, "_extract_check_text", return_value=""):
-        result = await content_agent.review(draft)
-    assert result["compliance_passed"] is True
-
-
-# ---------------------------------------------------------------------------
 # classify_format_lightweight — fixed string return set
 # ---------------------------------------------------------------------------
 
@@ -503,34 +470,6 @@ def test_classify_format_lightweight_returns_sub_agent_filter_strings():
     for expected in ("breaking_news", "thread", "infographic", "quote"):
         assert f'"{expected}"' in source, f"missing classifier label {expected}"
     assert '"long_form"' not in source, "long_form should have been removed from classifier"
-
-
-# ---------------------------------------------------------------------------
-# Compliance checker — retained module-level helper
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_compliance_screens_seva_mining_mention_locally():
-    """check_compliance short-circuits on 'seva mining' substring — no API call."""
-    client = AsyncMock()
-    client.messages.create = AsyncMock()
-    ok = await content_agent.check_compliance(
-        "Seva Mining just hit a big drill result", anthropic_client=client
-    )
-    assert ok is False
-    client.messages.create.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_compliance_failsafe_on_api_error():
-    """API errors during compliance check return False (fail-safe block)."""
-    client = AsyncMock()
-    client.messages.create = AsyncMock(side_effect=RuntimeError("rate limited"))
-    ok = await content_agent.check_compliance(
-        "A neutral gold market update", anthropic_client=client
-    )
-    assert ok is False
 
 
 # ---------------------------------------------------------------------------
@@ -703,192 +642,6 @@ def test_build_draft_item_gold_history_empty_carousel_falls_back():
     text = item.alternatives[0]["text"]
 
     assert text == "Gold History: Gold has not peaked"
-
-
-# ---------------------------------------------------------------------------
-# is_gold_relevant_or_systemic_shock — gold gate bearish filter (quick-260423-j7x)
-# ---------------------------------------------------------------------------
-
-GATE_CONFIG = {
-    "content_gold_gate_enabled": "true",
-    "content_gold_gate_model": "claude-haiku-4-5",
-    "content_bearish_filter_enabled": "true",
-}
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_rejects_price_bearish_forecast():
-    """Gate rejects price-bearish analyst forecasts with reject_reason='bearish_toward_gold'."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [
-        MagicMock(
-            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
-        )
-    ]
-    client.messages.create = AsyncMock(return_value=response)
-
-    story = {"title": "Morgan Stanley cuts gold price forecast by almost 10%", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, GATE_CONFIG, client=client
-    )
-
-    assert result["keep"] is False
-    assert result["reject_reason"] == "bearish_toward_gold"
-    assert result["sentiment"] == "bearish"
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_rejects_anti_gold_narrative():
-    """Gate rejects anti-gold narrative (bitcoin replacing gold) with bearish_toward_gold."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [
-        MagicMock(
-            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
-        )
-    ]
-    client.messages.create = AsyncMock(return_value=response)
-
-    story = {"title": "Bitcoin replaces gold as reserve asset of choice", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, GATE_CONFIG, client=client
-    )
-
-    assert result["keep"] is False
-    assert result["reject_reason"] == "bearish_toward_gold"
-    assert result["sentiment"] == "bearish"
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_rejects_factual_price_decline():
-    """Gate rejects factual-negative price movement stories with bearish_toward_gold."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [
-        MagicMock(
-            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
-        )
-    ]
-    client.messages.create = AsyncMock(return_value=response)
-
-    story = {"title": "Gold fell 1.2% today on stronger dollar", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, GATE_CONFIG, client=client
-    )
-
-    assert result["keep"] is False
-    assert result["reject_reason"] == "bearish_toward_gold"
-    assert result["sentiment"] == "bearish"
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_keeps_bullish_central_bank_buying():
-    """Gate keeps bullish stories (central bank buying) with keep=True."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [
-        MagicMock(
-            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}'
-        )
-    ]
-    client.messages.create = AsyncMock(return_value=response)
-
-    story = {"title": "Central banks added 800t of gold in Q1", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, GATE_CONFIG, client=client
-    )
-
-    assert result["keep"] is True
-    assert result["reject_reason"] is None
-    assert result["sentiment"] == "bullish"
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_keeps_bullish_price_forecast():
-    """Gate keeps bullish upside forecasts (Goldman $4K) — direction matters, not the word 'forecast'."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [
-        MagicMock(
-            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bullish"}'
-        )
-    ]
-    client.messages.create = AsyncMock(return_value=response)
-
-    story = {"title": "Goldman sees gold at $4K by year-end", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, GATE_CONFIG, client=client
-    )
-
-    assert result["keep"] is True
-    assert result["reject_reason"] is None
-    assert result["sentiment"] == "bullish"
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_keeps_neutral_record_high():
-    """Gate keeps neutral factual stories (record high) with keep=True."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [
-        MagicMock(
-            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "neutral"}'
-        )
-    ]
-    client.messages.create = AsyncMock(return_value=response)
-
-    story = {"title": "Gold hits new record high", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, GATE_CONFIG, client=client
-    )
-
-    assert result["keep"] is True
-    assert result["reject_reason"] is None
-    assert result["sentiment"] == "neutral"
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_fail_open_on_parse_error():
-    """Gate fails open (keep=True, sentiment=None) when Haiku returns non-JSON."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [MagicMock(text="not valid json at all")]
-    client.messages.create = AsyncMock(return_value=response)
-
-    story = {"title": "Some gold story", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, GATE_CONFIG, client=client
-    )
-
-    assert result["keep"] is True
-    assert result["reject_reason"] is None
-    assert result["sentiment"] is None
-
-
-@pytest.mark.asyncio
-async def test_gold_gate_flag_disabled():
-    """When content_bearish_filter_enabled='false', bearish stories are NOT rejected."""
-    client = AsyncMock()
-    response = MagicMock()
-    response.content = [
-        MagicMock(
-            text='{"is_gold_relevant": true, "primary_subject_is_specific_miner": false, "company": null, "sentiment": "bearish"}'
-        )
-    ]
-    client.messages.create = AsyncMock(return_value=response)
-
-    config_flag_off = {
-        "content_gold_gate_enabled": "true",
-        "content_gold_gate_model": "claude-haiku-4-5",
-        "content_bearish_filter_enabled": "false",
-    }
-    story = {"title": "Morgan Stanley cuts gold price forecast by almost 10%", "summary": "..."}
-    result = await content_agent.is_gold_relevant_or_systemic_shock(
-        story, config_flag_off, client=client
-    )
-
-    assert result["keep"] is True
 
 
 # ---------------------------------------------------------------------------

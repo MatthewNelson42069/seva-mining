@@ -1,8 +1,8 @@
 """
-Content Agent — review-service-only module.
+Content Agent — ingestion + helpers module.
 
 Post quick-260421-eoe, the Content Agent is NO LONGER a scheduled agent. It is a
-library module that the 7 content sub-agents (under scheduler/agents/content/)
+library module that the 6 content sub-agents (under scheduler/agents/content/)
 call into. It exposes:
 
 - ``fetch_stories()``: Shared SerpAPI + RSS ingestion with a 30-min in-memory
@@ -10,8 +10,6 @@ call into. It exposes:
   with ``predicted_format`` labels so each sub-agent can filter to its own
   content_type. Process-local cache — Railway runs the scheduler as a single
   worker, so this is safe.
-- ``review(draft)``: Haiku compliance gate. Pure function over a draft dict;
-  no DB I/O. Returns ``{"compliance_passed": bool, "rationale": str}``.
 - ``classify_format_lightweight(story, *, client)``: Retained helper export.
   Returns one of ``breaking_news | thread | infographic | quote``.
 
@@ -19,17 +17,22 @@ Sub-agents are responsible for the per-story deep research + drafting + persiste
 This module also keeps a handful of shared helpers the sub-agents call directly:
 ``fetch_article`` / ``extract_article_text`` / ``deduplicate_stories`` /
 ``recency_score`` / ``credibility_score`` / ``calculate_story_score`` /
-``is_gold_relevant_or_systemic_shock`` / ``build_draft_item`` /
-``build_no_story_bundle`` / ``check_compliance`` / ``_extract_check_text``.
+``build_draft_item`` / ``build_no_story_bundle``.
 
-Requirements: CONT-01 through CONT-17 (coverage split across the 7 sub-agents).
+v3.1 Phase 12 (quick-260520 / 12-02): The compliance/review sub-system
+(``review``, ``check_compliance``, ``is_gold_relevant_or_systemic_shock``,
+``_extract_check_text``) was surgically excised — those functions had no
+production callers after the 260420-sn9 / 260423-k8n purges; they only
+called each other and their tests. The LIVE exports (fetch_stories,
+deduplicate_stories) are preserved verbatim. See 12-02-SUMMARY.md.
+
+Requirements: CONT-01 through CONT-17 (coverage split across the 6 sub-agents).
 """
 
 from __future__ import annotations
 
 import asyncio
 import difflib
-import json
 import logging
 import time
 from datetime import datetime, timezone
@@ -40,6 +43,7 @@ import serpapi
 from anthropic import AsyncAnthropic
 from bs4 import BeautifulSoup
 
+from anthropic_client import get_anthropic_client
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -410,211 +414,6 @@ async def search_corroborating(
 
 
 # ---------------------------------------------------------------------------
-# Compliance checker — fail-safe pattern (CONT-14, CONT-15, CONT-16)
-# ---------------------------------------------------------------------------
-
-
-async def check_compliance(text: str, anthropic_client=None) -> bool:
-    """Check content for compliance. Returns True only on explicit 'pass'.
-    Fail-safe: ambiguous response = block (returns False).
-    Pre-screens locally for 'seva mining' before calling Claude Haiku.
-    """
-    text_lower = text.lower()
-    if "seva mining" in text_lower:
-        return False
-
-    if anthropic_client is None:
-        settings = get_settings()
-        anthropic_client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-
-    try:
-        response = await anthropic_client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=50,
-            system="You are a compliance checker. Evaluate the following content. Reply with exactly 'pass' if the content does NOT mention Seva Mining and does NOT contain financial advice (recommendations to buy, sell, invest, or any action-oriented investment guidance). Reply with 'fail: [reason]' otherwise.",
-            messages=[{"role": "user", "content": text}],
-        )
-        result = response.content[0].text.strip().lower()
-        return result == "pass"
-    except Exception as exc:
-        logger.warning("Compliance check failed with error: %s — blocking by default", exc)
-        return False
-
-
-async def is_gold_relevant_or_systemic_shock(
-    story: dict,
-    config: dict,
-    client: "AsyncAnthropic | None" = None,
-) -> dict:
-    """Two-bucket gold relevance gate (Haiku). Returns structured decision dict.
-
-    Bucket A: Directly about gold/precious metals/gold mining macro/sector → keep.
-    Bucket B: Systemic financial/geopolitical shock plausibly moving gold → keep.
-    Bucket C: Primary subject is a specific gold/mining company → reject (nnh rule).
-    Bucket D: Gold-relevant but bearish-toward-gold sentiment → reject (new J7X rule).
-    Everything else (off-topic, listicles, stock picks) → reject.
-
-    Return shape:
-        {"keep": bool, "reject_reason": str | None, "company": str | None, "sentiment": str | None}
-
-    New reject_reason value:
-        - "bearish_toward_gold"  (sentiment="bearish" from Haiku, when bearish filter on)
-
-    Fail-open: API errors or malformed JSON return {"keep": True, ...} so infra
-    blips never silence real gold stories.
-    Bypassed when config key content_gold_gate_enabled is False.
-    Bearish check alone bypassed when content_bearish_filter_enabled is False.
-
-    Requirements: NNH-01, NNH-02, NNH-03, NNH-04, NNH-05, J7X-01, J7X-02, J7X-03, J7X-04, J7X-05, J7X-06.
-    """
-    _KEEP = {"keep": True, "reject_reason": None, "company": None, "sentiment": None}
-
-    enabled_str = config.get("content_gold_gate_enabled", "true")
-    if str(enabled_str).lower() in ("false", "0", "no"):
-        return _KEEP
-
-    bearish_enabled_str = config.get("content_bearish_filter_enabled", "true")
-    bearish_filter_on = str(bearish_enabled_str).lower() not in ("false", "0", "no")
-
-    title = story.get("title", "")
-    summary = story.get("summary", "")
-    model = config.get("content_gold_gate_model", "claude-haiku-4-5")
-
-    anthropic_client = client or AsyncAnthropic()
-    try:
-        response = await anthropic_client.messages.create(
-            model=model,
-            max_tokens=100,
-            system=(
-                "You are a content filter for a gold-sector social media account. "
-                "Evaluate whether this news story should be kept (drafted into content) "
-                "or rejected, based on the rules below.\n\n"
-                "KEEP (is_gold_relevant=true) if the story is:\n"
-                "- Macro/sector gold or precious metals news: gold price moves, "
-                "central bank buying, gold supply/demand, gold ETF flows, miners-index moves.\n"
-                "- A systemic financial/geopolitical shock plausibly moving gold prices "
-                "(major war, sanctions, Strait of Hormuz disruption, Fed/USD policy shock, "
-                "oil supply shock, currency crisis, rare-earth restrictions).\n"
-                "- A story that CITES a financial institution (Goldman Sachs, BlackRock, "
-                "JPMorgan, Morgan Stanley, World Gold Council, IMF, Federal Reserve, "
-                "central banks) as a SOURCE providing a forecast, data, or analysis — "
-                "these are sources, not subjects. Their presence does NOT trigger is_gold_relevant=false rejection — but the forecast's direction still determines sentiment (a bearish forecast from Goldman/Morgan Stanley yields sentiment=bearish and is rejected by the bearish filter).\n\n"
-                "REJECT — primary_subject_is_specific_miner "
-                "(is_gold_relevant=true but primary_subject_is_specific_miner=true) if the story "
-                "is primarily about a single gold/mining company's own news: drilling results, "
-                "production updates, earnings/guidance, M&A where a specific miner is buyer or "
-                "target, executive changes, project milestones, financing/raises, resource "
-                "estimates. This applies even if gold price is mentioned incidentally.\n"
-                "Examples of REJECT (specific miner): "
-                "'B2Gold expects lower Q2 output from Goose mine' (B2Gold), "
-                "'McLaren Completes Drone MAG Program at Blue Quartz Gold Property' (McLaren), "
-                "'Barrick acquires Kinross in $8B deal' (Barrick+Kinross), "
-                "'Newmont posts record Q2, raises guidance' (Newmont), "
-                "'Seva Mining hits 12g/t gold at Timmins drill hole 42' (Seva Mining).\n\n"
-                "REJECT — bearish_toward_gold\n"
-                '(is_gold_relevant=true but sentiment="bearish") if the story\'s angle\n'
-                "is negative toward gold or its price. Three categories:\n"
-                "  1. Price-bearish forecasts or predictions: analyst cuts gold price\n"
-                '     target, bank downgrades gold outlook, "expect pullback/correction"\n'
-                '     framing. Example: "Morgan Stanley cuts gold price forecast by ~10%".\n'
-                "  2. Anti-gold narrative: gold dismissed in favor of alternatives,\n"
-                "     gold losing relevance/appeal, bitcoin/crypto replacing gold.\n"
-                '     Example: "Bitcoin replaces gold as reserve asset of choice".\n'
-                "  3. Factual-negative price movement: gold fell / dropped / slumped /\n"
-                '     pulled back. Example: "Gold fell 1.2% today on stronger dollar".\n'
-                'DIRECTION matters, not the word "forecast": upside forecasts\n'
-                '("Goldman sees gold at $4K") are sentiment="bullish" and KEPT.\n'
-                'Neutral factual ("gold hits new record high") is sentiment="neutral"\n'
-                "and KEPT.\n"
-                'Mixed or flat movement stories ("gold holds steady", "gold flat", "gold mixed") are sentiment="neutral" and KEPT.\n\n'
-                "REJECT — not_gold_relevant "
-                "(is_gold_relevant=false) for:\n"
-                "- Listicles or rankings of gold stocks "
-                "('Top 5 Gold Stocks', '7 Best-Performing Gold Stocks For...', "
-                "'Best Gold Stocks to Buy Now', 'Gold Stocks to Watch').\n"
-                "- Multi-stock analytical picks roundups or recommendation lists.\n"
-                "- Generic buying advice or educational content about gold investing.\n"
-                "- Unrelated business/financial news with no gold/metals/systemic-shock angle.\n\n"
-                "Examples of KEEP (macro/sector/source): "
-                "'Gold hits record $3,200 as Goldman forecasts $4K by year-end' (Goldman is a source), "
-                "'Central banks added 800t of gold in Q1, says World Gold Council' (WGC is a source), "
-                "'Gold miners index hits new high' (sector-wide), "
-                "'ETF flows into gold miners surge' (sector flow), "
-                "'US CPI at 2.1%; gold rallies on Fed cut odds' (macro), "
-                "'China imposes new rare-earth export restrictions' (geopolitics/systemic shock).\n\n"
-                "Respond with ONLY a compact JSON object, no other text:\n"
-                '{"is_gold_relevant": true|false, '
-                '"primary_subject_is_specific_miner": true|false, '
-                '"company": null|"<company name if primary_subject_is_specific_miner is true>", '
-                '"sentiment": "bullish"|"neutral"|"bearish"}'
-            ),
-            messages=[{"role": "user", "content": f"Title: {title}\nSummary: {summary}"}],
-        )
-        raw = response.content[0].text.strip()
-        try:
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-                raw = raw.rsplit("```", 1)[0].strip()
-            parsed = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            logger.warning(
-                "Gold gate returned non-JSON for '%s' — fail-open (keeping story): %r",
-                title[:50],
-                raw[:80],
-            )
-            return _KEEP
-
-        is_gold = bool(parsed.get("is_gold_relevant", True))
-        is_specific_miner = bool(parsed.get("primary_subject_is_specific_miner", False))
-        company_raw = parsed.get("company")
-        company = str(company_raw).strip() if company_raw else None
-        if not company:
-            company = None
-
-        sentiment_raw = parsed.get("sentiment")
-        sentiment = str(sentiment_raw).strip().lower() if sentiment_raw else None
-        if sentiment not in ("bullish", "neutral", "bearish"):
-            sentiment = None  # defensive: unknown → treat as missing (fail-open on this axis)
-
-        if not is_gold:
-            return {
-                "keep": False,
-                "reject_reason": "not_gold_relevant",
-                "company": None,
-                "sentiment": sentiment,
-            }
-        if is_specific_miner:
-            return {
-                "keep": False,
-                "reject_reason": "primary_subject_is_specific_miner",
-                "company": company,
-                "sentiment": sentiment,
-            }
-        if bearish_filter_on and sentiment == "bearish":
-            logger.info(
-                "Gold gate rejected bearish-toward-gold: %r (sentiment=bearish)",
-                title[:60],
-            )
-            return {
-                "keep": False,
-                "reject_reason": "bearish_toward_gold",
-                "company": None,
-                "sentiment": "bearish",
-            }
-        return {"keep": True, "reject_reason": None, "company": None, "sentiment": sentiment}
-
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Gold gate API failed for '%s' (%s) — fail-open (keeping story)",
-            title[:50],
-            type(exc).__name__,
-        )
-        return _KEEP
-
-
-# ---------------------------------------------------------------------------
 # No-story flag and ContentBundle builder (CONT-07)
 # ---------------------------------------------------------------------------
 
@@ -762,48 +561,6 @@ def parse_rss_entries(feed_url: str, source_name: str) -> list[dict]:
 def parse_serpapi_results(results: list[dict], source_name: str = "serpapi") -> list[dict]:
     """CONT-03: Parse SerpAPI news results into normalized story dicts."""
     return []
-
-
-# ---------------------------------------------------------------------------
-# Draft text extractor for compliance checking (used by review())
-# ---------------------------------------------------------------------------
-
-
-def _extract_check_text(draft_content: dict) -> str:
-    """Extract all text from draft_content for compliance checking."""
-    fmt = draft_content.get("format", "")
-    parts = []
-    if fmt == "breaking_news":
-        parts.append(draft_content.get("tweet", ""))
-        brief = draft_content.get("infographic_brief")
-        if brief and isinstance(brief, dict):
-            parts.append(brief.get("headline", ""))
-            parts.append(brief.get("caption", ""))
-    elif fmt == "thread":
-        parts.extend(draft_content.get("tweets", []))
-        parts.append(draft_content.get("long_form_post", ""))
-    elif fmt == "infographic":
-        parts.append(draft_content.get("twitter_caption", ""))
-        parts.append(draft_content.get("suggested_headline", ""))
-        parts.extend(draft_content.get("data_facts", []) or [])
-        # Do NOT compliance-check image_prompt — brand preamble + derived text, not novel content
-    elif fmt == "gold_history":
-        parts.extend(draft_content.get("tweets", []))
-        for slide in draft_content.get("instagram_carousel", []):
-            if isinstance(slide, dict):
-                parts.append(slide.get("headline", ""))
-                parts.append(slide.get("body", ""))
-        parts.append(draft_content.get("instagram_caption", ""))
-    elif fmt == "gold_media":
-        parts.append(draft_content.get("twitter_caption", ""))
-        parts.append(draft_content.get("instagram_caption", ""))
-    elif fmt == "quote":
-        parts.append(draft_content.get("twitter_post", ""))
-        parts.append(draft_content.get("quote_text", ""))
-        parts.append(draft_content.get("suggested_headline", ""))
-        parts.extend(draft_content.get("data_facts", []) or [])
-        # Do NOT compliance-check image_prompt
-    return " ".join(p for p in parts if p)
 
 
 # ---------------------------------------------------------------------------
@@ -1105,9 +862,10 @@ async def _do_fetch(bucket: int) -> list[dict]:
     # Per-request timeout keeps individual Anthropic calls bounded at 30 s.
     # With scoring now parallelised via asyncio.gather the worst-case wall
     # time for the whole fetch drops from ~118 × 30 s = 59 min to ~30 s.
-    anthropic_client = AsyncAnthropic(
-        api_key=settings.anthropic_api_key, timeout=30.0
-    )
+    # v3.1 Phase 12 — fetch_stories powers Seva-only daily summary scoring;
+    # routes through per-tenant resolver (D-07, D-09 + planner-flagged
+    # LIVE-site reclassification of line 1108 from CONTEXT.md's dead list).
+    anthropic_client = get_anthropic_client("seva", timeout=30.0)
     serpapi_client = (
         serpapi.Client(api_key=settings.serpapi_api_key) if settings.serpapi_api_key else None
     )
@@ -1267,38 +1025,3 @@ async def fetch_stories() -> list[dict]:
     else:
         # Another coroutine owns the fetch — await the shared Future.
         return await fut
-
-
-# ---------------------------------------------------------------------------
-# review(draft) — Haiku compliance gate (no DB I/O)
-# ---------------------------------------------------------------------------
-
-
-async def review(draft: dict) -> dict:
-    """Haiku compliance gate. Pure function — no DB I/O.
-
-    Extracts the checkable text from the draft_content payload (via
-    ``_extract_check_text``) and runs the shared ``check_compliance`` helper.
-    Sub-agents call this inline before writing their ContentBundle row.
-
-    Args:
-        draft: The draft_content dict a sub-agent produced. Must contain a
-               ``format`` key matching one of the known content_type values.
-
-    Returns:
-        ``{"compliance_passed": bool, "rationale": str}``. ``rationale`` is
-        a short English string for logging/audit — NOT guaranteed stable
-        wording; consumers should key off ``compliance_passed`` only.
-    """
-    check_text = _extract_check_text(draft)
-    if not check_text:
-        # Nothing to check — treat as pass, but note it for audit.
-        return {"compliance_passed": True, "rationale": "no checkable text"}
-
-    passed = await check_compliance(check_text)
-    if passed:
-        return {"compliance_passed": True, "rationale": "haiku pass"}
-    return {
-        "compliance_passed": False,
-        "rationale": "haiku blocked (seva mining mention or financial advice)",
-    }
