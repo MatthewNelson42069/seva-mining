@@ -22,14 +22,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-# Wave 2 (10-03-PLAN.md) removes this skip line to turn the module GREEN.
-pytest.skip(
-    "Wave 0 RED — production scheduler/agents/juno_refusal_detector.py "
-    "lands in Wave 2 (10-03-PLAN.md). Remove this skip line in that wave's "
-    "task to turn tests GREEN.",
-    allow_module_level=True,
-)
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 os.environ.setdefault("ANTHROPIC_API_KEY", "sk-test-fake")
