@@ -230,14 +230,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TENANT-08 | Phase 9 | Complete (2026-05-19, plan 09-03 — per-company cron + scoped scheduler queries + run_juno_daily_summary stub) |
 | TENANT-09 | Phase 9 | Complete (2026-05-19, plan 09-04 — centralized queryKeys factory with companyId slot) |
 | TENANT-10 | Phase 9 | Complete (2026-05-19, plan 09-05 — populated test_multitenant_isolation.py, 19 tests GREEN) |
-| DEF-01 | Phase 10 | Pending |
-| DEF-02 | Phase 10 | Pending |
-| DEF-03 | Phase 10 | Pending |
-| DEF-04 | Phase 10 | Pending |
-| DEF-05 | Phase 10 | Pending |
-| DEF-06 | Phase 10 | Pending |
-| DEF-07 | Phase 10 | Pending |
-| DEF-08 | Phase 10 | Pending |
+| DEF-01 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests + Phase-0 RSS verification artifact; production lands Wave 1 / 10-02) |
+| DEF-02 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests; production lands Wave 1 / 10-02) |
+| DEF-03 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests for DEFENCE_NEWS_SYSTEM_PROMPT; production lands Wave 1 / 10-02) |
+| DEF-04 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests for health-check + Defence News section; production lands Wave 2 / 10-03) |
+| DEF-05 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests for SerpAPI Canadian Procurement; production lands Wave 2 / 10-03) |
+| DEF-06 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests for Haiku classifier; production lands Wave 1 / 10-02) |
+| DEF-07 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests for refusal-detector; production lands Wave 2 / 10-03) |
+| DEF-08 | Phase 10 | Scaffolded (Wave 0 / 10-01 — companySectionConfig.ts shipped as production + RED tests; SummaryCard.tsx wiring lands Wave 3 / 10-04) |
 | DEF-09 | Phase 10 | Pending |
 | DEF-10 | Phase 10 | Pending |
 
