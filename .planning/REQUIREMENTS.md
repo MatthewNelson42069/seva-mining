@@ -11,7 +11,7 @@ Five cleanup items closing v3.0 audit follow-ups. Each requirement maps to exact
 
 Five small follow-ups from the v3.0 milestone audit (`milestones/v3.0-MILESTONE-AUDIT.md`). Independent of each other; can be batched in a single phase with parallel-where-possible waves.
 
-- [ ] **CLEANUP-01**: System removes the morning-only SerpAPI cost gate inside `scheduler/agents/daily_summary.py::_build_juno_canadian_procurement_section` (currently returns `("", {"skipped_reason": "non_morning_fire"}, 0)` when `is_morning_fire=False`). After change: BOTH daily Juno fires (08:05 PT + 12:05 PT) execute the 7 Canadian-procurement SerpAPI queries from `scheduler/companies/juno/serpapi.py::JUNO_SERPAPI_QUERIES`. Tests in `scheduler/tests/agents/test_juno_daily_summary.py` that assert noon-fire-skip-procurement MUST be updated in the same commit. Operator-facing UX: at 12:05 PT, the `/juno/` SummaryCard renders the full 3-section brief instead of the generic "No new Canadian defence procurement signals today" emptyFallback. Budget delta: Juno SerpAPI cost ~$5.25/mo → ~$8-9/mo (210 → ~420 calls/month, still inside $50/mo SerpAPI cap with ~$41 headroom).
+- [x] **CLEANUP-01**: System removes the morning-only SerpAPI cost gate inside `scheduler/agents/daily_summary.py::_build_juno_canadian_procurement_section` (currently returns `("", {"skipped_reason": "non_morning_fire"}, 0)` when `is_morning_fire=False`). After change: BOTH daily Juno fires (08:05 PT + 12:05 PT) execute the 7 Canadian-procurement SerpAPI queries from `scheduler/companies/juno/serpapi.py::JUNO_SERPAPI_QUERIES`. Tests in `scheduler/tests/agents/test_juno_daily_summary.py` that assert noon-fire-skip-procurement MUST be updated in the same commit. Operator-facing UX: at 12:05 PT, the `/juno/` SummaryCard renders the full 3-section brief instead of the generic "No new Canadian defence procurement signals today" emptyFallback. Budget delta: Juno SerpAPI cost ~$5.25/mo → ~$8-9/mo (210 → ~420 calls/month, still inside $50/mo SerpAPI cap with ~$41 headroom).
 
 - [x] **CLEANUP-02**: System refreshes the archived `milestones/v3.0-REQUIREMENTS.md` traceability table — rows DEF-01 through DEF-07 currently say "Scaffolded (Wave 0 / 10-01 — RED tests + ...; production lands Wave 1/Wave 2)" but Phase 10 VERIFICATION.md status: passed and the bullet checkboxes are correctly `[x]`. Update the descriptive text to "Complete (2026-05-19, plan 10-02 / 10-03 — <evidence>)" matching the format used for DEF-08..10. Pure documentation edit; no code touched.
 
@@ -61,7 +61,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEANUP-01 | Phase 11 | Pending |
+| CLEANUP-01 | Phase 11 | Complete |
 | CLEANUP-02 | Phase 11 | Complete |
 | CLEANUP-03 | Phase 11 | Pending |
 | CLEANUP-04 | Phase 11 | Complete |

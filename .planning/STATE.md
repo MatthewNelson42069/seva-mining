@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0.1
 milestone_name: — v3.0 Audit Cleanup Bundle
-status: Executing Phase 11
-stopped_at: Completed 11-02-PLAN.md — CLEANUP-02 traceability refresh (7 DEF-01..07 rows in v3.0-REQUIREMENTS.md flipped Scaffolded → Complete). Pure docs edit, 5dd14b8. Parallel Wave 1 with 11-01 + 11-04.
-last_updated: "2026-05-20T16:30:46.780Z"
+status: Ready to execute
+stopped_at: Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
+last_updated: "2026-05-20T16:32:44.420Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-19 — v3.0.1 milestone scoped)
 ## Current Position
 
 Phase: 11 (audit-cleanup-bundle) — EXECUTING
-Plan: 1 of 5
+Plan: 2 of 5
 
 ### v3.0.1 Roadmap Summary
 
@@ -151,6 +151,7 @@ Plan: 1 of 5
 | Phase 10-juno-defence-news-funnel P05 | 45 min | 3 tasks | 2 files |
 | Phase 11-audit-cleanup-bundle P4 | 1min | 1 tasks | 2 files |
 | Phase 11 P02 | 1 | 1 tasks | 1 files |
+| Phase 11 P1 | 10 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -350,6 +351,7 @@ Recent decisions affecting current work:
 - [Phase 10-juno-defence-news-funnel]: Wave 4 (10-05) Task 3 — operator-walked 10-item visual QA at 1440×900 against live-DB-backed rendered /juno/ Tab 1. All 10 items PASS; item 1 nuance (Canadian Procurement empty at 12:05 PT) explicitly accepted as by-design morning-only SerpAPI cost gate behaviour, NOT a rendering regression. DEF-09 closed via items 7+8 (Juno Tab 2 /juno/calendar + Tab 3 /juno/viral Phase 9 empty-state copy confirmed intact under all Phase 10 changes — page-level short-circuit guards held). visual_qa_results.md Final Verdict: APPROVED. All DEF-01..10 closed end-to-end.
 - [Phase 10-juno-defence-news-funnel]: Phase 10 close — FINAL phase of v3.0 milestone (TENANT-01..10 from Phase 9 + DEF-01..10 from Phase 10). Production Juno cron operationally enabled in local-dev; Railway env-var flip is sole remaining operator action before next 08:05 PT slot fires real Juno daily summary against production DB. Two deferred observations carried to v3.0.1+: (a) corpus-bounded bullet-count assertion in next 2-3 production smokes against live substrate; (b) Skydio Pydantic ValidationError fail-closed silently — unit test + Haiku temperature tuning. Operator separately rotating dev-scoped ANTHROPIC_API_KEY (chat transcript exposure — NOT part of this plan).
 - [Phase 11]: CLEANUP-02 (plan 11-02): Refreshed 7 DEF-01..07 traceability rows in archived milestones/v3.0-REQUIREMENTS.md from 'Scaffolded' to 'Complete (2026-05-19, plan 10-02 / 10-03 — <evidence>)' mirroring DEF-08..10 prose. Pure docs edit; 7+/7- diff scope; grep -c 'Scaffolded' returns 0.
+- [Phase 11]: 11-01 (CLEANUP-01): atomic co-commit pattern landed — production gate-removal + test refresh in commit 1e2c03f; both Juno fires (08:05 + 12:05 PT) now run the 7 Canadian-procurement SerpAPI queries; budget ~$5.25/mo → ~$8-9/mo, inside $50/mo cap. is_morning_fire param retained on signature for telemetry only.
 
 ### Pending Todos
 
@@ -430,9 +432,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T16:30:46.774Z
+Last session: 2026-05-20T16:32:44.415Z
 Last activity: 2026-05-20
-Stopped At: Completed 11-02-PLAN.md — CLEANUP-02 traceability refresh (7 DEF-01..07 rows in v3.0-REQUIREMENTS.md flipped Scaffolded → Complete). Pure docs edit, 5dd14b8. Parallel Wave 1 with 11-01 + 11-04.
+Stopped At: Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
 Prior activity: 2026-04-22 — Completed quick-260422-mfg (full rename `sub_video_clip` → `sub_gold_media` across scheduler + backend + frontend + DB). **Origin:** follow-up (b) from the zid debug session — `scheduler/agents/content/video_clip.py` hard-coded `CONTENT_TYPE="video_clip"` and `AGENT_NAME="sub_video_clip"` while `frontend/src/config/agentTabs.ts` L32 already showed `label: 'Gold Media'` and CLAUDE.md enumerated "gold media" as a canonical content type; the split wasted cycles in the zid debug session (debugger hunted for a `gold_media.py` file that didn't exist). Ran via `/gsd:quick --discuss` workflow; user responded "All clear" to the 3 gray-area AskUserQuestion batch, locking 8 decisions (D-01 through D-08) to Recommended paths: D-01 full rename, D-02 Alembic migration (auditable, vs one-off railway-run UPDATE), D-03 test file renamed, D-04 frontend component file renamed, D-05 worker.py "Gold Media" display unchanged, D-06 lock value 1015 preserved, D-07 `VIDEO_ACCOUNTS` → `GOLD_MEDIA_ACCOUNTS`, D-08 no backward-compat aliases. **Changes:** 3 git-renamed files (history preserved — `scheduler/agents/content/gold_media.py` 88% similarity `git log --follow` reaches vxg 68b21d1 + eoe 762b08b, `scheduler/tests/test_gold_media.py` 61%, `frontend/src/components/content/GoldMediaPreview.tsx` 90%) + 16 modified files across all 4 layers + 1 new Alembic migration `0008_rename_video_clip_to_gold_media.py` (single-headed chain confirmed via `alembic heads` = `0008 (head)`; upgrade updates `content_bundles.content_type` then `agent_runs.agent_name`; downgrade symmetric reverse). Planner extended rename scope for zero-grep hygiene consistency: internal helpers `_search_video_clips` → `_search_gold_media_clips`, `_draft_video_caption` → `_draft_gold_media_caption`, constant `VIDEO_CLIP_SCORE` → `GOLD_MEDIA_SCORE` (value 7.5 unchanged; only symbol moves). **Gates all 9 green:** scheduler 109/109 pytest + ruff clean; backend 69 passed + 5 skipped + ruff clean + alembic heads = 0008; frontend 52/52 vitest + tsc + lint + build all clean. **Zero-grep:** 0 matches for `video_clip`, `sub_video_clip`, `VideoClipPreview`, `VIDEO_ACCOUNTS`, `VIDEO_CLIP_SCORE`, `_search_video_clips`, `_draft_video_caption` across `scheduler/` + `backend/app/` + `frontend/src/` (0008 migration is sole permitted location for old strings by design). 2 commits on main: `e835b61` (refactor) + `69efac1` (SUMMARY). **Five of five zid follow-ups now addressed at the code level:** zid + krz + l40 + lbb + mfg. **Remaining:** (a) sub_gold_media (post-rename) consistent 0-items behavior — deferred as separate `/gsd:debug` investigation path (probe X API quota, `GOLD_MEDIA_ACCOUNTS` availability, analyst-quality-gate rejection rate from vxg). This rename was purely cosmetic/structural; 0-items is a distinct investigation.
 
