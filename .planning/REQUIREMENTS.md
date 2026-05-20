@@ -11,7 +11,7 @@
 
 Port of Seva's v2.1 Phase 6 paper-planner work to Juno's tab 2. Multi-tenant scaffolding from v3.0 Phase 9 already in place (`scoped_*()` helpers + `/api/{company}/calendar` router prefix + `<Route path=":company">` wrapper); v3.1's job is making `/juno/calendar` actually function, not building the Calendar from scratch.
 
-- [ ] **JCAL-01**: User opens `/juno/calendar` (Juno Tab 2) and sees the same weekly Mon-Sun paper-planner grid UI Seva users see — direct-edit textarea per day, current-week highlighted. Empty state copy: "No content planned for this week — start typing in any day to plan ahead." Currently this page renders a Phase 9 placeholder.
+- [ ] **JCAL-01** *(D-06)*: User opens `/juno/calendar` (Juno Tab 2) and sees the same weekly Mon-Sun paper-planner grid Seva users see — direct-edit textarea per day with em-dash placeholder when empty (matches Seva em-dash placeholder pattern; no tenant-asymmetric banner), current-week highlighted.
 - [ ] **JCAL-02**: User edits a day cell on the Juno calendar; auto-save fires on `blur` with optimistic UI; the persisted row in `calendar_items` carries `company_id='juno'` (verified via row-level `scoped_*()` helper, not raw `select(CalendarItem)`).
 - [ ] **JCAL-03**: User switches Juno → Seva via `CompanySwitcher`; calendar view immediately reflects Seva's content (TanStack Query keys keyed on `company_id` per Phase 9 `queryKeys.ts` pattern). Zero Juno bleed-through into Seva's view, zero Seva bleed-through into Juno's view (cross-tenant isolation test added).
 - [ ] **JCAL-04**: User week-navigates (prev / next / today) on the Juno calendar identically to Seva's calendar; URL state preserved on browser back/forward.
