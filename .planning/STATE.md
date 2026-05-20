@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: — Multi-Tenant Dashboards (Juno Industries Onboarding)
 status: Ready to execute
-stopped_at: Completed 10-03-PLAN.md (Wave 2 orchestrator + refusal-detector + health-check; DEF-04/05/07 closed; cron still disabled; ready for Wave 3 voice UAT)
-last_updated: "2026-05-20T02:36:48.315Z"
-last_activity: 2026-05-20
+stopped_at: Completed 10-04-PLAN.md (Wave 3 SummaryCard per-tenant + JUNO_CRON_ENABLED gate + voice UAT operator-APPROVED; DEF-08/10 closed; cron still disabled; ready for Wave 4 cron-enable + integration smoke)
+last_updated: "2026-05-19T20:30:00.000Z"
+last_activity: 2026-05-19
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 30
-  completed_plans: 29
+  completed_plans: 30
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-19) + .planning/ROADMAP.md (extended 
 ## Current Position
 
 Phase: 10 (juno-defence-news-funnel) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 
 ### v3.0 Roadmap Summary
 
@@ -143,6 +143,7 @@ Plan: 4 of 5
 | Phase 10-juno-defence-news-funnel P01 | 7 | 3 tasks | 10 files |
 | Phase 10-juno-defence-news-funnel P02 | 15min | 3 tasks | 6 files |
 | Phase 10-juno-defence-news-funnel P03 | 15 min | 3 tasks | 6 files |
+| Phase 10-juno-defence-news-funnel P04 | 3 hours | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -332,6 +333,11 @@ Recent decisions affecting current work:
 - [Phase 10-juno-defence-news-funnel]: Wave 1 (10-02): use anthropic GA syntax client.messages.parse(output_format=DefenceRelevance) + response.parsed_output (NOT deprecated output_config.format beta); 13 Tier-1 RSS feeds + 10 SerpAPI queries (7 Canadian procurement + 3 Wave 0 FALLBACK_TO_SERPAPI); DEFENCE_NEWS_SYSTEM_PROMPT designed from scratch (~575 tokens) with verbatim D-02 anti-tactical clause + 3 section markers + Janes/CSIS/IISS voice anchor; 4 Wave-0 RED test files flipped GREEN (25 passing assertions); scheduler suite 294 passed / 8 skipped
 - [Phase 10-juno-defence-news-funnel]: Refusal-detector + health-check shipped as separate scheduler/agents/juno_*.py modules (not inlined in daily_summary.py) so they can be unit-tested in isolation and reused if other Juno agents need the wrappers
 - [Phase 10-juno-defence-news-funnel]: SerpAPI morning-only gate implemented as _is_juno_morning_fire(now_la) module-level helper for monkeypatch-friendly cost gating; idempotency filter status.in_(running/completed/partial) PRESERVED per Phase 9 D-01b
+- [Phase 10-juno-defence-news-funnel]: Wave 3 (10-04) SummaryCard.tsx surgical ~15-line edit (useParams<{company}>() + sections.map over companySectionConfig[company]) closes DEF-08 without per-tenant fork; Phase 9 D-08 semantic-column reuse confirmed in production (gold_news_md serves both /seva/ "Gold News" and /juno/ "Defence News" render labels)
+- [Phase 10-juno-defence-news-funnel]: JUNO_CRON_ENABLED env-var gate with default-disabled semantics (os.getenv('JUNO_CRON_ENABLED', 'false').lower() == 'true') wraps the existing scheduler.add_job(_make_juno_daily_summary_job(...)) registration; INFO log on both ENABLED/DISABLED paths so operator can verify mode at scheduler startup; DISABLED log cites voice_calibration_uat.md path so operator knows what unlocks the cron; lock ID 1020 reservation untouched (only registration site gated)
+- [Phase 10-juno-defence-news-funnel]: Wave 3 (10-04) voice UAT dispatched via Option B inline dry-run script (scheduler/scripts/uat_voice_calibration.py) exercising production helpers (_build_juno_defence_news_section + classify_story + call_with_refusal_guard) against 8-story curated fixture — no DB writes, deterministic for re-runs, no SerpAPI/RSS mock required; auth-gate (stale ANTHROPIC_API_KEY 401) resolved by operator inline; second dispatch returned full Sonnet 4.6 + Haiku 4.5 output and exited 0
+- [Phase 10-juno-defence-news-funnel]: Wave 3 (10-04) 7-criterion pass bar 5/7 PASS + 1 operator-qualitative PASS (Criterion 1 voice match) + 1 corpus-bounded operator-accepted FAIL (Criterion 4 section balance — 2/2/2 vs floor 3-7/3-5/5-7 due to 8-story corpus; production fires will ingest 50-150 stories/day so floor easily met; Sonnet correctly flagged the gap rather than padding). Two deferred items filed for v3.0.1+: (a) corpus-bounded section balance re-test against live RSS+SerpAPI substrate in Wave 4 smoke; (b) Skydio (Story 7) Haiku Pydantic ValidationError fail-closed silently — add malformed-response unit test + consider lowering Haiku temperature
+- [Phase 10-juno-defence-news-funnel]: D-04 grep gate (Wave 4 cron-enable contract) honored — APPROVED marker line appended to voice_calibration_uat.md; `grep -c APPROVED voice_calibration_uat.md` returns 5 (>= 1 required); JUNO_CRON_ENABLED NOT flipped here (Wave 4 / 10-05 Task 1's job)
 
 ### Pending Todos
 
