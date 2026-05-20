@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Roadmap created; phases 12-15 pending
-stopped_at: Completed 12-01-PLAN.md — resolver module + Settings fields + 5 unit tests landed. Plans 12-02 and 12-03 unblocked.
-last_updated: "2026-05-20T19:17:50.726Z"
-last_activity: 2026-05-20 — Roadmap created (20 v3.1 requirements mapped to Phases 12-15)
+status: Phase 12 in progress (2/3 plans complete; Plan 03 = CI grep gate)
+stopped_at: Completed 12-02-PLAN.md — 5 Anthropic call sites refactored through resolver, 3 dead functions + 1 orphan helper excised, 13 dead-code tests removed. Full scheduler suite 323/1 GREEN (Plan 01 baseline 336 − 13 dead tests = 323 exact). Plan 03 (CI grep gate) unblocked.
+last_updated: "2026-05-20T19:34:47.258Z"
+last_activity: 2026-05-20 — Plan 12-02 landed (5 resolver call sites + 3 dead-func deletes; scheduler suite 323/1 GREEN)
 progress:
   total_phases: 4
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 ## Current Position
 
-Phase: Phase 12 — Per-tenant Anthropic API Key (pending — awaiting `/gsd:plan-phase 12`)
-Plan: —
-Status: Roadmap created; phases 12-15 pending
-Last activity: 2026-05-20 — Roadmap created (20 v3.1 requirements mapped to Phases 12-15)
+Phase: Phase 12 — Per-tenant Anthropic API Key (in progress — 2/3 plans complete; Plan 03 = CI grep gate + worker env-var logging)
+Plan: 12-02 complete → next: 12-03
+Status: Plans 12-01 + 12-02 GREEN; Plan 03 unblocked
+Last activity: 2026-05-20 — Plan 12-02 landed (5 resolver call sites + 3 dead-func deletes + 13 dead-code-test removals; full scheduler suite 323/1 GREEN)
 
 ### v3.1 Roadmap Summary (created 2026-05-20)
 
@@ -158,6 +158,7 @@ Last activity: 2026-05-20 — Roadmap created (20 v3.1 requirements mapped to Ph
 | Phase 11 P02 | 1 | 1 tasks | 1 files |
 | Phase 11 P1 | 10 | 2 tasks | 2 files |
 | Phase 12 P01 | 3 | 3 tasks | 3 files |
+| Phase 12-per-tenant-anthropic-api-key P02 | 11min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -362,6 +363,9 @@ Recent decisions affecting current work:
 - [Phase 12]: Stdlib logger (not structlog) for resolver — scheduler-wide convention preserved
 - [Phase 12]: Module-level dict cache (not functools.lru_cache) so tests can reset state directly via autouse fixture
 - [Phase 12]: _log_call omits model field — resolver does not know caller's model choice at resolve-time (documented CONTEXT D-03 deviation)
+- [Phase 12-per-tenant-anthropic-api-key]: Plan 12-02: CONTEXT.md D-09 line 1108 reclassified from dead to live (refactor as Seva, not delete) — _do_fetch is the engine of LIVE fetch_stories() imported by daily_summary.py and weekly_sweeper.py. Net delete count preserved (3 dead funcs) but with different members than CONTEXT.md enumerated.
+- [Phase 12-per-tenant-anthropic-api-key]: Plan 12-02: scheduler/scripts/uat_voice_calibration.py:377 surfaced as a 5th instantiation site CONTEXT.md missed; refactored as Juno tenant rather than exempted (operator UAT fires deserve correct attribution; Plan 03 grep gate scans all of scheduler/ not just scheduler/agents/).
+- [Phase 12-per-tenant-anthropic-api-key]: Plan 12-02: _extract_check_text helper deleted as third-order orphan after review() deletion (zero non-test callers post-purge). Per plan implementer-note authorization.
 
 ### Pending Todos
 
@@ -442,9 +446,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T19:17:50.720Z
+Last session: 2026-05-20T19:34:38.261Z
 Last activity: 2026-05-20
-Stopped At: Completed 12-01-PLAN.md — resolver module + Settings fields + 5 unit tests landed. Plans 12-02 and 12-03 unblocked.
+Stopped At: Completed 12-02-PLAN.md — 5 Anthropic call sites refactored through resolver, 3 dead functions + 1 orphan helper excised, 13 dead-code tests removed. Full scheduler suite 323/1 GREEN (Plan 01 baseline 336 − 13 dead tests = 323 exact). Plan 03 (CI grep gate) unblocked.
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 

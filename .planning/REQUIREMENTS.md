@@ -44,7 +44,7 @@ Currently `scheduler/agents/*.py` + `backend/app/*` all read `os.getenv("ANTHROP
 
 - [x] **KEY-01**: Operator sets `SEVA_ANTHROPIC_API_KEY` + `JUNO_ANTHROPIC_API_KEY` in Railway env vars. All Haiku 4.5 classifier calls (`scheduler/agents/juno_relevance.py`) + Sonnet 4.6 synthesis calls (`scheduler/agents/daily_summary.py` for both tenants + future Sweeper synthesis) resolve their Anthropic client via `get_anthropic_client(company_id)` — Seva calls bill to Seva's key, Juno calls bill to Juno's key.
 - [x] **KEY-02**: When per-tenant env var is unset, `get_anthropic_client(company_id)` falls back to the shared `ANTHROPIC_API_KEY` gracefully (logs WARN once at startup with the fallback notice; does not hard-fail). This preserves local-dev workflow where typically only one key is set, and gives a safe rollout path: ship the resolver first, set per-tenant keys in prod second, no deploy gap.
-- [ ] **KEY-03**: All Anthropic call sites in scheduler + backend route through the resolver. Grep for `Anthropic(api_key=` returns hits ONLY inside the resolver module (`scheduler/anthropic_client.py` or analogous). CI grep gate added if needed (mirroring `scripts/verify-tenant-isolation.sh` from Phase 9).
+- [x] **KEY-03**: All Anthropic call sites in scheduler + backend route through the resolver. Grep for `Anthropic(api_key=` returns hits ONLY inside the resolver module (`scheduler/anthropic_client.py` or analogous). CI grep gate added if needed (mirroring `scripts/verify-tenant-isolation.sh` from Phase 9).
 - [x] **KEY-04**: Cost attribution works as expected — Seva's Anthropic dashboard shows only `seva_*` request IDs; Juno's dashboard shows only `juno_*` request IDs. Verified by manual fire of `run_daily_summary` (Seva) + `run_juno_daily_summary` (Juno) post-deploy and checking each Anthropic console's recent usage.
 
 ## v3.2+ Requirements
@@ -87,7 +87,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 |-------------|-------|--------|
 | KEY-01 | Phase 12 | Complete |
 | KEY-02 | Phase 12 | Complete |
-| KEY-03 | Phase 12 | Pending |
+| KEY-03 | Phase 12 | Complete |
 | KEY-04 | Phase 12 | Complete |
 | BRAND-01 | Phase 13 | Pending |
 | BRAND-02 | Phase 13 | Pending |
