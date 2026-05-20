@@ -1,10 +1,12 @@
 ---
 phase: 13
 slug: per-company-branding
-status: draft
+status: approved
 shadcn_initialized: true
 preset: base-nova (neutral baseColor, lucide icons, CSS variables on)
 created: 2026-05-20
+reviewed_at: 2026-05-20
+checker_verdict: VERIFIED (6/6 dimensions pass; 8/8 critical-correctness checks pass)
 ---
 
 # Phase 13 — UI Design Contract

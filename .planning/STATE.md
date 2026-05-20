@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Phase 13 context gathered — ready to ui-phase or plan-phase
-stopped_at: Phase 13 (Per-company Branding) discuss-phase complete. 10 decisions locked across 4 gray areas (Juno visual identity navy/Juno Industries/letter-J + registry architecture + CSS token resolution via data-company attribute + 3 polish items folded in). Context captured at .planning/phases/13-per-company-branding/13-CONTEXT.md. Next step → `/gsd:ui-phase 13` (recommended for frontend phase) then `/gsd:plan-phase 13`.
-last_updated: "2026-05-20T20:00:00.000Z"
-last_activity: 2026-05-20 — Phase 13 discuss-phase complete; Juno palette = navy/oklch(0.55 0.15 240); registry pattern mirrors Phase 9 D-08; FOWB protection via :root[data-company='juno'] + RTL unit test; 3 polish items folded (tab title + favicon swap + bare-/ redirect)
+status: Phase 13 UI-SPEC approved — ready to plan
+stopped_at: Phase 13 UI-SPEC approved 2026-05-20. gsd-ui-checker verdict VERIFIED (6/6 design dimensions pass + 8/8 critical-correctness checks pass on first iteration; no revisions). Researcher caught important selector-specificity bug — selector is `:root.dark[data-company='juno']` (specificity 0,2,0) not `:root[data-company='juno']` because Phase 8 brand tokens live under `.dark` (specificity 0,1,0). OKLCH triple tuned from D-01 starting point to `oklch(0.58 0.14 245)`/hover `0.65 0.14 245`/subtle `0.58 0.14 245 / 0.05` (AA contrast verified). All 10 concrete artifacts delivered (companyBrandConfig.ts complete, 2 SVG favicons, useCompanyBrand.ts hook, CompanyBrandEffect.tsx, AppHeader before/after diff, BareRootRedirect, index.html title fix, 7-test matrix, 10-item operator visual-QA checklist). Next step → `/gsd:plan-phase 13`.
+last_updated: "2026-05-20T20:30:00.000Z"
+last_activity: 2026-05-20 — Phase 13 UI-SPEC approved; researcher fixed specificity bug; OKLCH triple finalized at oklch(0.58 0.14 245); 10 concrete artifacts ready for planner consumption
 progress:
   total_phases: 4
   completed_phases: 1
