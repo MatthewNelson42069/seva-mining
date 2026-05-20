@@ -11,6 +11,8 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { SummaryFeedPage } from '@/pages/SummaryFeedPage'
 import ContentCalendarPage from '@/pages/ContentCalendarPage'
 import WeeklyViralSweeperPage from '@/pages/WeeklyViralSweeperPage'
+import { CompanyBrandEffect } from '@/components/layout/CompanyBrandEffect'
+import { BareRootRedirect } from '@/components/layout/BareRootRedirect'
 
 /**
  * v3.0 Phase 9 — `AppRoutes` is the route tree extracted from App so tests
@@ -47,7 +49,7 @@ export function AppRoutes() {
 
         {/* Bookmark grace redirects (D-05, D-06) — outside ProtectedRoute so
             they fire regardless of auth state. */}
-        <Route index element={<Navigate to="/seva" replace />} />
+        <Route index element={<BareRootRedirect />} />
         <Route path="/calendar" element={<Navigate to="/seva/calendar" replace />} />
         <Route path="/viral" element={<Navigate to="/seva/viral" replace />} />
         <Route path="/queue" element={<Navigate to="/seva" replace />} />
@@ -57,7 +59,7 @@ export function AppRoutes() {
           <Route element={<AppShell />}>
 
             {/* v3.0 tenant-scoped 3-tab surface (TENANT-05) */}
-            <Route path=":company" element={<CompanyScopedRoute />}>
+            <Route path=":company" element={<><CompanyBrandEffect /><CompanyScopedRoute /></>}>
               <Route element={<TabbedDashboard />}>
                 <Route index element={<SummaryFeedPage />} />
                 <Route path="calendar" element={<ContentCalendarPage />} />
