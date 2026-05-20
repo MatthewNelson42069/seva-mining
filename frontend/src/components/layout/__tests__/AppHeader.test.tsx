@@ -38,6 +38,23 @@ function renderHeader() {
   )
 }
 
+// Phase 13 (BRAND-01, BRAND-03) — Juno-default helper. Mirrors renderHeader()
+// exactly except `initialEntries={['/juno']}` — useCompanyBrand() then
+// resolves to companyBrandConfig.juno via the URL useParams path of its
+// fallback chain (Zustand mock returns undefined → URL wins).
+function renderHeaderJuno() {
+  const queryClient = new QueryClient()
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/juno']}>
+        <Routes>
+          <Route path=":company/*" element={<AppHeader />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
 describe('AppHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -64,5 +81,21 @@ describe('AppHeader', () => {
     fireEvent.click(logoutBtn)
     expect(mockClearToken).toHaveBeenCalledOnce()
     expect(mockNavigate).toHaveBeenCalledWith('/login')
+  })
+
+  // Phase 13 (BRAND-01, BRAND-03) — Juno-default scenario.
+  // 4 tests above are the byte-identical Seva-default contract per D-09.
+  // 2 tests below assert registry-driven rendering at /juno.
+
+  it('renders the "Juno Industries" wordmark and "J" mark when route is /juno', () => {
+    renderHeaderJuno()
+    expect(screen.getByText('Juno Industries')).toBeInTheDocument()
+    expect(screen.getByText('J')).toBeInTheDocument()
+  })
+
+  it('does NOT render the "Seva Mining" wordmark or "S" mark when route is /juno', () => {
+    renderHeaderJuno()
+    expect(screen.queryByText('Seva Mining')).not.toBeInTheDocument()
+    expect(screen.queryByText('S')).not.toBeInTheDocument()
   })
 })
