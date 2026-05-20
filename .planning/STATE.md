@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Phase 12 in progress (2/3 plans complete; Plan 03 = CI grep gate)
-stopped_at: Completed 12-02-PLAN.md — 5 Anthropic call sites refactored through resolver, 3 dead functions + 1 orphan helper excised, 13 dead-code tests removed. Full scheduler suite 323/1 GREEN (Plan 01 baseline 336 − 13 dead tests = 323 exact). Plan 03 (CI grep gate) unblocked.
-last_updated: "2026-05-20T19:34:47.258Z"
-last_activity: 2026-05-20 — Plan 12-02 landed (5 resolver call sites + 3 dead-func deletes; scheduler suite 323/1 GREEN)
+status: completed
+stopped_at: Completed 12-03-PLAN.md
+last_updated: "2026-05-20T19:43:04.323Z"
+last_activity: 2026-05-20 — Plan 12-03 landed (CI grep gate verify-anthropic-resolver.sh + worker.py boot env-var logging for SEVA_/JUNO_/STRICT; full scheduler suite 323/1 GREEN; ready for operator Railway env-var configuration per CONTEXT D-04)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 ## Current Position
 
-Phase: Phase 12 — Per-tenant Anthropic API Key (in progress — 2/3 plans complete; Plan 03 = CI grep gate + worker env-var logging)
-Plan: 12-02 complete → next: 12-03
-Status: Plans 12-01 + 12-02 GREEN; Plan 03 unblocked
-Last activity: 2026-05-20 — Plan 12-02 landed (5 resolver call sites + 3 dead-func deletes + 13 dead-code-test removals; full scheduler suite 323/1 GREEN)
+Phase: Phase 12 — Per-tenant Anthropic API Key (code-side COMPLETE — 3/3 plans GREEN; operator post-deploy Railway env-var configuration pending per CONTEXT D-04)
+Plan: 12-03 complete → next: Phase 13 (Juno branding) or operator-side Phase 12 closure
+Status: Phase 12 code-side COMPLETE — all 3 plans GREEN; operator post-deploy checklist pending
+Last activity: 2026-05-20 — Plan 12-03 landed (CI grep gate verify-anthropic-resolver.sh + worker.py boot env-var logging for SEVA_/JUNO_/STRICT; full scheduler suite 323/1 GREEN; ready for operator Railway env-var configuration per CONTEXT D-04)
 
 ### v3.1 Roadmap Summary (created 2026-05-20)
 
@@ -159,6 +159,7 @@ Last activity: 2026-05-20 — Plan 12-02 landed (5 resolver call sites + 3 dead-
 | Phase 11 P1 | 10 | 2 tasks | 2 files |
 | Phase 12 P01 | 3 | 3 tasks | 3 files |
 | Phase 12-per-tenant-anthropic-api-key P02 | 11min | 3 tasks | 8 files |
+| Phase 12-per-tenant-anthropic-api-key P03 | 2min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -366,6 +367,8 @@ Recent decisions affecting current work:
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-02: CONTEXT.md D-09 line 1108 reclassified from dead to live (refactor as Seva, not delete) — _do_fetch is the engine of LIVE fetch_stories() imported by daily_summary.py and weekly_sweeper.py. Net delete count preserved (3 dead funcs) but with different members than CONTEXT.md enumerated.
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-02: scheduler/scripts/uat_voice_calibration.py:377 surfaced as a 5th instantiation site CONTEXT.md missed; refactored as Juno tenant rather than exempted (operator UAT fires deserve correct attribution; Plan 03 grep gate scans all of scheduler/ not just scheduler/agents/).
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-02: _extract_check_text helper deleted as third-order orphan after review() deletion (zero non-test callers post-purge). Per plan implementer-note authorization.
+- [Phase 12-per-tenant-anthropic-api-key]: Plan 12-03: Added grep scope filters (--include='*.py' --exclude-dir=__pycache__/.venv/node_modules) to verify-anthropic-resolver.sh as Rule 1 auto-fix — first dry-run hit 3 false positives (binary .pyc + vendored anthropic SDK class declarations in both backend/.venv and scheduler/.venv). Documented pattern for future grep gates on Python repos with vendored deps.
+- [Phase 12-per-tenant-anthropic-api-key]: Plan 12-03: WARNING severity chosen for per-tenant Anthropic key unset (not ERROR/INFO). Matches worker.py existing pattern for graceful-fallback-with-operator-impact misses (FRED_API_KEY, METALPRICEAPI_API_KEY) — operator-visible without breaking boot.
 
 ### Pending Todos
 
@@ -446,9 +449,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T19:34:38.261Z
+Last session: 2026-05-20T19:42:24.585Z
 Last activity: 2026-05-20
-Stopped At: Completed 12-02-PLAN.md — 5 Anthropic call sites refactored through resolver, 3 dead functions + 1 orphan helper excised, 13 dead-code tests removed. Full scheduler suite 323/1 GREEN (Plan 01 baseline 336 − 13 dead tests = 323 exact). Plan 03 (CI grep gate) unblocked.
+Stopped At: Completed 12-03-PLAN.md
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 

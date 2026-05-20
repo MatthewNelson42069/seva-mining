@@ -71,7 +71,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 
 **Ordering rationale:** Phase 12 (per-tenant Anthropic key) lands first — smallest scope, pure plumbing, unblocks cost-attribution for every downstream Juno LLM call (calendar drafting if any, sweeper Sonnet synthesis). Phase 13 (branding) lands second — visual identity arrives before the operator sees the new Juno tabs, so v3.1's mid-milestone state is "Juno feels like Juno even though Tabs 2/3 are still placeholder," not "Juno has new features but still wears Seva's wordmark." Phase 14 (Calendar Tab 2) lands third — port of v2.1 Phase 6 with minimal new logic; Phase 9's `scoped_*()` + `/api/{company}/calendar` scaffolding is already in place. Phase 15 (Sweeper Tab 3) lands last — most complex (defence-sector X queries TBD, Sunday 08:00 PT cron at reserved lock 1021, Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause from Phase 10 D-01); benefits from Phase 12's per-tenant key already being production-tested before Juno Sonnet costs hit a dedicated Juno API account.
 
-- [ ] **Phase 12: Per-tenant Anthropic API Key** — Resolver + grep gate + Railway env wiring; `get_anthropic_client(company_id)` falls back to shared `ANTHROPIC_API_KEY` when per-tenant unset; all call sites routed through resolver (KEY-01..04)
+- [x] **Phase 12: Per-tenant Anthropic API Key** — Resolver + grep gate + Railway env wiring; `get_anthropic_client(company_id)` falls back to shared `ANTHROPIC_API_KEY` when per-tenant unset; all call sites routed through resolver (KEY-01..04) (completed 2026-05-20)
 - [ ] **Phase 13: Per-company Branding** — Juno wordmark + logo + color palette via `companyBrandConfig.ts` registry pattern (extends Phase 9 D-08 `companySectionConfig.ts` precedent); no `if (company === 'juno')` branches; CI grep gate (BRAND-01..05)
 - [ ] **Phase 14: Juno Content Calendar (Tab 2)** — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD over Juno's `calendar_items` rows via existing `scoped_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests (JCAL-01..05)
 - [ ] **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** — Sunday 08:00 PT APScheduler cron at lock 1021; defence-sector X queries via `tweepy.AsyncClient.search_recent_tweets`; virality compute over Juno's `daily_summaries.raw_sources_jsonb`; Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; Tab 3 render (JSWEEP-01..06)
@@ -120,10 +120,10 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 4. Full regression suites GREEN — scheduler `pytest` stays at 331+ pass (zero regressions from Phase 11 baseline); backend at 184+; frontend untouched at 168
 5. Operator can roll back per-tenant key by unsetting both `SEVA_ANTHROPIC_API_KEY` + `JUNO_ANTHROPIC_API_KEY` in Railway env vars — next cron fires fall back to shared `ANTHROPIC_API_KEY` with no redeploy required (mirrors `JUNO_CRON_ENABLED` rollback precedent from Phase 10)
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 - [x] 12-01-PLAN.md — Wave 1 — Resolver module (`scheduler/anthropic_client.py`) + Settings fields (`seva_anthropic_api_key`, `juno_anthropic_api_key`, `anthropic_resolver_strict`) + 5+ unit tests (KEY-01, KEY-02, KEY-04)
 - [x] 12-02-PLAN.md — Wave 2 — Refactor 4 production sites (`daily_summary.py` ×2, `weekly_sweeper.py`, `content_agent.py::_do_fetch`) + 1 UAT script (`scripts/uat_voice_calibration.py`) through resolver; surgically excise 3 dead functions from `content_agent.py` (`check_compliance`, `is_gold_relevant_or_systemic_shock`, `review`) + their tests (KEY-01, KEY-03)
-- [ ] 12-03-PLAN.md — Wave 3 — CI grep gate (`scripts/verify-anthropic-resolver.sh`) mirroring `verify-tenant-isolation.sh` pattern + extend `scheduler/worker.py::_validate_env` to log per-tenant key + STRICT-mode status at boot (KEY-03, KEY-04)
+- [x] 12-03-PLAN.md — Wave 3 — CI grep gate (`scripts/verify-anthropic-resolver.sh`) mirroring `verify-tenant-isolation.sh` pattern + extend `scheduler/worker.py::_validate_env` to log per-tenant key + STRICT-mode status at boot (KEY-03, KEY-04)
 
 **Planner deviations from CONTEXT.md (documented in 12-02-PLAN.md objective):**
 - `content_agent.py:1108` reclassified from "dead" to LIVE refactor target (inside `_do_fetch` → `fetch_stories()` LIVE export)
@@ -397,7 +397,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 | 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 10. Juno Defence News Funnel | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 5/5 | Complete | 2026-05-20 |
-| 12. Per-tenant Anthropic API Key | v3.1 | 2/3 | In Progress|  |
+| 12. Per-tenant Anthropic API Key | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 13. Per-company Branding | v3.1 | 0/? | Pending | - |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 0/? | Pending | - |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 0/? | Pending | - |
