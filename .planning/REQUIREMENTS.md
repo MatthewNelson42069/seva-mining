@@ -11,11 +11,11 @@
 
 Port of Seva's v2.1 Phase 6 paper-planner work to Juno's tab 2. Multi-tenant scaffolding from v3.0 Phase 9 already in place (`scoped_*()` helpers + `/api/{company}/calendar` router prefix + `<Route path=":company">` wrapper); v3.1's job is making `/juno/calendar` actually function, not building the Calendar from scratch.
 
-- [ ] **JCAL-01** *(D-06)*: User opens `/juno/calendar` (Juno Tab 2) and sees the same weekly Mon-Sun paper-planner grid Seva users see — direct-edit textarea per day with em-dash placeholder when empty (matches Seva em-dash placeholder pattern; no tenant-asymmetric banner), current-week highlighted.
-- [ ] **JCAL-02**: User edits a day cell on the Juno calendar; auto-save fires on `blur` with optimistic UI; the persisted row in `calendar_items` carries `company_id='juno'` (verified via row-level `scoped_*()` helper, not raw `select(CalendarItem)`).
-- [ ] **JCAL-03**: User switches Juno → Seva via `CompanySwitcher`; calendar view immediately reflects Seva's content (TanStack Query keys keyed on `company_id` per Phase 9 `queryKeys.ts` pattern). Zero Juno bleed-through into Seva's view, zero Seva bleed-through into Juno's view (cross-tenant isolation test added).
-- [ ] **JCAL-04**: User week-navigates (prev / next / today) on the Juno calendar identically to Seva's calendar; URL state preserved on browser back/forward.
-- [ ] **JCAL-05**: All Juno calendar CRUD operations (GET range / POST / PATCH / DELETE) route through `/api/juno/calendar/*` with `Depends(get_current_company)` enforcing `company_id='juno'` server-side. Attempting to mutate a Seva row from `/api/juno/` (or vice versa) returns 404 (not 403 — tenant existence isolation).
+- [x] **JCAL-01** *(D-06)*: User opens `/juno/calendar` (Juno Tab 2) and sees the same weekly Mon-Sun paper-planner grid Seva users see — direct-edit textarea per day with em-dash placeholder when empty (matches Seva em-dash placeholder pattern; no tenant-asymmetric banner), current-week highlighted.
+- [x] **JCAL-02**: User edits a day cell on the Juno calendar; auto-save fires on `blur` with optimistic UI; the persisted row in `calendar_items` carries `company_id='juno'` (verified via row-level `scoped_*()` helper, not raw `select(CalendarItem)`).
+- [x] **JCAL-03**: User switches Juno → Seva via `CompanySwitcher`; calendar view immediately reflects Seva's content (TanStack Query keys keyed on `company_id` per Phase 9 `queryKeys.ts` pattern). Zero Juno bleed-through into Seva's view, zero Seva bleed-through into Juno's view (cross-tenant isolation test added).
+- [x] **JCAL-04**: User week-navigates (prev / next / today) on the Juno calendar identically to Seva's calendar; URL state preserved on browser back/forward.
+- [x] **JCAL-05**: All Juno calendar CRUD operations (GET range / POST / PATCH / DELETE) route through `/api/juno/calendar/*` with `Depends(get_current_company)` enforcing `company_id='juno'` server-side. Attempting to mutate a Seva row from `/api/juno/` (or vice versa) returns 404 (not 403 — tenant existence isolation).
 
 ### Juno Weekly Viral Sweeper (JSWEEP)
 
@@ -94,11 +94,11 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 | BRAND-03 | Phase 13 | Complete |
 | BRAND-04 | Phase 13 | Complete |
 | BRAND-05 | Phase 13 | Complete |
-| JCAL-01 | Phase 14 | Pending |
-| JCAL-02 | Phase 14 | Pending |
-| JCAL-03 | Phase 14 | Pending |
-| JCAL-04 | Phase 14 | Pending |
-| JCAL-05 | Phase 14 | Pending |
+| JCAL-01 | Phase 14 | Complete |
+| JCAL-02 | Phase 14 | Complete |
+| JCAL-03 | Phase 14 | Complete |
+| JCAL-04 | Phase 14 | Complete |
+| JCAL-05 | Phase 14 | Complete |
 | JSWEEP-01 | Phase 15 | Pending |
 | JSWEEP-02 | Phase 15 | Pending |
 | JSWEEP-03 | Phase 15 | Pending |

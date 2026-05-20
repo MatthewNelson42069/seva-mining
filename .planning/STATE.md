@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Phase 14 context gathered — ready to plan (UI-SPEC likely skippable)
-stopped_at: Phase 14 (Juno Content Calendar) discuss-phase complete 2026-05-20. 7 decisions locked across 4 gray areas. Critical scope insight — Phase 14 is far narrower than ROADMAP suggests: backend + frontend hooks ALREADY multi-tenant from v2.1 Phase 6 + v3.0 Phase 9. Actual surface = delete 13-line short-circuit at ContentCalendarPage.tsx:42-54 + 1 new frontend test (RTL + TanStack key isolation) + 1 new backend test (404 on cross-tenant mutate). LLM-assist deferred. Empty-state matches Seva em-dash pattern (no banner). Zero Seva-side changes (D-09 byte-identical preserved). Next step → `/gsd:plan-phase 14` (or `/gsd:ui-phase 14` first if you want the formal design contract gate — discouraged here since no new visual surfaces).
-last_updated: "2026-05-21T00:00:00.000Z"
-last_activity: 2026-05-20 — Phase 14 discuss-phase complete; scope reduced from 5-req surface to 1 deletion + 2 test files; CONTEXT notes Phase 13's CSS-token cascade auto-applies Juno navy to calendar surfaces (no new UI design work)
+status: verifying
+stopped_at: Completed 14-01-PLAN.md — Juno content calendar gate removal; 4 tasks committed (1ec09ae feat, 75a3039 test, 6c7674d test, f063426 docs); frontend 178/178 + backend 188/188 GREEN; D-07 zero-regression preserved; ready for phase-14 verifier
+last_updated: "2026-05-20T22:25:20.752Z"
+last_activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  completed_phases: 3
+  total_plans: 7
+  completed_plans: 7
 ---
 
 # Project State
@@ -163,6 +163,7 @@ Last activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno test
 | Phase 13-per-company-branding P01 | 4 | 2 tasks | 6 files |
 | Phase 13 P02 | 2 | 3 tasks | 4 files |
 | Phase 13-per-company-branding P03 | 35 | 4 tasks | 2 files |
+| Phase 14-juno-content-calendar P01 | 6 | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -375,6 +376,7 @@ Recent decisions affecting current work:
 - [Phase 13-per-company-branding]: Phase 13 Plan 01: Selector ':root.dark[data-company=juno]' chosen over ':root[data-company=juno]' to mirror Phase 8 .dark scoping (specificity 0,2,0 beats .dark's 0,1,0; preserves D-09 Seva zero-regression contract)
 - [Phase 13]: Wave 2: CompanyBrandEffect mounted as Fragment sibling of CompanyScopedRoute (element={<><CompanyBrandEffect /><CompanyScopedRoute /></>}) — preserves SRP split between brand effect and route guard
 - [Phase 13]: operator approved Phase 13 visual QA 2026-05-20 — Juno navy palette (oklch(0.58 0.14 245)) reads institutional defence; FOWB-free transitions verified manually at 1440x900 (all 6 MUST-PASS + all 4 SHOULD-PASS items confirmed)
+- [Phase 14-juno-content-calendar]: Phase 14 Plan 01: deleted 13-line Phase 9 D-09 Juno calendar short-circuit at ContentCalendarPage.tsx:42-54 per D-01; added 3 frontend RTL + 4 backend pytest cross-tenant isolation tests per D-04/D-05; surgically relaxed REQUIREMENTS.md JCAL-01 wording per D-06 with *(D-06)* annotation; D-07 byte-identical zero-regression contract preserved (12 critical files unchanged). Frontend 175→178 tests, backend 184→188 tests, all JCAL-01..05 behaviorally satisfied. Ready for phase-14 verifier.
 
 ### Pending Todos
 
@@ -455,9 +457,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T21:34:48.100Z
+Last session: 2026-05-20T22:25:20.745Z
 Last activity: 2026-05-20
-Stopped At: Completed 13-03-PLAN.md
+Stopped At: Completed 14-01-PLAN.md — Juno content calendar gate removal; 4 tasks committed (1ec09ae feat, 75a3039 test, 6c7674d test, f063426 docs); frontend 178/178 + backend 188/188 GREEN; D-07 zero-regression preserved; ready for phase-14 verifier
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 

@@ -73,7 +73,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 
 - [x] **Phase 12: Per-tenant Anthropic API Key** — Resolver + grep gate + Railway env wiring; `get_anthropic_client(company_id)` falls back to shared `ANTHROPIC_API_KEY` when per-tenant unset; all call sites routed through resolver (KEY-01..04) (completed 2026-05-20)
 - [x] **Phase 13: Per-company Branding** — Juno wordmark + logo + color palette via `companyBrandConfig.ts` registry pattern (extends Phase 9 D-08 `companySectionConfig.ts` precedent); no `if (company === 'juno')` branches; CI grep gate (BRAND-01..05) — 3/3 plans complete; 175/175 frontend tests; operator visual QA 10/10 PASS; TENANT-VISITED-v31-redux closed
-- [ ] **Phase 14: Juno Content Calendar (Tab 2)** — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD over Juno's `calendar_items` rows via existing `scoped_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests (JCAL-01..05)
+- [x] **Phase 14: Juno Content Calendar (Tab 2)** — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD over Juno's `calendar_items` rows via existing `scoped_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests (JCAL-01..05) (completed 2026-05-20)
 - [ ] **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** — Sunday 08:00 PT APScheduler cron at lock 1021; defence-sector X queries via `tweepy.AsyncClient.search_recent_tweets`; virality compute over Juno's `daily_summaries.raw_sources_jsonb`; Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; Tab 3 render (JSWEEP-01..06)
 
 ---
@@ -269,10 +269,10 @@ Plans:
 4. Attempting to PATCH a Seva row via `/api/juno/calendar/{seva_item_id}` returns 404 — server-side `Depends(get_current_company)` + `scoped_calendar_*()` helpers correctly enforce tenant existence isolation (verified by `backend/tests/test_calendar_tenant_isolation.py`)
 5. Full regression suites GREEN + the new isolation tests pass: backend stays at 184+ + new cross-tenant tests, frontend at 168+ + new isolation scenario; `scripts/verify-tenant-isolation.sh` continues to exit 0 (no new raw `select(CalendarItem)` outside `scoped.py`)
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 14-01-PLAN.md — Lift Juno calendar gate (delete short-circuit at ContentCalendarPage.tsx:42-54), add frontend RTL test (per-tenant TanStack Query key isolation), add backend cross-tenant test (PATCH+DELETE 404 both directions), relax JCAL-01 wording per D-06
+- [x] 14-01-PLAN.md — Lift Juno calendar gate (delete short-circuit at ContentCalendarPage.tsx:42-54), add frontend RTL test (per-tenant TanStack Query key isolation), add backend cross-tenant test (PATCH+DELETE 404 both directions), relax JCAL-01 wording per D-06
 
 **Complexity:** S-M (most logic ALREADY EXISTS — v2.1 Phase 6 is fully functional under Phase 9's multi-tenant routing; v3.1 Phase 14 is verification + isolation tests + empty-state copy registry + Juno-specific UAT, not new feature build)
 **Estimated duration:** 2-3 hours
@@ -408,7 +408,7 @@ Plans:
 | 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 5/5 | Complete | 2026-05-20 |
 | 12. Per-tenant Anthropic API Key | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 13. Per-company Branding | v3.1 | 3/3 | Complete   | 2026-05-20 |
-| 14. Juno Content Calendar (Tab 2) | v3.1 | 0/? | Pending | - |
+| 14. Juno Content Calendar (Tab 2) | v3.1 | 1/1 | Complete   | 2026-05-20 |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 0/? | Pending | - |
 
 ---
