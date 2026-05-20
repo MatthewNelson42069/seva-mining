@@ -197,7 +197,13 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 4. Adding a hypothetical third tenant (e.g., `'acme'`) requires editing exactly one file (`companyBrandConfig.ts`) + adding two assets (logo SVG + favicon PNG); zero component edits needed — verified by a doc-comment example in the registry file plus a smoke test scenario in `branding.test.tsx`
 5. Full regression suites GREEN — frontend `vitest` stays at 168+ pass + the new branding scenario tests; backend + scheduler untouched
 
-**Plans:** TBD (planner decomposition pending)
+**Plans:** 3 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Foundation: companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + index.css :root.dark[data-company='juno'] override + index.html title fix
+- [ ] 13-02-PLAN.md — Consumers: CompanyBrandEffect.tsx side-effect component + AppHeader.tsx refactor to consume hook + BareRootRedirect (TENANT-VISITED-v31-redux) + App.tsx wiring
+- [ ] 13-03-PLAN.md — Tests + verification: extend AppHeader.test.tsx with 2 Juno tests + new AppHeader.brand.test.tsx with 5 FOWB/cleanup tests + D-10 grep gate + operator visual QA checkpoint
+
 
 **Complexity:** M (more touch points than Phase 12; light-touch but spread across 5-7 frontend files + new registry + new test file + CSS token plumbing; operator design input required for color palette)
 **Estimated duration:** 3-5 hours including operator design check-in for Juno palette
