@@ -20,12 +20,28 @@ Every piece of intelligence the dashboard surfaces must be genuinely valuable to
 
 Audit verdict: `tech_debt` — 20/20 requirements satisfied, 0 critical blockers, 8 non-blocking follow-ups filed for v3.0.1/v3.1+. See [`milestones/v3.0-MILESTONE-AUDIT.md`](milestones/v3.0-MILESTONE-AUDIT.md).
 
-## Next Milestone
+## Current Milestone: v3.0.1 v3.0 Audit Cleanup Bundle
 
-Not yet scoped. Run `/gsd:new-milestone` to start the next cycle. Candidate themes from the v3.0 audit + deferred items:
+**Goal:** Close all 5 non-blocking follow-ups filed by the v3.0 milestone audit. Resolve the 12:05 PT Canadian Procurement UX (operator preference: both daily Juno fires produce full 3-section briefs), tighten documentation drift (traceability table + VALIDATION.md frontmatter), remove dead code (`run_juno_daily_summary` double-definition), and harden the Haiku classifier ValidationError path. Ships v3.0 cleanly closed.
 
-- **v3.0.1 cleanup bundle** (recommended quick close — 4-5 short tasks): traceability table refresh for DEF-01..07; VALIDATION.md frontmatter `nyquist_compliant: true` flips for Phase 9 + 10; `run_juno_daily_summary` double-definition cleanup; Skydio Pydantic ValidationError logging; 12:05 PT Canadian Procurement UX decision (operator preference: re-run SerpAPI for full briefs both fires, +$1/mo)
-- **v3.1 Juno expansion**: Juno Content Calendar (JUNO-CAL-v31, Tab 2) + Juno Weekly Viral Sweeper (JUNO-SWEEP-v31, Tab 3) + per-company branding (TENANT-BRAND-v31, Juno gets own wordmark/colors) + last-visited tenant for bare `/` redirect + per-tenant Anthropic API key
+**Target features:**
+- **DEF-05 12:05 PT brief completeness** — Remove the morning-only SerpAPI cost gate so both daily Juno fires (08:05 PT + 12:05 PT) run the 7 Canadian-procurement SerpAPI queries. Budget impact: ~$5.25/mo → ~$8-9/mo Juno SerpAPI (still inside $50/mo cap with ~$41 headroom).
+- **Traceability documentation refresh** — Update archived `milestones/v3.0-REQUIREMENTS.md` traceability rows DEF-01..DEF-07 from "Scaffolded (Wave 0)" to "Complete (Wave 1/2)" with plan attribution.
+- **`run_juno_daily_summary` double-definition cleanup** — Delete the Phase 9 stub block at `scheduler/agents/daily_summary.py:762` (dead code shadowed by Phase 10 live entry at `:1150`).
+- **VALIDATION.md frontmatter updates** — Flip `nyquist_compliant: false` → `true` and `wave_0_complete: false` → `true` in both `milestones/v3.0-phases/09-multi-tenant-foundation/09-VALIDATION.md` and `milestones/v3.0-phases/10-juno-defence-news-funnel/10-VALIDATION.md`. All Wave 0 tests already GREEN.
+- **Skydio Pydantic ValidationError observability** — Add structured logging when Haiku 4.5 classifier raises `ValidationError` (currently fail-closed silently). Log to `agent_runs.notes` with classifier input excerpt + error type. Optionally tune Haiku temperature to reduce schema-mismatch frequency.
+
+**Budget:** Incremental $2-4/mo SerpAPI bump (Juno noon fire re-runs procurement queries). Total monthly cost target stays inside ~$210-225/month envelope.
+
+**Stack additions:** None — pure config/code cleanup on existing v3.0 stack.
+
+**Hard parts the roadmap addresses:**
+1. **12:05 PT change semantics** — confirm removal of `is_morning_fire` gate doesn't break Wave 2 (10-03) tests that assert noon-fire-skip-SerpAPI. Update those tests in same commit.
+2. **Dead-code removal safety** — `run_juno_daily_summary` Phase 9 stub at line 762 is shadowed by Phase 10 implementation at line 1150. Verify Python's last-wins semantics actually applies (it does) AND nothing imports `daily_summary.run_juno_daily_summary` and would silently switch behavior. Confirm with grep + targeted pytest re-run.
+3. **Haiku ValidationError logging without breaking the fail-closed contract** — current behavior (excluded from synthesis) MUST be preserved; logging is observability-only.
+
+**Out of scope (deferred to v3.1+):**
+- **v3.1 Juno expansion**: Juno Content Calendar (JUNO-CAL-v31, Tab 2) + Juno Weekly Viral Sweeper (JUNO-SWEEP-v31, Tab 3) + per-company branding (TENANT-BRAND-v31) + last-visited tenant for bare `/` redirect + per-tenant Anthropic API key
 - **v3.2+ N-tenant scaling**: `companies` DB table (TENANT-N-v32, replacing hardcoded CHECK constraint)
 
 ## Past Milestones
@@ -247,4 +263,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 — after v3.0 milestone COMPLETE. Multi-tenant platform shipped (Seva + Juno toggle). v3.0 archived to `milestones/v3.0-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`. REQUIREMENTS.md cleared (fresh for next milestone). Next: `/gsd:new-milestone` to scope v3.0.1 cleanup or v3.1 Juno expansion.*
+*Last updated: 2026-05-19 — v3.0.1 cleanup milestone started. 5 follow-ups from v3.0 audit: 12:05 PT Canadian Procurement full-brief enablement, traceability table refresh, double-definition cleanup, VALIDATION.md frontmatter flips, Haiku ValidationError logging. Continues phase counter from Phase 11.*

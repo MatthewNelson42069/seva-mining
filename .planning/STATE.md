@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
-milestone: null
-milestone_name: (no active milestone — v3.0 closed 2026-05-19; ready for next milestone scope)
-status: Between milestones
-stopped_at: v3.0 milestone complete + archived (Phase 9 + Phase 10 shipped 2026-05-19; audit `tech_debt` with 20/20 reqs satisfied; ROADMAP collapsed; REQUIREMENTS.md cleared; PROJECT.md evolved). Ready to scope next milestone.
-last_updated: "2026-05-19T20:30:00.000Z"
+milestone: v3.0.1
+milestone_name: — v3.0 Audit Cleanup Bundle
+status: Defining requirements
+stopped_at: Milestone v3.0.1 started — closes 5 non-blocking follow-ups from v3.0 audit (12:05 PT Canadian Procurement, traceability refresh, double-definition cleanup, VALIDATION frontmatter, Skydio ValidationError logging). Phase counter continues at Phase 11.
+last_updated: "2026-05-19T21:00:00.000Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 0
@@ -17,16 +17,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-19 after v3.0 milestone complete)
+See: .planning/PROJECT.md (updated 2026-05-19 — v3.0.1 milestone scoped)
 
 **Core value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno.
-**Current focus:** Between milestones — ready to scope v3.0.1 cleanup OR v3.1 Juno expansion. Run `/gsd:new-milestone` to start.
+**Current focus:** Milestone v3.0.1 — defining requirements (5 audit-cleanup items targeting Phase 11+)
 
 ## Current Position
 
-Phase: Not started (no active milestone)
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone scope
+Status: Defining requirements
+Last activity: 2026-05-19 — Milestone v3.0.1 started (PROJECT.md updated; audit-cleanup scope confirmed)
 
 ### v3.0 Roadmap Summary
 
