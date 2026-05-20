@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Phase 13 UI-SPEC approved — ready to plan
-stopped_at: Phase 13 UI-SPEC approved 2026-05-20. gsd-ui-checker verdict VERIFIED (6/6 design dimensions pass + 8/8 critical-correctness checks pass on first iteration; no revisions). Researcher caught important selector-specificity bug — selector is `:root.dark[data-company='juno']` (specificity 0,2,0) not `:root[data-company='juno']` because Phase 8 brand tokens live under `.dark` (specificity 0,1,0). OKLCH triple tuned from D-01 starting point to `oklch(0.58 0.14 245)`/hover `0.65 0.14 245`/subtle `0.58 0.14 245 / 0.05` (AA contrast verified). All 10 concrete artifacts delivered (companyBrandConfig.ts complete, 2 SVG favicons, useCompanyBrand.ts hook, CompanyBrandEffect.tsx, AppHeader before/after diff, BareRootRedirect, index.html title fix, 7-test matrix, 10-item operator visual-QA checklist). Next step → `/gsd:plan-phase 13`.
-last_updated: "2026-05-20T20:30:00.000Z"
-last_activity: 2026-05-20 — Phase 13 UI-SPEC approved; researcher fixed specificity bug; OKLCH triple finalized at oklch(0.58 0.14 245); 10 concrete artifacts ready for planner consumption
+status: Plan 13-01 GREEN — 4 new files + 2 modified; 168/168 frontend tests pass; zero regression; UI-SPEC verbatim consumption invariant honored
+stopped_at: Completed 13-per-company-branding/13-01-PLAN.md
+last_updated: "2026-05-20T21:00:24.719Z"
+last_activity: "2026-05-20 — Plan 13-01 landed (companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + :root.dark[data-company='juno'] CSS override + index.html title swap; commits b0edf68 + 406c8b9)"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 ## Current Position
 
-Phase: Phase 12 — Per-tenant Anthropic API Key (code-side COMPLETE — 3/3 plans GREEN; operator post-deploy Railway env-var configuration pending per CONTEXT D-04)
-Plan: 12-03 complete → next: Phase 13 (Juno branding) or operator-side Phase 12 closure
-Status: Phase 12 code-side COMPLETE — all 3 plans GREEN; operator post-deploy checklist pending
-Last activity: 2026-05-20 — Plan 12-03 landed (CI grep gate verify-anthropic-resolver.sh + worker.py boot env-var logging for SEVA_/JUNO_/STRICT; full scheduler suite 323/1 GREEN; ready for operator Railway env-var configuration per CONTEXT D-04)
+Phase: Phase 13 — Per-company Branding (Wave 1 plan 13-01 GREEN; Wave 2 + Wave 3 in parallel execution by orchestrator)
+Plan: 13-01 complete → Plan 13-02 (Wave 2 — AppHeader refactor + CompanyBrandEffect + BareRootRedirect) next
+Status: Plan 13-01 GREEN — 4 new files + 2 modified; 168/168 frontend tests pass; zero regression; UI-SPEC verbatim consumption invariant honored
+Last activity: 2026-05-20 — Plan 13-01 landed (companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + :root.dark[data-company='juno'] CSS override + index.html title swap; commits b0edf68 + 406c8b9)
 
 ### v3.1 Roadmap Summary (created 2026-05-20)
 
@@ -160,6 +160,7 @@ Last activity: 2026-05-20 — Plan 12-03 landed (CI grep gate verify-anthropic-r
 | Phase 12 P01 | 3 | 3 tasks | 3 files |
 | Phase 12-per-tenant-anthropic-api-key P02 | 11min | 3 tasks | 8 files |
 | Phase 12-per-tenant-anthropic-api-key P03 | 2min | 2 tasks | 2 files |
+| Phase 13-per-company-branding P01 | 4 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -369,6 +370,7 @@ Recent decisions affecting current work:
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-02: _extract_check_text helper deleted as third-order orphan after review() deletion (zero non-test callers post-purge). Per plan implementer-note authorization.
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-03: Added grep scope filters (--include='*.py' --exclude-dir=__pycache__/.venv/node_modules) to verify-anthropic-resolver.sh as Rule 1 auto-fix — first dry-run hit 3 false positives (binary .pyc + vendored anthropic SDK class declarations in both backend/.venv and scheduler/.venv). Documented pattern for future grep gates on Python repos with vendored deps.
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-03: WARNING severity chosen for per-tenant Anthropic key unset (not ERROR/INFO). Matches worker.py existing pattern for graceful-fallback-with-operator-impact misses (FRED_API_KEY, METALPRICEAPI_API_KEY) — operator-visible without breaking boot.
+- [Phase 13-per-company-branding]: Phase 13 Plan 01: Selector ':root.dark[data-company=juno]' chosen over ':root[data-company=juno]' to mirror Phase 8 .dark scoping (specificity 0,2,0 beats .dark's 0,1,0; preserves D-09 Seva zero-regression contract)
 
 ### Pending Todos
 
@@ -449,9 +451,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T19:42:24.585Z
+Last session: 2026-05-20T21:00:24.713Z
 Last activity: 2026-05-20
-Stopped At: Completed 12-03-PLAN.md
+Stopped At: Completed 13-per-company-branding/13-01-PLAN.md
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 

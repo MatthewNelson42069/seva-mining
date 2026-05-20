@@ -197,10 +197,10 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 4. Adding a hypothetical third tenant (e.g., `'acme'`) requires editing exactly one file (`companyBrandConfig.ts`) + adding two assets (logo SVG + favicon PNG); zero component edits needed — verified by a doc-comment example in the registry file plus a smoke test scenario in `branding.test.tsx`
 5. Full regression suites GREEN — frontend `vitest` stays at 168+ pass + the new branding scenario tests; backend + scheduler untouched
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 13-01-PLAN.md — Foundation: companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + index.css :root.dark[data-company='juno'] override + index.html title fix
+- [x] 13-01-PLAN.md — Foundation: companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + index.css :root.dark[data-company='juno'] override + index.html title fix
 - [ ] 13-02-PLAN.md — Consumers: CompanyBrandEffect.tsx side-effect component + AppHeader.tsx refactor to consume hook + BareRootRedirect (TENANT-VISITED-v31-redux) + App.tsx wiring
 - [ ] 13-03-PLAN.md — Tests + verification: extend AppHeader.test.tsx with 2 Juno tests + new AppHeader.brand.test.tsx with 5 FOWB/cleanup tests + D-10 grep gate + operator visual QA checkpoint
 
@@ -404,7 +404,7 @@ Plans:
 | 10. Juno Defence News Funnel | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 5/5 | Complete | 2026-05-20 |
 | 12. Per-tenant Anthropic API Key | v3.1 | 3/3 | Complete   | 2026-05-20 |
-| 13. Per-company Branding | v3.1 | 0/? | Pending | - |
+| 13. Per-company Branding | v3.1 | 1/3 | In Progress|  |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 0/? | Pending | - |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 0/? | Pending | - |
 
