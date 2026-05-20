@@ -294,3 +294,122 @@ def test_survives_threshold_none_input():
     from agents.juno_relevance import survives_threshold
 
     assert survives_threshold(None) is False
+
+
+# ---------------------------------------------------------------------------
+# CLEANUP-05 (Phase 11) — Haiku ValidationError observability.
+# Fail-closed contract preserved; new accumulator logs ValidationError shape
+# to agent_runs.notes['haiku_validation_errors'] without changing return value.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_classify_story_validation_error_logged_and_fail_closed():
+    """CLEANUP-05: when messages.parse raises pydantic.ValidationError,
+    classify_story (a) returns None [fail-closed contract preserved] and
+    (b) appends one structured entry to the validation_errors accumulator
+    with shape {input_excerpt, error_type, error_msg}, each string field
+    capped at 200 chars."""
+    from pydantic import ValidationError, BaseModel
+
+    from agents.juno_relevance import classify_story
+
+    # Build a real pydantic.ValidationError by triggering a validation
+    # failure on a throwaway model — easier than instantiating ValidationError
+    # directly (pydantic v2 makes that internal).
+    class _Throwaway(BaseModel):
+        x: int
+
+    try:
+        _Throwaway(x="not-an-int")
+    except ValidationError as ve:
+        real_validation_error = ve
+
+    mock_client = MagicMock()
+    mock_client.messages.parse = AsyncMock(side_effect=real_validation_error)
+
+    accumulator: list[dict] = []
+    result = await classify_story(
+        mock_client,
+        title="Skydio dual-use drone framing test " * 5,  # long title to exercise 200-cap
+        snippet="Some long snippet content " * 30,
+        validation_errors=accumulator,
+    )
+
+    # Fail-closed contract: ValidationError → return None (item excluded).
+    assert result is None, (
+        "CLEANUP-05 Hard Part P3: classify_story MUST still return None on "
+        "ValidationError; fail-closed dual-use exclusion is a behavioral contract."
+    )
+
+    # Accumulator gained exactly one structured entry.
+    assert len(accumulator) == 1, (
+        f"Expected 1 validation_errors entry; got {len(accumulator)}"
+    )
+    entry = accumulator[0]
+    assert set(entry.keys()) >= {"input_excerpt", "error_type", "error_msg"}, (
+        f"Entry missing required keys; got {set(entry.keys())}"
+    )
+    assert entry["error_type"] == "ValidationError", entry
+    assert isinstance(entry["error_msg"], str)
+    assert isinstance(entry["input_excerpt"], str)
+    # 200-char caps per CLEANUP-05 spec.
+    assert len(entry["input_excerpt"]) <= 200, len(entry["input_excerpt"])
+    assert len(entry["error_msg"]) <= 200, len(entry["error_msg"])
+    # input_excerpt carries some real title content (not blank).
+    assert "Skydio" in entry["input_excerpt"], entry["input_excerpt"]
+
+
+@pytest.mark.asyncio
+async def test_classify_story_accumulator_none_default_preserves_legacy_behavior():
+    """CLEANUP-05: classify_story must remain callable without the new
+    validation_errors kwarg (backwards-compatible default)."""
+    from pydantic import ValidationError, BaseModel
+
+    from agents.juno_relevance import classify_story
+
+    class _Throwaway(BaseModel):
+        x: int
+
+    try:
+        _Throwaway(x="not-an-int")
+    except ValidationError as ve:
+        real_validation_error = ve
+
+    mock_client = MagicMock()
+    mock_client.messages.parse = AsyncMock(side_effect=real_validation_error)
+
+    # No accumulator passed — legacy signature.
+    result = await classify_story(
+        mock_client,
+        title="legacy caller test",
+        snippet="snippet",
+    )
+    assert result is None, "Legacy callers still get None fail-closed."
+
+
+@pytest.mark.asyncio
+async def test_classify_story_generic_exception_still_fail_closed_without_accumulator_entry():
+    """CLEANUP-05: non-ValidationError exceptions (network, timeout) STILL
+    fail-closed but do NOT append to the accumulator — the accumulator is
+    SPECIFICALLY for schema-validation failures (the operator-observability
+    case from the v3.0 audit Skydio incident)."""
+    from agents.juno_relevance import classify_story
+
+    mock_client = MagicMock()
+    mock_client.messages.parse = AsyncMock(side_effect=RuntimeError("network down"))
+
+    accumulator: list[dict] = []
+    result = await classify_story(
+        mock_client,
+        title="t",
+        snippet="s",
+        validation_errors=accumulator,
+    )
+
+    assert result is None
+    # Non-ValidationError did NOT pollute the accumulator.
+    assert accumulator == [], (
+        "Generic exceptions should fail-closed silently — accumulator is "
+        f"for ValidationError only; got {accumulator}"
+    )

@@ -21,7 +21,7 @@ import logging
 from typing import Literal
 
 from anthropic import AsyncAnthropic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -88,11 +88,26 @@ async def classify_story(
     *,
     title: str,
     snippet: str,
+    validation_errors: list[dict] | None = None,
 ) -> DefenceRelevance | None:
     """Run the Haiku classifier on one story. Returns None on hard failure.
 
     Fail-closed: on exception, log + return None. Caller treats None as
     is_relevant=False (drop the story) rather than retrying.
+
+    CLEANUP-05 (Phase 11): if `validation_errors` is provided (a list owned
+    by the caller), pydantic.ValidationError raised inside
+    messages.parse(output_format=DefenceRelevance) will append a structured
+    entry to it BEFORE fail-closing. The list shape is documented as a
+    contract: list of dicts with keys {input_excerpt, error_type, error_msg}.
+    The accumulator is then surfaced into agent_runs.notes
+    ['haiku_validation_errors'] by the caller for operator-observability of
+    schema-mismatch frequency (the v3.0 audit's Skydio dual-use exclusion
+    precedent).
+
+    Behavioral fail-closed contract is PRESERVED — the offending item is
+    still excluded from Sonnet synthesis. Logging is observability-only;
+    the broad-Exception fail-closed return remains the final guard.
     """
     user_message = (
         f"Title: {title}\n\n"
@@ -108,7 +123,24 @@ async def classify_story(
             output_format=DefenceRelevance,
         )
         return response.parsed_output
-    except Exception as exc:  # noqa: BLE001 — fail-closed
+    except ValidationError as exc:
+        # CLEANUP-05 — append structured log entry BEFORE fail-closing.
+        # Behavioral contract preserved: still return None below.
+        if validation_errors is not None:
+            input_excerpt = f"{title} | {snippet}"[:200]
+            error_msg = str(exc)[:200]
+            validation_errors.append({
+                "input_excerpt": input_excerpt,
+                "error_type": type(exc).__name__,
+                "error_msg": error_msg,
+            })
+        logger.warning(
+            "juno_relevance: classify_story ValidationError on '%s' (%s)",
+            (title or "")[:60],
+            type(exc).__name__,
+        )
+        return None
+    except Exception as exc:  # noqa: BLE001 — fail-closed for non-schema errors
         logger.warning(
             "juno_relevance: classify_story failed on '%s' (%s)",
             (title or "")[:60],
