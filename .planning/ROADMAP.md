@@ -57,9 +57,9 @@ Full roadmap detail: `milestones/v3.0-ROADMAP.md`. Audit verdict `tech_debt` (20
 
 **Milestone goal:** Close the 5 non-blocking follow-ups filed by the v3.0 milestone audit (`milestones/v3.0-MILESTONE-AUDIT.md`) — resolve the 12:05 PT Canadian Procurement UX, tighten documentation drift (traceability table + VALIDATION.md frontmatter), remove the `run_juno_daily_summary` double-definition dead code, and harden the Haiku classifier ValidationError observability path. Ships v3.0 cleanly closed before any v3.1 expansion work begins. Single phase (Phase 11) because all 5 items are small audit follow-ups sharing v3.0 context; bundling them avoids ceremony overhead.
 
-- [ ] **Phase 11: v3.0 Audit Cleanup Bundle** — Close CLEANUP-01..05 (12:05 PT Canadian Procurement enablement + traceability refresh + dead-code removal + VALIDATION frontmatter flips + Haiku ValidationError logging)
+- [ ] **Phase 11: Audit Cleanup Bundle** — Close CLEANUP-01..05 (12:05 PT Canadian Procurement enablement + traceability refresh + dead-code removal + VALIDATION frontmatter flips + Haiku ValidationError logging)
 
-### Phase 11: v3.0 Audit Cleanup Bundle
+### Phase 11: Audit Cleanup Bundle
 
 **Goal:** All 5 v3.0 audit follow-ups land in one small bundle. After this phase: the 12:05 PT Juno cron writes a full 3-section brief (Defence News + Canadian Procurement + World Events) instead of skipping procurement queries by design; `milestones/v3.0-REQUIREMENTS.md` traceability table reflects production reality (Complete, not Scaffolded) for DEF-01..07; `scheduler/agents/daily_summary.py` has exactly one `run_juno_daily_summary` definition; both v3.0 phase VALIDATION.md frontmatters show `nyquist_compliant: true` + `wave_0_complete: true`; and the Haiku 4.5 relevance classifier's silent `ValidationError` fail-closed path now emits structured logs to `agent_runs.notes` while preserving the existing fail-closed contract (item excluded from synthesis on schema mismatch).
 
@@ -93,9 +93,21 @@ Full roadmap detail: `milestones/v3.0-ROADMAP.md`. Audit verdict `tech_debt` (20
 4. Both `09-VALIDATION.md` + `10-VALIDATION.md` frontmatter show `nyquist_compliant: true` and `wave_0_complete: true`; no other frontmatter fields disturbed
 5. When a synthetic schema-violating payload is fed to `juno_relevance.py`, the Haiku `ValidationError` is now logged to `agent_runs.notes` under the `haiku_validation_errors` key with `input_excerpt` + `error_type` + `error_msg` populated; behavioral fail-closed contract preserved — the offending item is still excluded from Sonnet synthesis (NO change to the dual-use exclusion goal); `test_juno_relevance_classifier.py` regression test continues to pass
 
-**Plans:** TBD — likely 5 (one per CLEANUP requirement). Provisional sequencing for `/gsd:plan-phase` to confirm:
-- Wave 1 (parallel, different files): 11-01 (CLEANUP-01 — `daily_summary.py` cost-gate removal + Wave 2 test update) + 11-02 (CLEANUP-02 — `milestones/v3.0-REQUIREMENTS.md` docs) + 11-04 (CLEANUP-04 — two VALIDATION.md frontmatter edits)
-- Wave 2 (serialize after 11-01 since same file): 11-03 (CLEANUP-03 — `daily_summary.py` line-762 dead-code removal) + 11-05 (CLEANUP-05 — `juno_relevance.py` ValidationError logging)
+**Plans:** 5 plans planned 2026-05-19 by `/gsd:plan-phase 11`. Two waves; wave 1 fully parallel.
+
+Plans:
+- [ ] 11-01-PLAN.md — CLEANUP-01: remove morning-only SerpAPI gate in `daily_summary.py`; co-commit test refresh (Wave 1)
+- [ ] 11-02-PLAN.md — CLEANUP-02: refresh DEF-01..07 traceability rows in `milestones/v3.0-REQUIREMENTS.md` from Scaffolded → Complete (Wave 1)
+- [ ] 11-03-PLAN.md — CLEANUP-03: remove stale Phase-9-stub section-divider comment block in `daily_summary.py` (Wave 2, depends on 11-01 — same file)
+- [ ] 11-04-PLAN.md — CLEANUP-04: flip `nyquist_compliant` + `wave_0_complete` to `true` in 09-VALIDATION.md + 10-VALIDATION.md frontmatter (Wave 1)
+- [ ] 11-05-PLAN.md — CLEANUP-05: Haiku ValidationError observability in `juno_relevance.py` via accumulator-based `agent_runs.notes['haiku_validation_errors']` write; fail-closed contract preserved (Wave 2, depends on 11-01 — same file)
+
+Wave 1 (parallel, file-disjoint): 11-01, 11-02, 11-04.
+Wave 2 (serial after 11-01, both touch `scheduler/agents/daily_summary.py`): 11-03, 11-05.
+
+Note on CLEANUP-03 scope: planning-time grep against working-tree HEAD shows exactly ONE `def run_juno_daily_summary` (at line 1150) — the audit's "line 762 stub" wording reflects the as-shipped audit view, but the stub function body was already replaced by Phase 10's helper functions. What remains at lines 813-823 is a stale section-divider COMMENT block titled "v3.0 Phase 9 — Juno daily_summary stub entry point" — plan 11-03 removes that misleading comment. If the executor finds a second `def run_juno_daily_summary` somewhere between line 813 and the live impl (unexpected — would indicate a post-planning regression), they MUST delete that stub body too; the plan documents both paths.
+
+Note on CLEANUP-05 temperature tuning: the requirement makes Haiku `temperature` tuning OPTIONAL ("planner picks"). Planner decision: DEFER to v3.1. Rationale: no production telemetry yet on ValidationError frequency post-CLEANUP-01 enablement; better to gather data before tuning. Logging-only is the v3.0.1 deliverable.
 
 **UI hint**: no
 
@@ -143,7 +155,7 @@ Full roadmap detail: `milestones/v3.0-ROADMAP.md`. Audit verdict `tech_debt` (20
 | 8. UI Polish + Dead-Code Strip | v2.1 | 4/4 | Complete | 2026-05-19 |
 | 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 10. Juno Defence News Funnel | v3.0 | 5/5 | Complete | 2026-05-19 |
-| 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 0/? | Not started | - |
+| 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 0/5 | Planned | - |
 
 ---
 
