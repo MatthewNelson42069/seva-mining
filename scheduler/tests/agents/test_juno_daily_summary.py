@@ -227,7 +227,10 @@ async def test_run_juno_daily_summary_idempotency(caplog):
 # Phase 10 Wave 2 GREEN tests — landed in 10-03-PLAN.md alongside the real
 # synthesis path in scheduler/agents/daily_summary.py::run_juno_daily_summary.
 # Originally Wave 0 RED scaffolds (per-function skips); skips removed in
-# Wave 2 task.
+# Wave 2 task. CLEANUP-01 (Phase 11, 2026-05-19): dropped the
+# `_is_juno_morning_fire=True` force-mocks from `test_serpapi_canadian_procurement`
+# and `test_canadian_procurement_section` — the SerpAPI dispatch now runs on
+# both daily fires per operator preference.
 # ---------------------------------------------------------------------------
 
 
@@ -314,11 +317,10 @@ async def test_serpapi_canadian_procurement():
         ["site:canada.ca defence", "site:war.gov defence"],
     ), patch(
         "serpapi.Client"
-    ) as MockSerp, patch(
-        # Force morning-fire path (SerpAPI dispatch) regardless of wall clock.
-        "agents.daily_summary._is_juno_morning_fire",
-        return_value=True,
-    ):
+    ) as MockSerp:
+        # CLEANUP-01 (Phase 11): SerpAPI now runs on BOTH fires (08:05 + 12:05
+        # PT) per operator preference. No need to force the morning-fire path —
+        # the procurement section dispatches SerpAPI regardless of wall clock.
         mock_client = MagicMock()
         mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
         MockClient.return_value = mock_client
@@ -356,9 +358,9 @@ async def test_canadian_procurement_section():
 
     with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
         "agents.daily_summary.AsyncAnthropic"
-    ) as MockClient, patch(
-        "agents.daily_summary._is_juno_morning_fire", return_value=True
-    ):
+    ) as MockClient:
+        # CLEANUP-01 (Phase 11): morning-fire mock no longer required —
+        # _build_juno_canadian_procurement_section runs on both fires.
         mock_client = MagicMock()
         mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
         MockClient.return_value = mock_client

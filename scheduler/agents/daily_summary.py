@@ -193,16 +193,18 @@ def _derive_period_label(now_la: datetime) -> str:
 
 
 def _is_juno_morning_fire(now_la: datetime) -> bool:
-    """Return True for the 08:05 PT Juno fire (SerpAPI runs only on this fire).
+    """Return True for the 08:05 PT Juno fire.
 
-    Per RESEARCH §Open Question 1 — SerpAPI dispatched once per day on the
-    morning fire (saves ~$2-4/mo). The 12:05 PT fire passes is_morning_fire
-    =False; the procurement section returns ('', {'skipped_reason':
-    'non_morning_fire'}, 0) so the row's `ontario_law_md` from the morning
-    fire's idempotency-window write is the source-of-truth.
+    Post-CLEANUP-01 (Phase 11, 2026-05-19): SerpAPI no longer gates on
+    morning-only — both 08:05 PT and 12:05 PT fires execute the 7
+    Canadian-procurement SerpAPI queries. This helper is retained because
+    `agent_runs.notes.is_morning_fire` is still useful diagnostic data
+    (lets dashboards distinguish the two daily fires) and the value is
+    passed through to `_build_juno_canadian_procurement_section` for
+    telemetry-only purposes.
 
-    Implemented as a module-level function so tests can monkeypatch it to
-    force the morning-fire path regardless of wall-clock time.
+    Implemented as a module-level function so tests can monkeypatch it
+    when they need to assert period-label behaviour.
     """
     return now_la.hour < 10
 
@@ -980,18 +982,17 @@ async def _build_juno_canadian_procurement_section(
     serpapi_client: "serpapi.Client | None",
     is_morning_fire: bool,
 ) -> tuple[str | None, dict, int]:
-    """Call SerpAPI for Canadian procurement queries (morning fire only) +
-    Sonnet 4.6 synthesis with refusal-guard.
+    """Call SerpAPI for Canadian procurement queries + Sonnet 4.6
+    synthesis with refusal-guard. Runs on BOTH daily fires (08:05 PT +
+    12:05 PT) per CLEANUP-01 — operator preference is a full 3-section
+    brief twice daily; budget delta ~$3/mo (210 → ~420 SerpAPI calls/mo,
+    inside the $50/mo SerpAPI cap with ~$41 headroom).
 
-    Per RESEARCH Open Question 1 — only the 08:05 PT morning fire runs
-    SerpAPI; the 12:05 PT fire passes is_morning_fire=False and the section
-    returns ('', {'skipped_reason': 'non_morning_fire'}, 0) so the caller
-    can re-use the morning fire's section via the idempotency window.
+    `is_morning_fire` is retained on the signature for telemetry
+    (`agent_runs.notes.is_morning_fire`) but no longer gates execution.
 
     Returns (markdown_or_None, diagnostic, serpapi_count).
     """
-    if not is_morning_fire:
-        return ("", {"skipped_reason": "non_morning_fire"}, 0)
     if serpapi_client is None:
         return ("", {"skipped_reason": "no_serpapi_client"}, 0)
 
@@ -1229,21 +1230,21 @@ async def run_juno_daily_summary() -> None:
     anthropic_client = AsyncAnthropic(
         api_key=settings.anthropic_api_key, timeout=JUNO_SONNET_TIMEOUT,
     )
-    # SerpAPI client: morning fire only (per RESEARCH §Open Q 1 — saves
-    # $2-4/mo by skipping 12:05 PT re-queries). Wrap instantiation in
-    # try/except so missing/invalid key on the 08:05 fire doesn't kill the
-    # whole run — section just skips with a diagnostic.
+    # SerpAPI client: instantiated on BOTH fires per CLEANUP-01. The
+    # `_build_juno_canadian_procurement_section` no longer short-circuits
+    # at noon; the only remaining skip path is "no API key configured".
+    # Wrap instantiation in try/except so missing/invalid key doesn't kill
+    # the whole run — section just skips with diagnostic 'no_serpapi_client'.
     serpapi_client: "serpapi.Client | None" = None
-    if is_morning_fire:
-        try:
-            if settings.serpapi_api_key:
-                serpapi_client = serpapi.Client(api_key=settings.serpapi_api_key)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "juno: serpapi.Client instantiation failed (%s) — section will skip",
-                type(exc).__name__,
-            )
-            serpapi_client = None
+    try:
+        if settings.serpapi_api_key:
+            serpapi_client = serpapi.Client(api_key=settings.serpapi_api_key)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "juno: serpapi.Client instantiation failed (%s) — section will skip",
+            type(exc).__name__,
+        )
+        serpapi_client = None
 
     # --- Section 1: Defence News (RSS + Sonnet) ---
     defence_entries: list[dict] = []
