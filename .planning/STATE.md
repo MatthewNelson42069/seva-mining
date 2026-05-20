@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Plan 13-01 GREEN — 4 new files + 2 modified; 168/168 frontend tests pass; zero regression; UI-SPEC verbatim consumption invariant honored
-stopped_at: Completed 13-per-company-branding/13-01-PLAN.md
-last_updated: "2026-05-20T21:00:24.719Z"
-last_activity: "2026-05-20 — Plan 13-01 landed (companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + :root.dark[data-company='juno'] CSS override + index.html title swap; commits b0edf68 + 406c8b9)"
+status: "Plan 13-02 GREEN — 2 new files + 2 modified; AppHeader registry-driven; CompanyBrandEffect mounted in :company subtree; BareRootRedirect closes TENANT-VISITED-v31-redux; 168/168 frontend tests pass; D-09 + D-10 contracts honored"
+stopped_at: Completed 13-02-PLAN.md
+last_updated: "2026-05-20T21:07:56.892Z"
+last_activity: 2026-05-20 — Plan 13-02 landed (CompanyBrandEffect.tsx + BareRootRedirect.tsx new; AppHeader.tsx + App.tsx refactored to consume registry; commits 8e346ca + 268f417 + 968ba6b; 168/168 tests pass)
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 ## Current Position
 
-Phase: Phase 13 — Per-company Branding (Wave 1 plan 13-01 GREEN; Wave 2 + Wave 3 in parallel execution by orchestrator)
-Plan: 13-01 complete → Plan 13-02 (Wave 2 — AppHeader refactor + CompanyBrandEffect + BareRootRedirect) next
-Status: Plan 13-01 GREEN — 4 new files + 2 modified; 168/168 frontend tests pass; zero regression; UI-SPEC verbatim consumption invariant honored
-Last activity: 2026-05-20 — Plan 13-01 landed (companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + :root.dark[data-company='juno'] CSS override + index.html title swap; commits b0edf68 + 406c8b9)
+Phase: Phase 13 — Per-company Branding (Waves 1 + 2 GREEN; Wave 3 — tests + visual QA — in parallel execution by orchestrator)
+Plan: 13-02 complete → Plan 13-03 (Wave 3 — extend AppHeader tests + new FOWB test file + operator visual QA) next
+Status: Plan 13-02 GREEN — 2 new files + 2 modified; AppHeader registry-driven; CompanyBrandEffect mounted in :company subtree; BareRootRedirect closes TENANT-VISITED-v31-redux; 168/168 frontend tests pass; D-09 + D-10 contracts honored
+Last activity: 2026-05-20 — Plan 13-02 landed (CompanyBrandEffect.tsx + BareRootRedirect.tsx new; AppHeader.tsx + App.tsx refactored to consume registry; commits 8e346ca + 268f417 + 968ba6b; 168/168 tests pass)
 
 ### v3.1 Roadmap Summary (created 2026-05-20)
 
@@ -161,6 +161,7 @@ Last activity: 2026-05-20 — Plan 13-01 landed (companyBrandConfig.ts registry 
 | Phase 12-per-tenant-anthropic-api-key P02 | 11min | 3 tasks | 8 files |
 | Phase 12-per-tenant-anthropic-api-key P03 | 2min | 2 tasks | 2 files |
 | Phase 13-per-company-branding P01 | 4 | 2 tasks | 6 files |
+| Phase 13 P02 | 2 | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -371,6 +372,7 @@ Recent decisions affecting current work:
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-03: Added grep scope filters (--include='*.py' --exclude-dir=__pycache__/.venv/node_modules) to verify-anthropic-resolver.sh as Rule 1 auto-fix — first dry-run hit 3 false positives (binary .pyc + vendored anthropic SDK class declarations in both backend/.venv and scheduler/.venv). Documented pattern for future grep gates on Python repos with vendored deps.
 - [Phase 12-per-tenant-anthropic-api-key]: Plan 12-03: WARNING severity chosen for per-tenant Anthropic key unset (not ERROR/INFO). Matches worker.py existing pattern for graceful-fallback-with-operator-impact misses (FRED_API_KEY, METALPRICEAPI_API_KEY) — operator-visible without breaking boot.
 - [Phase 13-per-company-branding]: Phase 13 Plan 01: Selector ':root.dark[data-company=juno]' chosen over ':root[data-company=juno]' to mirror Phase 8 .dark scoping (specificity 0,2,0 beats .dark's 0,1,0; preserves D-09 Seva zero-regression contract)
+- [Phase 13]: Wave 2: CompanyBrandEffect mounted as Fragment sibling of CompanyScopedRoute (element={<><CompanyBrandEffect /><CompanyScopedRoute /></>}) — preserves SRP split between brand effect and route guard
 
 ### Pending Todos
 
@@ -451,9 +453,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T21:00:24.713Z
+Last session: 2026-05-20T21:07:53.638Z
 Last activity: 2026-05-20
-Stopped At: Completed 13-per-company-branding/13-01-PLAN.md
+Stopped At: Completed 13-02-PLAN.md
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
