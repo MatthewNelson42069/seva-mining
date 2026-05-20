@@ -72,7 +72,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 **Ordering rationale:** Phase 12 (per-tenant Anthropic key) lands first — smallest scope, pure plumbing, unblocks cost-attribution for every downstream Juno LLM call (calendar drafting if any, sweeper Sonnet synthesis). Phase 13 (branding) lands second — visual identity arrives before the operator sees the new Juno tabs, so v3.1's mid-milestone state is "Juno feels like Juno even though Tabs 2/3 are still placeholder," not "Juno has new features but still wears Seva's wordmark." Phase 14 (Calendar Tab 2) lands third — port of v2.1 Phase 6 with minimal new logic; Phase 9's `scoped_*()` + `/api/{company}/calendar` scaffolding is already in place. Phase 15 (Sweeper Tab 3) lands last — most complex (defence-sector X queries TBD, Sunday 08:00 PT cron at reserved lock 1021, Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause from Phase 10 D-01); benefits from Phase 12's per-tenant key already being production-tested before Juno Sonnet costs hit a dedicated Juno API account.
 
 - [x] **Phase 12: Per-tenant Anthropic API Key** — Resolver + grep gate + Railway env wiring; `get_anthropic_client(company_id)` falls back to shared `ANTHROPIC_API_KEY` when per-tenant unset; all call sites routed through resolver (KEY-01..04) (completed 2026-05-20)
-- [ ] **Phase 13: Per-company Branding** — Juno wordmark + logo + color palette via `companyBrandConfig.ts` registry pattern (extends Phase 9 D-08 `companySectionConfig.ts` precedent); no `if (company === 'juno')` branches; CI grep gate (BRAND-01..05)
+- [x] **Phase 13: Per-company Branding** — Juno wordmark + logo + color palette via `companyBrandConfig.ts` registry pattern (extends Phase 9 D-08 `companySectionConfig.ts` precedent); no `if (company === 'juno')` branches; CI grep gate (BRAND-01..05) — 3/3 plans complete; 175/175 frontend tests; operator visual QA 10/10 PASS; TENANT-VISITED-v31-redux closed
 - [ ] **Phase 14: Juno Content Calendar (Tab 2)** — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD over Juno's `calendar_items` rows via existing `scoped_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests (JCAL-01..05)
 - [ ] **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** — Sunday 08:00 PT APScheduler cron at lock 1021; defence-sector X queries via `tweepy.AsyncClient.search_recent_tweets`; virality compute over Juno's `daily_summaries.raw_sources_jsonb`; Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; Tab 3 render (JSWEEP-01..06)
 
@@ -197,12 +197,12 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 4. Adding a hypothetical third tenant (e.g., `'acme'`) requires editing exactly one file (`companyBrandConfig.ts`) + adding two assets (logo SVG + favicon PNG); zero component edits needed — verified by a doc-comment example in the registry file plus a smoke test scenario in `branding.test.tsx`
 5. Full regression suites GREEN — frontend `vitest` stays at 168+ pass + the new branding scenario tests; backend + scheduler untouched
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 13-01-PLAN.md — Foundation: companyBrandConfig.ts registry + useCompanyBrand.ts hook + 2 favicon SVGs + index.css :root.dark[data-company='juno'] override + index.html title fix
 - [x] 13-02-PLAN.md — Consumers: CompanyBrandEffect.tsx side-effect component + AppHeader.tsx refactor to consume hook + BareRootRedirect (TENANT-VISITED-v31-redux) + App.tsx wiring
-- [ ] 13-03-PLAN.md — Tests + verification: extend AppHeader.test.tsx with 2 Juno tests + new AppHeader.brand.test.tsx with 5 FOWB/cleanup tests + D-10 grep gate + operator visual QA checkpoint
+- [x] 13-03-PLAN.md — Tests + verification: extended AppHeader.test.tsx with 2 Juno tests + new AppHeader.brand.test.tsx with 5 FOWB/cleanup tests + D-10 grep gates (Gate A 0 hits in components; Gate B 1 documented registry-internal quirk) + operator visual QA 10/10 PASS at 1440x900
 
 
 **Complexity:** M (more touch points than Phase 12; light-touch but spread across 5-7 frontend files + new registry + new test file + CSS token plumbing; operator design input required for color palette)
@@ -404,7 +404,7 @@ Plans:
 | 10. Juno Defence News Funnel | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 5/5 | Complete | 2026-05-20 |
 | 12. Per-tenant Anthropic API Key | v3.1 | 3/3 | Complete   | 2026-05-20 |
-| 13. Per-company Branding | v3.1 | 2/3 | In Progress|  |
+| 13. Per-company Branding | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 0/? | Pending | - |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 0/? | Pending | - |
 

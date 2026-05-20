@@ -35,7 +35,7 @@ Defence-sector parallel to Seva's v2.1 Phase 7 sweeper. Lock slot `juno_weekly_s
 - [x] **BRAND-01**: User on any `/juno/*` route sees "Juno Industries" in the `AppHeader` wordmark slot (currently shows "Seva Mining"). User on any `/seva/*` route continues to see "Seva Mining" — zero regression from v3.0.
 - [x] **BRAND-02**: User on `/juno/*` sees a Juno-specific color palette resolved through CSS tokens (`--color-brand-accent[-hover/-subtle]` per Phase 8 UI-01..04 pattern). Juno's palette is defence-industry appropriate — subdued / authoritative / not-Seva's-amber. Specific palette values defined during discuss-phase (candidates: navy / slate / desaturated steel-blue / muted-bronze).
 - [x] **BRAND-03**: User on `/juno/*` sees a Juno-specific brand icon (logo) in `AppHeader`'s left-most slot. Juno logo asset stored at `frontend/public/brand/juno-icon.svg` (or analogous), Seva remains `seva-icon.svg`. Logo resolution driven by `:company` URL segment via the brand registry.
-- [ ] **BRAND-04**: User switches Seva → Juno via `CompanySwitcher`; wordmark + logo + accent color all flip simultaneously on route change, no flash-of-wrong-brand (FOWB) during transition. Verified by single-test scenario: route from `/seva/` to `/juno/`, assert no intermediate state.
+- [x] **BRAND-04**: User switches Seva → Juno via `CompanySwitcher`; wordmark + logo + accent color all flip simultaneously on route change, no flash-of-wrong-brand (FOWB) during transition. Verified by single-test scenario: route from `/seva/` to `/juno/`, assert no intermediate state.
 - [x] **BRAND-05**: All brand resolution is config-driven, not component-branching. Grep for `company === 'juno'` or `company === 'seva'` inside `frontend/src/components/` returns zero hits in any `Brand*` / `AppHeader*` / `TabbedDashboard*` file (CI grep gate added if needed). The pattern is: components read `useCompanyBrand()` (or analogous hook) which consults `companyBrandConfig.ts`. Adding a future tenant requires only a registry entry.
 
 ### Per-tenant Anthropic API Key (KEY)
@@ -92,7 +92,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 | BRAND-01 | Phase 13 | Complete |
 | BRAND-02 | Phase 13 | Complete |
 | BRAND-03 | Phase 13 | Complete |
-| BRAND-04 | Phase 13 | Pending |
+| BRAND-04 | Phase 13 | Complete |
 | BRAND-05 | Phase 13 | Complete |
 | JCAL-01 | Phase 14 | Pending |
 | JCAL-02 | Phase 14 | Pending |
