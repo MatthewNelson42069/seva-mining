@@ -209,3 +209,260 @@ async def test_run_juno_daily_summary_idempotency(caplog):
         f"Idempotency violation: DailySummary row added despite recent row; "
         f"got {len(summary_rows)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 Wave 0 RED tests — Wave 2 (10-03-PLAN.md) lands the real
+# synthesis path and removes the per-function pytest.skip() lines below.
+#
+# Each test body is COMPLETE — Wave 2 only deletes the skip line to turn
+# the test GREEN. Per-function skip (rather than module-level) preserves
+# the Phase 9 GREEN tests above.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_defence_news_section():
+    """Wave 2 (10-03-PLAN.md): JUNO_DEFENCE_FEEDS → Sonnet → 3 bullets in gold_news_md."""
+    pytest.skip(
+        "Defence News real-synthesis path lands in Wave 2 (10-03-PLAN.md). "
+        "Remove this skip line in that wave's task to turn the test GREEN."
+    )
+
+    from agents.daily_summary import run_juno_daily_summary
+    from models.daily_summary import DailySummary
+
+    # Mock 5 fake feed entries
+    fake_entries = [
+        MagicMock(
+            title=f"Defence story {i}",
+            link=f"https://example.com/{i}",
+            summary=f"snippet {i}",
+        )
+        for i in range(5)
+    ]
+    fake_feed = MagicMock(bozo=0, entries=fake_entries)
+
+    expected_md = (
+        "### 🛡️ Defence News\n"
+        "- Item 1 (Defense News)\n"
+        "- Item 2 (Breaking Defense)\n"
+        "- Item 3 (DefenseScoop)\n"
+    )
+    sonnet_resp = MagicMock()
+    sonnet_resp.content = [MagicMock(text=expected_md)]
+
+    factory, _session, added_rows, _agent_run = _mock_session_factory(
+        idempotency_returns_existing=False
+    )
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
+        "feedparser.parse", return_value=fake_feed
+    ), patch(
+        "agents.daily_summary.AsyncAnthropic"
+    ) as MockClient, patch(
+        "companies.juno.feeds.JUNO_DEFENCE_FEEDS",
+        [(f"src{i}", f"https://example.com/feed{i}") for i in range(5)],
+    ):
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
+        MockClient.return_value = mock_client
+        await run_juno_daily_summary()
+
+    summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
+    assert len(summary_rows) == 1
+    assert summary_rows[0].gold_news_md is not None
+    assert "Defence News" in summary_rows[0].gold_news_md
+    assert summary_rows[0].gold_news_md.count("\n- ") >= 3
+
+
+@pytest.mark.asyncio
+async def test_serpapi_canadian_procurement():
+    """Wave 2 (10-03-PLAN.md): SerpAPI hits flow into ontario_law_md."""
+    pytest.skip(
+        "Canadian Procurement SerpAPI path lands in Wave 2 (10-03-PLAN.md). "
+        "Remove this skip line in that wave's task to turn the test GREEN."
+    )
+
+    from agents.daily_summary import run_juno_daily_summary
+    from models.daily_summary import DailySummary
+
+    fake_hits = [
+        {"title": f"Canadian DND contract {i}", "link": f"https://canada.ca/{i}"}
+        for i in range(3)
+    ]
+    serpapi_resp = MagicMock()
+    serpapi_resp.get_dict = MagicMock(return_value={"news_results": fake_hits})
+
+    expected_md = (
+        "### 🇨🇦 Canadian Procurement\n"
+        "- DND awards $200M contract (SerpAPI)\n"
+        "- PSPC announces vendor list (SerpAPI)\n"
+        "- RCAF procurement notice (SerpAPI)\n"
+    )
+    sonnet_resp = MagicMock()
+    sonnet_resp.content = [MagicMock(text=expected_md)]
+
+    factory, _session, added_rows, _agent_run = _mock_session_factory(
+        idempotency_returns_existing=False
+    )
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
+        "agents.daily_summary.AsyncAnthropic"
+    ) as MockClient, patch(
+        "companies.juno.serpapi.JUNO_SERPAPI_QUERIES",
+        ["site:canada.ca defence", "site:war.gov defence"],
+    ), patch(
+        "serpapi.Client"
+    ) as MockSerp:
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
+        MockClient.return_value = mock_client
+        MockSerp.return_value.search = MagicMock(return_value=serpapi_resp)
+        await run_juno_daily_summary()
+
+    summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
+    assert len(summary_rows) == 1
+    assert summary_rows[0].ontario_law_md is not None
+    assert "Canadian Procurement" in summary_rows[0].ontario_law_md
+    assert summary_rows[0].ontario_law_md.count("\n- ") >= 3
+
+
+@pytest.mark.asyncio
+async def test_canadian_procurement_section():
+    """Wave 2 (10-03-PLAN.md): end-to-end Canadian Procurement section write."""
+    pytest.skip(
+        "Canadian Procurement end-to-end path lands in Wave 2 (10-03-PLAN.md). "
+        "Remove this skip line in that wave's task to turn the test GREEN."
+    )
+
+    from agents.daily_summary import run_juno_daily_summary
+    from models.daily_summary import DailySummary
+
+    sonnet_resp = MagicMock()
+    sonnet_resp.content = [
+        MagicMock(
+            text=(
+                "### 🇨🇦 Canadian Procurement\n"
+                "- DND signs $1B Boeing contract (Canada.ca)\n"
+                "- PSPC vendor list update (canadiandefencereview.com)\n"
+                "- Lagassé commentary on NORAD modernization (Substack)\n"
+            )
+        )
+    ]
+
+    factory, _session, added_rows, _agent_run = _mock_session_factory(
+        idempotency_returns_existing=False
+    )
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
+        "agents.daily_summary.AsyncAnthropic"
+    ) as MockClient:
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
+        MockClient.return_value = mock_client
+        await run_juno_daily_summary()
+
+    summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
+    assert len(summary_rows) == 1
+    assert summary_rows[0].ontario_law_md is not None
+    assert "Canadian Procurement" in summary_rows[0].ontario_law_md
+    # Verify structured-bullets format
+    assert "- " in summary_rows[0].ontario_law_md
+
+
+@pytest.mark.asyncio
+async def test_world_events_section_with_haiku_filter():
+    """Wave 2 (10-03-PLAN.md): Haiku classifier filter → Sonnet → ontario_stats_md."""
+    pytest.skip(
+        "World Events Haiku filter path lands in Wave 2 (10-03-PLAN.md). "
+        "Remove this skip line in that wave's task to turn the test GREEN."
+    )
+
+    from agents.daily_summary import run_juno_daily_summary
+    from agents.juno_relevance import DefenceRelevance
+    from models.daily_summary import DailySummary
+
+    # 10 fake world-news entries
+    fake_entries = [
+        MagicMock(
+            title=f"World event {i}",
+            link=f"https://reuters.com/{i}",
+            summary=f"world snippet {i}",
+        )
+        for i in range(10)
+    ]
+    fake_feed = MagicMock(bozo=0, entries=fake_entries)
+
+    # 4 above threshold, 6 below
+    classifier_results = [
+        DefenceRelevance(
+            is_relevant=True if i < 4 else False,
+            category="active_conflict" if i < 4 else "not_relevant",
+            confidence=0.85 if i < 4 else 0.5,
+            reasoning=f"reason {i}",
+        )
+        for i in range(10)
+    ]
+
+    expected_md = (
+        "### 🌐 World Events Relevant to Defence\n"
+        "- Event 1 (Reuters)\n"
+        "- Event 2 (Reuters)\n"
+        "- Event 3 (Reuters)\n"
+        "- Event 4 (Reuters)\n"
+    )
+    sonnet_resp = MagicMock()
+    sonnet_resp.content = [MagicMock(text=expected_md)]
+
+    factory, _session, added_rows, _agent_run = _mock_session_factory(
+        idempotency_returns_existing=False
+    )
+
+    classifier_responses = [
+        MagicMock(parsed_output=r) for r in classifier_results
+    ]
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
+        "feedparser.parse", return_value=fake_feed
+    ), patch(
+        "agents.daily_summary.AsyncAnthropic"
+    ) as MockClient:
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock(return_value=sonnet_resp)
+        mock_client.messages.parse = AsyncMock(side_effect=classifier_responses)
+        MockClient.return_value = mock_client
+        await run_juno_daily_summary()
+
+    summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
+    assert len(summary_rows) == 1
+    assert summary_rows[0].ontario_stats_md is not None
+    assert "World Events" in summary_rows[0].ontario_stats_md
+    # Only 4 above-threshold entries should appear
+    assert summary_rows[0].ontario_stats_md.count("\n- ") == 4
+
+
+@pytest.mark.asyncio
+async def test_idempotency_window_with_partial():
+    """Wave 2 (10-03-PLAN.md): second call within 30 min returns without writing duplicate."""
+    pytest.skip(
+        "Partial-row idempotency assertion locked in Wave 2 (10-03-PLAN.md) "
+        "alongside real synthesis. Remove this skip line in that wave's task."
+    )
+
+    from agents.daily_summary import run_juno_daily_summary
+    from models.agent_run import AgentRun
+    from models.daily_summary import DailySummary
+
+    # Idempotency returns existing partial row → no new write
+    factory, _session, added_rows, _agent_run = _mock_session_factory(
+        idempotency_returns_existing=True
+    )
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory):
+        await run_juno_daily_summary()
+
+    agent_run_rows = [r for r in added_rows if isinstance(r, AgentRun)]
+    summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
+    assert len(agent_run_rows) == 0
+    assert len(summary_rows) == 0
