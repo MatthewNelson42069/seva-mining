@@ -120,7 +120,15 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 4. Full regression suites GREEN — scheduler `pytest` stays at 331+ pass (zero regressions from Phase 11 baseline); backend at 184+; frontend untouched at 168
 5. Operator can roll back per-tenant key by unsetting both `SEVA_ANTHROPIC_API_KEY` + `JUNO_ANTHROPIC_API_KEY` in Railway env vars — next cron fires fall back to shared `ANTHROPIC_API_KEY` with no redeploy required (mirrors `JUNO_CRON_ENABLED` rollback precedent from Phase 10)
 
-**Plans:** TBD (planner decomposition pending)
+**Plans:** 3 plans across 3 waves (planned 2026-05-20)
+- [ ] 12-01-PLAN.md — Wave 1 — Resolver module (`scheduler/anthropic_client.py`) + Settings fields (`seva_anthropic_api_key`, `juno_anthropic_api_key`, `anthropic_resolver_strict`) + 5+ unit tests (KEY-01, KEY-02, KEY-04)
+- [ ] 12-02-PLAN.md — Wave 2 — Refactor 4 production sites (`daily_summary.py` ×2, `weekly_sweeper.py`, `content_agent.py::_do_fetch`) + 1 UAT script (`scripts/uat_voice_calibration.py`) through resolver; surgically excise 3 dead functions from `content_agent.py` (`check_compliance`, `is_gold_relevant_or_systemic_shock`, `review`) + their tests (KEY-01, KEY-03)
+- [ ] 12-03-PLAN.md — Wave 3 — CI grep gate (`scripts/verify-anthropic-resolver.sh`) mirroring `verify-tenant-isolation.sh` pattern + extend `scheduler/worker.py::_validate_env` to log per-tenant key + STRICT-mode status at boot (KEY-03, KEY-04)
+
+**Planner deviations from CONTEXT.md (documented in 12-02-PLAN.md objective):**
+- `content_agent.py:1108` reclassified from "dead" to LIVE refactor target (inside `_do_fetch` → `fetch_stories()` LIVE export)
+- `scheduler/scripts/uat_voice_calibration.py:377` added as 4th refactor target (not in CONTEXT.md's D-09 enumeration; surfaced by broader scheduler-wide grep)
+- Net effect: 4 refactored sites + 1 UAT script + 3 dead functions deleted (`check_compliance`, `is_gold_relevant_or_systemic_shock`, `review`); CONTEXT D-09 said "3 refactor + 3 dead delete" — final count is "4 refactor + 1 UAT refactor + 3 dead delete"; grep gate result identical to CONTEXT intent: zero `AsyncAnthropic(` outside resolver
 
 **Complexity:** S (pure plumbing — single new module, ~5 call-site edits, one grep gate, no schema changes, no UI work)
 **Estimated duration:** 1-2 hours
