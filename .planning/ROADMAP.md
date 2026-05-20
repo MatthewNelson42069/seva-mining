@@ -120,8 +120,8 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 4. Full regression suites GREEN — scheduler `pytest` stays at 331+ pass (zero regressions from Phase 11 baseline); backend at 184+; frontend untouched at 168
 5. Operator can roll back per-tenant key by unsetting both `SEVA_ANTHROPIC_API_KEY` + `JUNO_ANTHROPIC_API_KEY` in Railway env vars — next cron fires fall back to shared `ANTHROPIC_API_KEY` with no redeploy required (mirrors `JUNO_CRON_ENABLED` rollback precedent from Phase 10)
 
-**Plans:** 3 plans across 3 waves (planned 2026-05-20)
-- [ ] 12-01-PLAN.md — Wave 1 — Resolver module (`scheduler/anthropic_client.py`) + Settings fields (`seva_anthropic_api_key`, `juno_anthropic_api_key`, `anthropic_resolver_strict`) + 5+ unit tests (KEY-01, KEY-02, KEY-04)
+**Plans:** 1/3 plans executed
+- [x] 12-01-PLAN.md — Wave 1 — Resolver module (`scheduler/anthropic_client.py`) + Settings fields (`seva_anthropic_api_key`, `juno_anthropic_api_key`, `anthropic_resolver_strict`) + 5+ unit tests (KEY-01, KEY-02, KEY-04)
 - [ ] 12-02-PLAN.md — Wave 2 — Refactor 4 production sites (`daily_summary.py` ×2, `weekly_sweeper.py`, `content_agent.py::_do_fetch`) + 1 UAT script (`scripts/uat_voice_calibration.py`) through resolver; surgically excise 3 dead functions from `content_agent.py` (`check_compliance`, `is_gold_relevant_or_systemic_shock`, `review`) + their tests (KEY-01, KEY-03)
 - [ ] 12-03-PLAN.md — Wave 3 — CI grep gate (`scripts/verify-anthropic-resolver.sh`) mirroring `verify-tenant-isolation.sh` pattern + extend `scheduler/worker.py::_validate_env` to log per-tenant key + STRICT-mode status at boot (KEY-03, KEY-04)
 
@@ -397,7 +397,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 | 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 10. Juno Defence News Funnel | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 11. v3.0 Audit Cleanup Bundle | v3.0.1 | 5/5 | Complete | 2026-05-20 |
-| 12. Per-tenant Anthropic API Key | v3.1 | 0/? | Pending | - |
+| 12. Per-tenant Anthropic API Key | v3.1 | 1/3 | In Progress|  |
 | 13. Per-company Branding | v3.1 | 0/? | Pending | - |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 0/? | Pending | - |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 0/? | Pending | - |

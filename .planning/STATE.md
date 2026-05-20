@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Phase 12 context gathered — ready to plan
-stopped_at: Phase 12 (Per-tenant Anthropic API Key) discuss-phase complete. 9 decisions locked across 4 gray areas (fallback policy, strict mode, verification approach, dead-code handling, call-site signature). Context captured at .planning/phases/12-per-tenant-anthropic-api-key/12-CONTEXT.md. Next step → `/gsd:plan-phase 12` (or `/clear` first for fresh context window).
-last_updated: "2026-05-20T19:00:00.000Z"
-last_activity: 2026-05-20
+status: Roadmap created; phases 12-15 pending
+stopped_at: Completed 12-01-PLAN.md — resolver module + Settings fields + 5 unit tests landed. Plans 12-02 and 12-03 unblocked.
+last_updated: "2026-05-20T19:17:50.726Z"
+last_activity: 2026-05-20 — Roadmap created (20 v3.1 requirements mapped to Phases 12-15)
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
 ---
 
 # Project State
@@ -157,6 +157,7 @@ Last activity: 2026-05-20 — Roadmap created (20 v3.1 requirements mapped to Ph
 | Phase 11-audit-cleanup-bundle P4 | 1min | 1 tasks | 2 files |
 | Phase 11 P02 | 1 | 1 tasks | 1 files |
 | Phase 11 P1 | 10 | 2 tasks | 2 files |
+| Phase 12 P01 | 3 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -357,6 +358,10 @@ Recent decisions affecting current work:
 - [Phase 10-juno-defence-news-funnel]: Phase 10 close — FINAL phase of v3.0 milestone (TENANT-01..10 from Phase 9 + DEF-01..10 from Phase 10). Production Juno cron operationally enabled in local-dev; Railway env-var flip is sole remaining operator action before next 08:05 PT slot fires real Juno daily summary against production DB. Two deferred observations carried to v3.0.1+: (a) corpus-bounded bullet-count assertion in next 2-3 production smokes against live substrate; (b) Skydio Pydantic ValidationError fail-closed silently — unit test + Haiku temperature tuning. Operator separately rotating dev-scoped ANTHROPIC_API_KEY (chat transcript exposure — NOT part of this plan).
 - [Phase 11]: CLEANUP-02 (plan 11-02): Refreshed 7 DEF-01..07 traceability rows in archived milestones/v3.0-REQUIREMENTS.md from 'Scaffolded' to 'Complete (2026-05-19, plan 10-02 / 10-03 — <evidence>)' mirroring DEF-08..10 prose. Pure docs edit; 7+/7- diff scope; grep -c 'Scaffolded' returns 0.
 - [Phase 11]: 11-01 (CLEANUP-01): atomic co-commit pattern landed — production gate-removal + test refresh in commit 1e2c03f; both Juno fires (08:05 + 12:05 PT) now run the 7 Canadian-procurement SerpAPI queries; budget ~$5.25/mo → ~$8-9/mo, inside $50/mo cap. is_morning_fire param retained on signature for telemetry only.
+- [Phase 12]: Key fingerprint format = last-8-chars of raw API key (operator-friendly, matches Anthropic console truncation)
+- [Phase 12]: Stdlib logger (not structlog) for resolver — scheduler-wide convention preserved
+- [Phase 12]: Module-level dict cache (not functools.lru_cache) so tests can reset state directly via autouse fixture
+- [Phase 12]: _log_call omits model field — resolver does not know caller's model choice at resolve-time (documented CONTEXT D-03 deviation)
 
 ### Pending Todos
 
@@ -437,9 +442,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T18:30:00.000Z
+Last session: 2026-05-20T19:17:50.720Z
 Last activity: 2026-05-20
-Stopped At: v3.1 roadmap created. ROADMAP.md updated with Phase 12-15 detail blocks (Per-tenant Anthropic API Key, Per-company Branding, Juno Content Calendar, Juno Weekly Viral Sweeper). REQUIREMENTS.md traceability table updated — all 20 v3.1 requirements mapped to phases (KEY → 12, BRAND → 13, JCAL → 14, JSWEEP → 15). Progress table extended with rows 12-15 Pending. Next step → `/gsd:plan-phase 12` to decompose KEY-01..04 into executable plans (smallest phase, pure plumbing; expected 1-2 hr).
+Stopped At: Completed 12-01-PLAN.md — resolver module + Settings fields + 5 unit tests landed. Plans 12-02 and 12-03 unblocked.
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
