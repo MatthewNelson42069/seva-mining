@@ -812,19 +812,6 @@ async def run_daily_summary() -> None:
             logger.exception("daily_summary agent_runs telemetry update failed")
 
 
-# ---------------------------------------------------------------------------
-# v3.0 Phase 9 — Juno daily_summary stub entry point (TENANT-08).
-#
-# Registered as an APScheduler job in scheduler/worker.py at
-# CronTrigger(hour="8,12", minute=5, timezone="America/Los_Angeles") — 5-min
-# stagger from the Seva run_daily_summary() above (D-01a). Writes a
-# status='partial' daily_summaries row with all section markdown NULL so the
-# Juno tab in the v3.0 dashboard renders an empty-state. Phase 10 (DEF-01..10)
-# replaces this stub with the real Defence-News Funnel pipeline (Canadian
-# procurement contracts + defence-industry headlines + Sonnet synthesis).
-# ---------------------------------------------------------------------------
-
-
 async def _fetch_7day_avg_for_feed(
     session: AsyncSession, source_name: str
 ) -> float:
