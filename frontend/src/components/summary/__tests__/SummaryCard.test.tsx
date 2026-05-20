@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
 import type { SummaryCard as SummaryCardData } from '@/api/summaries'
+import { companySectionConfig } from '@/config/companySectionConfig'
 import { SummaryCard } from '../SummaryCard'
 
 function makeSummary(overrides: Partial<SummaryCardData> = {}): SummaryCardData {
@@ -78,5 +80,98 @@ describe('SummaryCard', () => {
     const leadH2 = Array.from(h2Elements).find(el => el.textContent === 'Lead')
     expect(leadH2).toBeTruthy()
     expect(container.querySelector('li')?.textContent).toBe('one')
+  })
+})
+
+/**
+ * Phase 10 DEF-08 RED test block — per-tenant section title rendering.
+ *
+ * Wave 0 (10-01-PLAN.md, this commit) lands `companySectionConfig.ts` as
+ * production code; Wave 3 (10-04-PLAN.md) wires `useParams<{company}>()`
+ * into `SummaryCard.tsx` and renders sections via
+ * `companySectionConfig[company].map(...)`. Once that lands, flip
+ * `describe.skip` → `describe` to turn this block GREEN.
+ *
+ * The `companySectionConfig` import above runs at type-check time even
+ * while skipped — catches mis-spelled field names or broken module path
+ * before Wave 3 executes.
+ */
+describe.skip('per-tenant section titles (DEF-08 — Wave 3 in 10-04-PLAN.md)', () => {
+  function renderAtRoute(route: string, summary: SummaryCardData) {
+    return render(
+      <MemoryRouter initialEntries={[route]}>
+        <Routes>
+          <Route path=":company/*" element={<SummaryCard summary={summary} />} />
+        </Routes>
+      </MemoryRouter>
+    )
+  }
+
+  it('renders Seva titles when route is /seva/', () => {
+    // companySectionConfig sanity — ensures the import resolves at type-check time
+    expect(companySectionConfig.seva).toHaveLength(3)
+
+    const summary = makeSummary({
+      gold_news_md: '## Lead\n\n* gold one\n',
+      ontario_law_md: '## Law\n\n* ont one\n',
+      ontario_stats_md: '## Stats\n\n* stat one\n',
+    })
+    renderAtRoute('/seva/', summary)
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Gold News' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Ontario Law' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Ontario Stats' })).toBeInTheDocument()
+    // Juno titles must NOT appear at /seva/
+    expect(screen.queryByText('Defence News')).toBeNull()
+    expect(screen.queryByText('Canadian Procurement')).toBeNull()
+  })
+
+  it('renders Juno titles when route is /juno/', () => {
+    expect(companySectionConfig.juno).toHaveLength(3)
+
+    const summary = makeSummary({
+      gold_news_md: '## Lead\n\n* defence one\n',
+      ontario_law_md: '## Law\n\n* cp one\n',
+      ontario_stats_md: '## Stats\n\n* world one\n',
+    })
+    renderAtRoute('/juno/', summary)
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Defence News' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'Canadian Procurement' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        level: 3,
+        name: 'World Events Relevant to Defence',
+      })
+    ).toBeInTheDocument()
+    // Seva titles must NOT appear at /juno/
+    expect(screen.queryByText('Gold News')).toBeNull()
+    expect(screen.queryByText('Ontario Law')).toBeNull()
+    expect(screen.queryByText('Ontario Stats')).toBeNull()
+  })
+
+  it('renders Juno empty-fallback copy when content is null', () => {
+    const summary = makeSummary({
+      gold_news_md: null,
+      ontario_law_md: null,
+      ontario_stats_md: null,
+    })
+    renderAtRoute('/juno/', summary)
+
+    expect(
+      screen.getByText(/No major defence-industry moves for this window/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/No new Canadian defence procurement signals today/i)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /No defence-relevant world events met the relevance threshold today/i
+      )
+    ).toBeInTheDocument()
+    // Seva fallback copy must NOT appear at /juno/
+    expect(screen.queryByText(/No major moves in gold for this window/i)).toBeNull()
   })
 })
