@@ -37,7 +37,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 
 ### v3.0 — Multi-Tenant Dashboards (Juno Industries Onboarding)
 
-- [x] **Phase 9: Multi-Tenant Foundation** — Atomic deploy adding row-level `company_id` to the 3 multi-tenant tables, `scoped_*()` query helpers, `/api/{company}` router prefix, `/:company/` frontend routing, AppHeader/CompanyBar switcher, TanStack key factory, per-company cron fan-out (juno path wired as stub) — `/seva/*` byte-equivalent to v2.1; `/juno/*` empty-state (completed 2026-05-19, pending verification)
+- [x] **Phase 9: Multi-Tenant Foundation** — Atomic deploy adding row-level `company_id` to the 3 multi-tenant tables, `scoped_*()` query helpers, `/api/{company}` router prefix, `/:company/` frontend routing, AppHeader/CompanyBar switcher, TanStack key factory, per-company cron fan-out (juno path wired as stub) — `/seva/*` byte-equivalent to v2.1; `/juno/*` empty-state (completed 2026-05-19, verifier 10/10 passed)
 - [ ] **Phase 10: Juno Defence News Funnel** — Config-only after Phase 9: defence Tier-1 RSS feeds + SerpAPI fallback for paywalled sources + Canadian-procurement queries + defence Sonnet 4.6 system prompt (designed from scratch) + Haiku 4.5 world-events relevance classifier + refusal-detector + voice-calibration UAT — Tab 1 of `/juno/` renders live defence/procurement/world-events summary
 
 ---
@@ -502,7 +502,7 @@ Plans:
 | 6. Content Calendar | v2.1 | 5/5 | Complete | 2026-05-19 |
 | 7. Weekly Viral Sweeper | v2.1 | 6/6 | Complete | 2026-05-19 |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 4/4 | Complete | 2026-05-19 |
-| 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete pending verification | 2026-05-19 |
+| 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete | 2026-05-19 |
 | 10. Juno Defence News Funnel | v3.0 | 0/? | Not started | - |
 
 ---
