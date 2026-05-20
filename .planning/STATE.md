@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: verifying
-stopped_at: Completed 14-01-PLAN.md — Juno content calendar gate removal; 4 tasks committed (1ec09ae feat, 75a3039 test, 6c7674d test, f063426 docs); frontend 178/178 + backend 188/188 GREEN; D-07 zero-regression preserved; ready for phase-14 verifier
-last_updated: "2026-05-20T22:25:20.752Z"
-last_activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
+status: Phase 15 context gathered — ready to ui-phase or plan-phase
+stopped_at: Phase 15 (Juno Weekly Viral Sweeper) discuss-phase complete 2026-05-20. 10 decisions locked across 4 gray areas. THE BIG decision (defence-sector X queries) resolved with starter handle set (RUSI/CSIS/IISS/DefenseNews/BreakingDefense/DefenseScoop/JanesIntel/CDA_CDAI/canadaforces + #defence #NATO; cashtags EXCLUDED per anti-feature). New module `scheduler/agents/juno_weekly_sweeper.py` parallel to Phase 10 pattern. New `JUNO_SWEEPER_SYSTEM_PROMPT` in juno/prompts.py with Janes/CSIS voice + verbatim anti-tactical clause from Phase 10. Refusal-detector reused verbatim. Virality compute over 3-sub-array union (defence_news + canadian_procurement + world_events). Mirror Phase 10 operator rollout: deploy disabled → smoke fire → voice UAT → flip JUNO_SWEEPER_CRON_ENABLED. Frontend short-circuit removal at WeeklyViralSweeperPage.tsx:48-56 (mirrors Phase 14). Zero Seva-side changes (D-10). Next step → `/gsd:plan-phase 15` (or `/gsd:ui-phase 15` if you want a formal Tab 3 design contract).
+last_updated: "2026-05-21T01:00:00.000Z"
+last_activity: 2026-05-20 — Phase 15 discuss-phase complete; 10 decisions locked; largest v3.1 phase scoped; operator voice UAT precedent from Phase 10 mirrored
 progress:
   total_phases: 4
   completed_phases: 3
