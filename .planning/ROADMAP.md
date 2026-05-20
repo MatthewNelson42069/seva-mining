@@ -5,7 +5,7 @@
 - ✅ **v1.0.1 — Approval Dashboard (deprecated by v2.0 pivot)** — Phases 1-11, shipped 2026-04-25 → archive: [`milestones/v1.0.1/ROADMAP.md`](milestones/v1.0.1/ROADMAP.md)
 - ✅ **v2.0 — Daily Summary Feed** — Phases 1-4 (reset numbering), shipped 2026-05-06 → archive: [`milestones/v2.0-ROADMAP.md`](milestones/v2.0-ROADMAP.md)
 - ✅ **v2.1 — Three-Tab Content Engine + UI Polish** — Phases 5-8 (project-wide counter continues), shipped 2026-05-19
-- 🚧 **v3.0 — Multi-Tenant Dashboards (Juno Industries Onboarding)** — Phases 9-10 (project-wide counter continues), initiated 2026-05-19
+- ✅ **v3.0 — Multi-Tenant Dashboards (Juno Industries Onboarding)** — Phases 9-10 (project-wide counter continues), shipped 2026-05-19 (pending Phase 10 verifier final regression gate)
 
 ## Phases
 
@@ -38,7 +38,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 ### v3.0 — Multi-Tenant Dashboards (Juno Industries Onboarding)
 
 - [x] **Phase 9: Multi-Tenant Foundation** — Atomic deploy adding row-level `company_id` to the 3 multi-tenant tables, `scoped_*()` query helpers, `/api/{company}` router prefix, `/:company/` frontend routing, AppHeader/CompanyBar switcher, TanStack key factory, per-company cron fan-out (juno path wired as stub) — `/seva/*` byte-equivalent to v2.1; `/juno/*` empty-state (completed 2026-05-19, verifier 10/10 passed)
-- [ ] **Phase 10: Juno Defence News Funnel** — Config-only after Phase 9: defence Tier-1 RSS feeds + SerpAPI fallback for paywalled sources + Canadian-procurement queries + defence Sonnet 4.6 system prompt (designed from scratch) + Haiku 4.5 world-events relevance classifier + refusal-detector + voice-calibration UAT — Tab 1 of `/juno/` renders live defence/procurement/world-events summary
+- [x] **Phase 10: Juno Defence News Funnel** — Config-only after Phase 9: defence Tier-1 RSS feeds + SerpAPI fallback for paywalled sources + Canadian-procurement queries + defence Sonnet 4.6 system prompt (designed from scratch) + Haiku 4.5 world-events relevance classifier + refusal-detector + voice-calibration UAT — Tab 1 of `/juno/` renders live defence/procurement/world-events summary (completed 2026-05-19; all DEF-01..10 closed end-to-end; production cron operational pending Railway env-var flip; FINAL phase of v3.0)
 
 ---
 
@@ -509,7 +509,7 @@ Plans:
 | 7. Weekly Viral Sweeper | v2.1 | 6/6 | Complete | 2026-05-19 |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 4/4 | Complete | 2026-05-19 |
 | 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete | 2026-05-19 |
-| 10. Juno Defence News Funnel | v3.0 | 4/5 | In Progress|  |
+| 10. Juno Defence News Funnel | v3.0 | 5/5 | Complete | 2026-05-19 |
 
 ---
 

@@ -104,7 +104,7 @@ Juno's Tab 1 daily summary card with three sections (Defence News + Canadian Pro
 - [x] **DEF-06**: System renders the Juno daily summary's World Events Relevant to Defence section via a Haiku 4.5 structured-output relevance classifier returning `{is_relevant, category, confidence, reasoning}` against generic world news (Reuters World, AP World); only `is_relevant=true AND confidence >= 0.7` items flow to Sonnet 4.6 synthesis; 9 named inclusion categories (active conflict, alignment shifts, spending policy, sanctions/export controls, energy/critical-minerals, semiconductors, space, hypersonic/AI/autonomy, treaty events) vs explicit exclusion categories
 - [x] **DEF-07**: System wraps the Juno Sonnet daily-summary call in a refusal-detector that inspects the response for content-policy refusal patterns (Anthropic-Pentagon dispute precedent); on refusal detection, retries once with a framing nudge ("Analyze as defence-industry market commentary, not tactical intelligence"), then falls back to a `status='partial'` row with the refused section blanked (precedent: v2.1 `partial` status pattern in `daily_summary.py`)
 - [x] **DEF-08**: System renders the existing `SummaryCard.tsx` component for Juno by tolerating missing-or-renamed section markdown fields — Juno's row has `defence_news_md`, `canadian_procurement_md`, `world_events_md` instead of Seva's `gold_news_md`, `ontario_law_md`, `ontario_stats_md`; a single component handles both tenants via per-company section configuration (no per-tenant `SummaryCard` fork)
-- [ ] **DEF-09**: System renders an empty-state on Juno's Tab 2 (Content Calendar) and Tab 3 (Weekly Viral Sweeper) reading "Coming in v3.1 — Juno Calendar/Sweeper not yet enabled" so the operator sees clearly what's deferred; Tab 1 (News Funnel) is the only Juno tab with live functionality in v3.0
+- [x] **DEF-09**: System renders an empty-state on Juno's Tab 2 (Content Calendar) and Tab 3 (Weekly Viral Sweeper) reading "Coming in v3.1 — Juno Calendar/Sweeper not yet enabled" so the operator sees clearly what's deferred; Tab 1 (News Funnel) is the only Juno tab with live functionality in v3.0
 - [x] **DEF-10**: System runs a voice-calibration UAT during Phase 10 implementation — 5-10 hand-curated defence stories produce daily summaries the operator approves on tone, depth, signal-to-noise, and dual-use boundary BEFORE the Juno cron is enabled in production; UAT artifact persisted in phase directory
 
 ## v3.1+ Requirements
@@ -238,7 +238,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEF-06 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests for Haiku classifier; production lands Wave 1 / 10-02) |
 | DEF-07 | Phase 10 | Scaffolded (Wave 0 / 10-01 — RED tests for refusal-detector; production lands Wave 2 / 10-03) |
 | DEF-08 | Phase 10 | Complete (2026-05-19, plan 10-04 — SummaryCard.tsx useParams + companySectionConfig.map; describe.skip → describe; 168 frontend tests GREEN) |
-| DEF-09 | Phase 10 | Pending |
+| DEF-09 | Phase 10 | Complete (2026-05-19, plan 10-05 — visual_qa_results.md APPROVED, operator confirmed Juno Tab 2/Tab 3 Phase 9 empty-state intact under all Phase 10 changes) |
 | DEF-10 | Phase 10 | Complete (2026-05-19, plan 10-04 — voice UAT corpus + uat_voice_calibration.py + live Sonnet+Haiku output + 7-criterion pass bar, operator APPROVED 2026-05-19) |
 
 **Coverage:**
