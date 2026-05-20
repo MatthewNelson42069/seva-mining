@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v3.0.1
 milestone_name: — v3.0 Audit Cleanup Bundle
-status: Defining requirements
-stopped_at: Milestone v3.0.1 started — closes 5 non-blocking follow-ups from v3.0 audit (12:05 PT Canadian Procurement, traceability refresh, double-definition cleanup, VALIDATION frontmatter, Skydio ValidationError logging). Phase counter continues at Phase 11.
-last_updated: "2026-05-19T21:00:00.000Z"
+status: Roadmap defined — Phase 11 ready to plan
+stopped_at: Roadmap defined — v3.0.1 maps all 5 audit-cleanup requirements (CLEANUP-01..05) to a single bundle phase (Phase 11). Phase counter continues from v3.0 (last Phase 10). Ready for `/gsd:plan-phase 11`.
+last_updated: "2026-05-19T22:00:00.000Z"
 last_activity: 2026-05-19
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,16 +20,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-19 — v3.0.1 milestone scoped)
 
 **Core value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno.
-**Current focus:** Milestone v3.0.1 — defining requirements (5 audit-cleanup items targeting Phase 11+)
+**Current focus:** Milestone v3.0.1 — roadmap defined; Phase 11 (v3.0 Audit Cleanup Bundle) ready to plan
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 11 — v3.0 Audit Cleanup Bundle (not started — roadmap defined)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-19 — Milestone v3.0.1 started (PROJECT.md updated; audit-cleanup scope confirmed)
+Status: Roadmap defined — ready for `/gsd:plan-phase 11`
+Last activity: 2026-05-19 — Phase 11 roadmap entry written; ROADMAP.md + REQUIREMENTS.md traceability updated
 
-### v3.0 Roadmap Summary
+### v3.0.1 Roadmap Summary
+
+- **Phase 11: v3.0 Audit Cleanup Bundle** (CLEANUP-01..05) — single bundle phase closing 5 non-blocking v3.0 audit follow-ups; complexity S; estimated 1-2 hours; depends on v3.0 shipped (✓ 2026-05-19)
+
+### v3.0 Roadmap Summary (archived — shipped 2026-05-19)
 
 - **Phase 9: Multi-Tenant Foundation** (TENANT-01..10) — single atomic deploy; partial multi-tenancy worse than none; depends on v2.1 Phase 8
 - **Phase 10: Juno Defence News Funnel** (DEF-01..10) — config-only after Phase 9; depends on Phase 9 merged + verified
