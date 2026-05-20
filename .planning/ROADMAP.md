@@ -37,7 +37,7 @@ Phase artifacts archived to `milestones/v2.0-phases/`. Full roadmap detail: `mil
 
 ### v3.0 — Multi-Tenant Dashboards (Juno Industries Onboarding)
 
-- [ ] **Phase 9: Multi-Tenant Foundation** — Atomic deploy adding row-level `company_id` to the 3 multi-tenant tables, `scoped_*()` query helpers, `/api/{company}` router prefix, `/:company/` frontend routing, AppHeader/CompanyBar switcher, TanStack key factory, per-company cron fan-out (juno path wired as stub) — `/seva/*` byte-equivalent to v2.1; `/juno/*` empty-state
+- [x] **Phase 9: Multi-Tenant Foundation** — Atomic deploy adding row-level `company_id` to the 3 multi-tenant tables, `scoped_*()` query helpers, `/api/{company}` router prefix, `/:company/` frontend routing, AppHeader/CompanyBar switcher, TanStack key factory, per-company cron fan-out (juno path wired as stub) — `/seva/*` byte-equivalent to v2.1; `/juno/*` empty-state (completed 2026-05-19, pending verification)
 - [ ] **Phase 10: Juno Defence News Funnel** — Config-only after Phase 9: defence Tier-1 RSS feeds + SerpAPI fallback for paywalled sources + Canadian-procurement queries + defence Sonnet 4.6 system prompt (designed from scratch) + Haiku 4.5 world-events relevance classifier + refusal-detector + voice-calibration UAT — Tab 1 of `/juno/` renders live defence/procurement/world-events summary
 
 ---
@@ -377,7 +377,7 @@ Plans:
 - [x] 09-02-PLAN.md — Wave 1 DB foundation (Alembic 0014 with `server_default='seva'` + dual-model parity + `backend/app/queries/scoped.py` helpers + `get_current_company` FastAPI dep)
 - [x] 09-03-PLAN.md — Wave 2 backend routers + scheduler (3 routers under `/api/{company}` + per-company cron with `juno_daily_summary=1020` lock ID + `juno_weekly_sweeper=1021` slot reserved + `run_juno_daily_summary` stub writes `status='partial'` row)
 - [x] 09-04-PLAN.md — Wave 3 frontend routing + switcher + queryKeys (`<Route path=':company'>` wrapper + bookmark grace redirects + `CompanySwitcher` segmented control inside formally freeze-lifted AppHeader + Zustand persist for `lastVisitedCompany` + centralized TanStack key factory + per-page Juno empty-state short-circuits)
-- [ ] 09-05-PLAN.md — Wave 4 cross-tenant integration verification + human-verify checkpoint at 1440×900 (populates `test_multitenant_isolation.py` parametrized matrix; runs full 3-layer test suite + CI grep gate; reproduces verbatim 50+ item UI-SPEC QA checklist; smoke-tests one scheduler fire produces both tenants' rows; documents AppHeader freeze-lift in PROJECT.md Key Decisions per D-02 third documentation location)
+- [x] 09-05-PLAN.md — Wave 4 cross-tenant integration verification + human-verify checkpoint at 1440×900 (populates `test_multitenant_isolation.py` parametrized matrix; runs full 3-layer test suite + CI grep gate; reproduces verbatim 50+ item UI-SPEC QA checklist; smoke-tests one scheduler fire produces both tenants' rows; documents AppHeader freeze-lift in PROJECT.md Key Decisions per D-02 third documentation location)
 
 **UI hint**: yes
 
@@ -502,7 +502,7 @@ Plans:
 | 6. Content Calendar | v2.1 | 5/5 | Complete | 2026-05-19 |
 | 7. Weekly Viral Sweeper | v2.1 | 6/6 | Complete | 2026-05-19 |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 4/4 | Complete | 2026-05-19 |
-| 9. Multi-Tenant Foundation | v3.0 | 0/? | Not started | - |
+| 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete pending verification | 2026-05-19 |
 | 10. Juno Defence News Funnel | v3.0 | 0/? | Not started | - |
 
 ---

@@ -90,7 +90,7 @@ The plumbing that makes the existing single-tenant Seva dashboard multi-tenant. 
 - [x] **TENANT-07**: System renders a `CompanySwitcher` component (segmented control or dropdown — placement decision: AppHeader edit vs sibling `CompanyBar` deferred to discuss-phase) that lets the operator toggle between Seva and Juno; switch updates URL via React Router navigate (URL canonical), clears TanStack Query cache as defence-in-depth, and persists "last visited" via Zustand
 - [x] **TENANT-08**: System scopes the daily_summary cron per-company so each scheduler fire writes one Seva daily_summary row AND one Juno daily_summary row; topology decision (single-cron-fanout vs per-company-jobs vs 100-ID-blocks) deferred to discuss-phase; OPS-02 advisory-lock uniqueness assertion preserved
 - [x] **TENANT-09**: System updates TanStack Query keys to include `company_id` (`['summaries', companyId, limit]`, `['calendar', companyId, start, end]`, etc.) so cache doesn't leak across tenant switches; centralized key factory at `frontend/src/api/queryKeys.ts`
-- [ ] **TENANT-10**: System adds tenant-isolation regression test (`backend/tests/test_multitenant_isolation.py`) that creates rows for both tenants, asserts each tenant's API returns ONLY its own rows under all read endpoints, and fails the build on any cross-tenant leakage
+- [x] **TENANT-10**: System adds tenant-isolation regression test (`backend/tests/test_multitenant_isolation.py`) that creates rows for both tenants, asserts each tenant's API returns ONLY its own rows under all read endpoints, and fails the build on any cross-tenant leakage
 
 ### Juno Defence News Funnel (DEF)
 
@@ -220,16 +220,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UI-05 | Phase 8 | Complete (2026-05-19, plan 08-03) |
 | UI-06 | Phase 8 | Complete |
 | UI-07 | Phase 8 | Complete (2026-05-19, plan 08-03) |
-| TENANT-01 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-02 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-03 | Phase 9 | Pending (Wave 0 RED test + grep gate landed 09-01) |
-| TENANT-04 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-05 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-06 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-07 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-08 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-09 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
-| TENANT-10 | Phase 9 | Pending (Wave 0 RED test landed 09-01) |
+| TENANT-01 | Phase 9 | Complete (2026-05-19, plan 09-02 — Alembic 0014 added company_id + backfill) |
+| TENANT-02 | Phase 9 | Complete (2026-05-19, plan 09-02 — CHECK constraint + composite indexes) |
+| TENANT-03 | Phase 9 | Complete (2026-05-19, plan 09-02 — scoped helpers + CI grep gate landed 09-01) |
+| TENANT-04 | Phase 9 | Complete (2026-05-19, plan 09-03 — /api/{company}/* + get_current_company dep) |
+| TENANT-05 | Phase 9 | Complete (2026-05-19, plan 09-04 — :company nested route + CompanyScopedRoute) |
+| TENANT-06 | Phase 9 | Complete (2026-05-19, plan 09-04 — bookmark grace redirects to /seva/*) |
+| TENANT-07 | Phase 9 | Complete (2026-05-19, plan 09-04 — CompanySwitcher + AppHeader freeze-lift) |
+| TENANT-08 | Phase 9 | Complete (2026-05-19, plan 09-03 — per-company cron + scoped scheduler queries + run_juno_daily_summary stub) |
+| TENANT-09 | Phase 9 | Complete (2026-05-19, plan 09-04 — centralized queryKeys factory with companyId slot) |
+| TENANT-10 | Phase 9 | Complete (2026-05-19, plan 09-05 — populated test_multitenant_isolation.py, 19 tests GREEN) |
 | DEF-01 | Phase 10 | Pending |
 | DEF-02 | Phase 10 | Pending |
 | DEF-03 | Phase 10 | Pending |
