@@ -625,6 +625,33 @@ async def _validate_env() -> None:
             logger.error("ENV %s: MISSING — agents will fail without this key", key)
     for key, present in optional.items():
         logger.info("ENV %s: %s", key, "SET ✓" if present else "not set (optional)")
+
+    # v3.1 Phase 12 — per-tenant Anthropic key resolver visibility (KEY-04).
+    # Surfaces the 3 new env vars at scheduler boot so operator can confirm
+    # Railway configuration without grepping the Anthropic console.
+    # Logs WARNING (not ERROR) when per-tenant unset — the resolver falls
+    # back to shared ANTHROPIC_API_KEY gracefully (D-01).
+    per_tenant_anthropic = {
+        "SEVA_ANTHROPIC_API_KEY": settings.seva_anthropic_api_key,
+        "JUNO_ANTHROPIC_API_KEY": settings.juno_anthropic_api_key,
+    }
+    for key, value in per_tenant_anthropic.items():
+        if value:
+            logger.info("ENV %s: SET ✓", key)
+        else:
+            logger.warning(
+                "ENV %s: not set — resolver will fall back to shared ANTHROPIC_API_KEY",
+                key,
+            )
+
+    # STRICT mode is a boolean toggle, not a missing-key. Log unconditionally.
+    logger.info(
+        "ENV ANTHROPIC_RESOLVER_STRICT: %s",
+        "true (resolver will RAISE on per-tenant key miss)"
+        if settings.anthropic_resolver_strict
+        else "false (resolver will fall back gracefully)",
+    )
+
     market_data = {
         "FRED_API_KEY": bool(settings.fred_api_key),
         "METALPRICEAPI_API_KEY": bool(settings.metalpriceapi_api_key),
