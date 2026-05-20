@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Roadmap created — Phase 12 pending
-stopped_at: v3.1 roadmap created 2026-05-20. 20 requirements mapped to 4 phases (12-15). All 20 traceability rows updated to Phase N / Pending. Next step → `/gsd:plan-phase 12` (Per-tenant Anthropic API Key).
-last_updated: "2026-05-20T18:30:00.000Z"
+status: Phase 12 context gathered — ready to plan
+stopped_at: Phase 12 (Per-tenant Anthropic API Key) discuss-phase complete. 9 decisions locked across 4 gray areas (fallback policy, strict mode, verification approach, dead-code handling, call-site signature). Context captured at .planning/phases/12-per-tenant-anthropic-api-key/12-CONTEXT.md. Next step → `/gsd:plan-phase 12` (or `/clear` first for fresh context window).
+last_updated: "2026-05-20T19:00:00.000Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 4
