@@ -35,6 +35,7 @@ and git history; the precedent matches the 260420-sn9 + 260423-k8n purges
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -443,24 +444,40 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     )
 
     # v3.0 Phase 9 — TENANT-08 — Juno daily_summary at 08:05 + 12:05 PT.
+    # v3.0 Phase 10 (Wave 3, 10-04-PLAN.md) — JUNO_CRON_ENABLED env var gate.
+    # Registration is conditional on JUNO_CRON_ENABLED=true so production deploys
+    # do NOT fire the Juno cron until the operator approves voice UAT
+    # (.planning/phases/10-juno-defence-news-funnel/voice_calibration_uat.md).
+    # Rollback is a single env-var unset (no redeploy needed).
     # 5-min stagger from Seva's hour="8,12", minute=0 (D-01a). Rationale:
     # spreads Anthropic API rate-limit pressure (PITFALLS.md §3) and avoids
     # simultaneous Sonnet calls. Lock ID 1020 (JOB_LOCK_IDS["juno_daily_summary"]).
     # juno_weekly_sweeper (lock 1021) is slot-only in v3.0 — registration
     # deferred to v3.1+ per D-01. 08:05 + 12:05 are both outside the
     # DST-ambiguous 01:00-02:00 window (MOD-1 — safe).
-    scheduler.add_job(
-        _make_juno_daily_summary_job(engine),
-        trigger=CronTrigger(
-            hour="8,12",
-            minute=5,
-            timezone="America/Los_Angeles",
-        ),
-        id="juno_daily_summary",
-        name="Daily Summary — Juno — 08:05 + 12:05 America/Los_Angeles",
-        max_instances=1,
-        misfire_grace_time=1800,
-    )
+    juno_cron_enabled = os.getenv("JUNO_CRON_ENABLED", "false").lower() == "true"
+    if juno_cron_enabled:
+        logger.info(
+            "juno_daily_summary cron ENABLED via JUNO_CRON_ENABLED=true env var"
+        )
+        scheduler.add_job(
+            _make_juno_daily_summary_job(engine),
+            trigger=CronTrigger(
+                hour="8,12",
+                minute=5,
+                timezone="America/Los_Angeles",
+            ),
+            id="juno_daily_summary",
+            name="Daily Summary — Juno — 08:05 + 12:05 America/Los_Angeles",
+            max_instances=1,
+            misfire_grace_time=1800,
+        )
+    else:
+        logger.info(
+            "juno_daily_summary cron DISABLED — set JUNO_CRON_ENABLED=true in "
+            "Railway env after voice UAT approves "
+            "(.planning/phases/10-juno-defence-news-funnel/voice_calibration_uat.md)"
+        )
 
     # daily_summary_prune — fires at 03:00 PT daily (OPS-01).
     # 03:00 PT is outside both summary fire times (08:00 + 12:00 PT) so the

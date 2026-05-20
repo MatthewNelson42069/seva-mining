@@ -125,7 +125,7 @@ def test_retired_crons_absent_from_job_lock_ids():
 
 @pytest.mark.asyncio
 async def test_scheduler_registers_4_jobs_after_juno_add():
-    """build_scheduler() registers exactly 4 jobs after Phase 9 juno_daily_summary add.
+    """build_scheduler() registers exactly 4 jobs when JUNO_CRON_ENABLED=true.
 
     Phase 1 Plan 05 (CRIT-1 / SUM-06): midday_digest registration REMOVED;
     daily_summary registration ADDED.
@@ -134,14 +134,16 @@ async def test_scheduler_registers_4_jobs_after_juno_add():
     Phase 7 Plan 05 (SWEEP-09): weekly_sweeper ADDED.
     v3.0 Phase 9 (TENANT-08): juno_daily_summary ADDED (juno_weekly_sweeper
     slot-only — NOT registered per D-01).
-    Final state: 4 jobs — daily_summary + daily_summary_prune + weekly_sweeper
-    + juno_daily_summary.
+    v3.0 Phase 10 (Wave 3, 10-04): juno_daily_summary registration GATED behind
+    JUNO_CRON_ENABLED=true env var — operator must opt in after voice UAT.
+    With env var set, final state: 4 jobs — daily_summary + daily_summary_prune
+    + weekly_sweeper + juno_daily_summary.
     """
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",
         new=AsyncMock(return_value={"morning_digest_schedule_hour": "8"}),
-    ):
+    ), patch.dict(os.environ, {"JUNO_CRON_ENABLED": "true"}):
         scheduler = await build_scheduler(mock_engine)
 
     try:
@@ -152,7 +154,7 @@ async def test_scheduler_registers_4_jobs_after_juno_add():
                 "daily_summary",        # Phase 1 Plan 05 replacement for midday_digest
                 "daily_summary_prune",  # Phase 4 Plan 01 (OPS-01)
                 "weekly_sweeper",       # Phase 7 Plan 05 (SWEEP-09)
-                "juno_daily_summary",   # v3.0 Phase 9 (TENANT-08)
+                "juno_daily_summary",   # v3.0 Phase 9 (TENANT-08) — gated by JUNO_CRON_ENABLED
             ]
         )
         assert ids == expected, f"expected {expected}, got {ids}"
@@ -653,10 +655,13 @@ async def test_build_scheduler_omits_v1_sub_agent_crons():
         "sub_gold_history",
     }
     engine = MagicMock()
+    # v3.0 Phase 10 (Wave 3, 10-04): juno_daily_summary now gated behind
+    # JUNO_CRON_ENABLED=true env var. Set it so this test (which asserts the
+    # full registered set when Juno is enabled) still verifies the 4-job count.
     with patch(
         "worker._read_schedule_config",
         new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
-    ):
+    ), patch.dict(os.environ, {"JUNO_CRON_ENABLED": "true"}):
         scheduler = await build_scheduler(engine)
     try:
         job_ids = {j.id for j in scheduler.get_jobs()}
@@ -669,11 +674,11 @@ async def test_build_scheduler_omits_v1_sub_agent_crons():
         assert "daily_summary_prune" in job_ids, "daily_summary_prune must remain registered"
         assert "weekly_sweeper" in job_ids, "weekly_sweeper must be registered (Phase 7 Plan 05)"
         assert "juno_daily_summary" in job_ids, (
-            "juno_daily_summary must be registered (v3.0 Phase 9 TENANT-08)"
+            "juno_daily_summary must be registered when JUNO_CRON_ENABLED=true (v3.0 Phase 9/10)"
         )
         assert len(job_ids) == 4, (
-            f"Scheduler should have exactly 4 jobs after Phase 9 juno_daily_summary "
-            f"add, got {len(job_ids)}: {job_ids}"
+            f"Scheduler should have exactly 4 jobs when JUNO_CRON_ENABLED=true, "
+            f"got {len(job_ids)}: {job_ids}"
         )
     finally:
         if scheduler.running:
@@ -824,6 +829,11 @@ async def test_juno_daily_summary_registered():
     D-01a 5-min stagger: Seva fires at 08:00 + 12:00 PT; Juno fires at
     08:05 + 12:05 PT (same twice-daily cadence, 5-min offset). Both use
     America/Los_Angeles timezone.
+
+    v3.0 Phase 10 (Wave 3, 10-04): registration is gated behind
+    JUNO_CRON_ENABLED=true env var (defaults to false in production). This
+    test sets the env var to verify the trigger config is correct when the
+    operator does opt in.
     """
     from apscheduler.triggers.cron import CronTrigger
 
@@ -831,7 +841,7 @@ async def test_juno_daily_summary_registered():
     with patch(
         "worker._read_schedule_config",
         new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
-    ):
+    ), patch.dict(os.environ, {"JUNO_CRON_ENABLED": "true"}):
         scheduler = await build_scheduler(mock_engine)
     try:
         job = scheduler.get_job("juno_daily_summary")
@@ -861,23 +871,25 @@ async def test_juno_daily_summary_registered():
 
 
 @pytest.mark.asyncio
-async def test_scheduler_registers_4_jobs_after_juno_add():
+async def test_scheduler_registers_4_jobs_after_juno_add_when_env_enabled():
     """v3.0 Phase 9 — juno_daily_summary added; juno_weekly_sweeper slot
-    reserved but NOT registered. Total jobs: 3 + 1 = 4.
+    reserved but NOT registered. Total jobs: 3 + 1 = 4 when env enabled.
 
     Existing 3 (Phase 7): daily_summary, daily_summary_prune, weekly_sweeper.
     Phase 9 adds: juno_daily_summary (registered).
     NOT registered in Phase 9: juno_weekly_sweeper (slot-only per D-01).
 
-    When this test is unblocked in Wave 2, the existing
-    test_scheduler_registers_3_jobs_after_v1_deregistration test must ALSO
-    be updated to expect 4 jobs (or its assertion adjusted to a >= check).
+    v3.0 Phase 10 (Wave 3, 10-04): juno_daily_summary registration is GATED
+    behind JUNO_CRON_ENABLED=true. Test name changed from the original
+    test_scheduler_registers_4_jobs_after_juno_add (which was a duplicate of
+    a same-named test earlier in this file — Python silently overwrote the
+    first one) to make the env-var gate intent explicit.
     """
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",
         new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
-    ):
+    ), patch.dict(os.environ, {"JUNO_CRON_ENABLED": "true"}):
         scheduler = await build_scheduler(mock_engine)
     try:
         jobs = scheduler.get_jobs()
@@ -888,14 +900,89 @@ async def test_scheduler_registers_4_jobs_after_juno_add():
                 "daily_summary_prune",  # Phase 4 Plan 01 (OPS-01)
                 "weekly_sweeper",       # Phase 7 Plan 05 (SWEEP-09)
                 "juno_daily_summary",   # v3.0 Phase 9 — juno_daily_summary added
-                                        # (juno_weekly_sweeper slot reserved but not registered)
+                                        # gated by JUNO_CRON_ENABLED=true (Phase 10 Wave 3)
+                                        # juno_weekly_sweeper slot reserved but not registered
             ]
         )
         assert ids == expected, f"expected {expected}, got {ids}"
         assert len(jobs) == 4, (
-            f"Expected exactly 4 jobs after Phase 9 juno_daily_summary add, "
+            f"Expected exactly 4 jobs when JUNO_CRON_ENABLED=true, "
             f"got {len(jobs)}: {ids}"
         )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_juno_daily_summary_NOT_registered_when_env_false():
+    """v3.0 Phase 10 (Wave 3, 10-04) — JUNO_CRON_ENABLED env-var gate.
+
+    Production deploys with JUNO_CRON_ENABLED unset (or set to anything other
+    than "true") MUST NOT register the Juno daily_summary cron. The cron is
+    only enabled after operator approves voice UAT
+    (.planning/phases/10-juno-defence-news-funnel/voice_calibration_uat.md)
+    and explicitly flips JUNO_CRON_ENABLED=true in Railway env.
+
+    With env var unset, scheduler should register 3 jobs (daily_summary,
+    daily_summary_prune, weekly_sweeper) — NOT 4. juno_weekly_sweeper stays
+    slot-only regardless (lock 1021 reservation untouched).
+    """
+    mock_engine = MagicMock()
+    # Explicitly ensure JUNO_CRON_ENABLED is NOT set (test base env may have
+    # it from a previous test using patch.dict — patch.dict cleans up on exit
+    # but be defensive).
+    env_clean = {k: v for k, v in os.environ.items() if k != "JUNO_CRON_ENABLED"}
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ), patch.dict(os.environ, env_clean, clear=True):
+        scheduler = await build_scheduler(mock_engine)
+    try:
+        job_ids = {j.id for j in scheduler.get_jobs()}
+        assert "juno_daily_summary" not in job_ids, (
+            "juno_daily_summary must NOT be registered when JUNO_CRON_ENABLED is unset "
+            f"(Phase 10 Wave 3 gate). Got jobs: {job_ids}"
+        )
+        # The Seva jobs MUST still be registered — gate only affects Juno.
+        assert "daily_summary" in job_ids
+        assert "daily_summary_prune" in job_ids
+        assert "weekly_sweeper" in job_ids
+        assert len(job_ids) == 3, (
+            f"Scheduler should register exactly 3 jobs when JUNO_CRON_ENABLED is unset, "
+            f"got {len(job_ids)}: {job_ids}"
+        )
+        # Slot-only reservation still untouched — lock 1021 stays reserved
+        # whether or not the cron is enabled.
+        assert "juno_weekly_sweeper" not in job_ids, (
+            "juno_weekly_sweeper must remain slot-only (D-01)"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_juno_daily_summary_NOT_registered_when_env_explicitly_false():
+    """v3.0 Phase 10 (Wave 3, 10-04) — JUNO_CRON_ENABLED=false explicit case.
+
+    Operator may set JUNO_CRON_ENABLED=false in Railway env explicitly (e.g.,
+    to roll back a previous true). This must also gate Juno out — only the
+    literal string "true" (case-insensitive) registers the cron.
+    """
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
+    ), patch.dict(os.environ, {"JUNO_CRON_ENABLED": "false"}):
+        scheduler = await build_scheduler(mock_engine)
+    try:
+        job_ids = {j.id for j in scheduler.get_jobs()}
+        assert "juno_daily_summary" not in job_ids, (
+            "juno_daily_summary must NOT be registered when JUNO_CRON_ENABLED=false. "
+            f"Got jobs: {job_ids}"
+        )
+        assert len(job_ids) == 3
     finally:
         if scheduler.running:
             scheduler.shutdown(wait=False)
@@ -908,12 +995,16 @@ async def test_juno_weekly_sweeper_NOT_registered():
     D-01 explicitly says "1021 is RESERVED only — registration deferred to
     v3.1+ when Juno Weekly Sweeper lands". This test guards against an
     accidental Phase 9 registration of the sweeper.
+
+    v3.0 Phase 10 (Wave 3): test runs with JUNO_CRON_ENABLED=true so the
+    daily_summary cron IS registered — we want to verify the sweeper is
+    still absent even when the daily cron is enabled.
     """
     mock_engine = MagicMock()
     with patch(
         "worker._read_schedule_config",
         new=AsyncMock(return_value={"morning_digest_schedule_hour": "7"}),
-    ):
+    ), patch.dict(os.environ, {"JUNO_CRON_ENABLED": "true"}):
         scheduler = await build_scheduler(mock_engine)
     try:
         job = scheduler.get_job("juno_weekly_sweeper")
