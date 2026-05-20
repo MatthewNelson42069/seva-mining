@@ -460,7 +460,7 @@ Plans:
 
 - [x] 10-01-PLAN.md — Wave 0: Phase-0 RSS verification + 8 Wave 0 RED test files + companySectionConfig.ts production module (DEF-01..08 scaffolds)
 - [x] 10-02-PLAN.md — Wave 1: Haiku 4.5 World Events classifier + populated JUNO_DEFENCE_FEEDS + JUNO_SERPAPI_QUERIES + production DEFENCE_NEWS_SYSTEM_PROMPT (DEF-01, DEF-02, DEF-03, DEF-06)
-- [ ] 10-03-PLAN.md — Wave 2: refusal-detector + extended run_juno_daily_summary with health-check + 3-section Sonnet synthesis (DEF-04, DEF-05, DEF-07)
+- [x] 10-03-PLAN.md — Wave 2: refusal-detector + extended run_juno_daily_summary with health-check + 3-section Sonnet synthesis (DEF-04, DEF-05, DEF-07)
 - [ ] 10-04-PLAN.md — Wave 3: SummaryCard.tsx per-tenant rendering + JUNO_CRON_ENABLED env-var gate + voice-calibration UAT (BLOCKING checkpoint) (DEF-08, DEF-10)
 - [ ] 10-05-PLAN.md — Wave 4: cron-enable + manual fire smoke + visual QA at 1440×900 (BLOCKING checkpoint) (DEF-09 + final verification)
 
