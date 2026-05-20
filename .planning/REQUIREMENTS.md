@@ -5,7 +5,7 @@
 
 ## v3.1 Requirements
 
-19 atomic requirements across 4 feature categories. All deferred items from the v3.0 audit's `tech_debt` tier (Juno expansion + per-tenant key) plus per-company branding. Phase numbering continues from Phase 11; v3.1 starts at **Phase 12**.
+20 atomic requirements across 4 feature categories. All deferred items from the v3.0 audit's `tech_debt` tier (Juno expansion + per-tenant key) plus per-company branding. Phase numbering continues from Phase 11; v3.1 starts at **Phase 12**.
 
 ### Juno Content Calendar (JCAL)
 
@@ -81,36 +81,37 @@ Explicitly excluded from v3.1. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements. Updated during roadmap creation (2026-05-20).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| JCAL-01 | TBD | Pending |
-| JCAL-02 | TBD | Pending |
-| JCAL-03 | TBD | Pending |
-| JCAL-04 | TBD | Pending |
-| JCAL-05 | TBD | Pending |
-| JSWEEP-01 | TBD | Pending |
-| JSWEEP-02 | TBD | Pending |
-| JSWEEP-03 | TBD | Pending |
-| JSWEEP-04 | TBD | Pending |
-| JSWEEP-05 | TBD | Pending |
-| JSWEEP-06 | TBD | Pending |
-| BRAND-01 | TBD | Pending |
-| BRAND-02 | TBD | Pending |
-| BRAND-03 | TBD | Pending |
-| BRAND-04 | TBD | Pending |
-| BRAND-05 | TBD | Pending |
-| KEY-01 | TBD | Pending |
-| KEY-02 | TBD | Pending |
-| KEY-03 | TBD | Pending |
-| KEY-04 | TBD | Pending |
+| KEY-01 | Phase 12 | Pending |
+| KEY-02 | Phase 12 | Pending |
+| KEY-03 | Phase 12 | Pending |
+| KEY-04 | Phase 12 | Pending |
+| BRAND-01 | Phase 13 | Pending |
+| BRAND-02 | Phase 13 | Pending |
+| BRAND-03 | Phase 13 | Pending |
+| BRAND-04 | Phase 13 | Pending |
+| BRAND-05 | Phase 13 | Pending |
+| JCAL-01 | Phase 14 | Pending |
+| JCAL-02 | Phase 14 | Pending |
+| JCAL-03 | Phase 14 | Pending |
+| JCAL-04 | Phase 14 | Pending |
+| JCAL-05 | Phase 14 | Pending |
+| JSWEEP-01 | Phase 15 | Pending |
+| JSWEEP-02 | Phase 15 | Pending |
+| JSWEEP-03 | Phase 15 | Pending |
+| JSWEEP-04 | Phase 15 | Pending |
+| JSWEEP-05 | Phase 15 | Pending |
+| JSWEEP-06 | Phase 15 | Pending |
 
 **Coverage:**
 - v3.1 requirements: 20 total (5 JCAL + 6 JSWEEP + 5 BRAND + 4 KEY)
-- Mapped to phases: 0 (pending roadmap creation)
-- Unmapped: 20 (will be filled by roadmapper)
+- Mapped to phases: 20 ✓ (Phase 12: 4 KEY; Phase 13: 5 BRAND; Phase 14: 5 JCAL; Phase 15: 6 JSWEEP)
+- Unmapped: 0 ✓
+- Orphans: 0 ✓
 
 ---
 *Requirements defined: 2026-05-20*
-*Last updated: 2026-05-20 — v3.1 Juno Feature Parity + Branding milestone scoped*
+*Last updated: 2026-05-20 — v3.1 roadmap created; all 20 requirements mapped to Phases 12-15*

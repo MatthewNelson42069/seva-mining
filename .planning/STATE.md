@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Defining requirements
-stopped_at: v3.1 milestone scoped 2026-05-20. Scope confirmed: JUNO-CAL-v31 + JUNO-SWEEP-v31 + TENANT-BRAND-v31 + TENANT-KEY-v31. Next step → research decision, then requirements.
-last_updated: "2026-05-20T17:00:00.000Z"
+status: Roadmap created — Phase 12 pending
+stopped_at: v3.1 roadmap created 2026-05-20. 20 requirements mapped to 4 phases (12-15). All 20 traceability rows updated to Phase N / Pending. Next step → `/gsd:plan-phase 12` (Per-tenant Anthropic API Key).
+last_updated: "2026-05-20T18:30:00.000Z"
 last_activity: 2026-05-20
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -24,17 +24,19 @@ See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 12 — Per-tenant Anthropic API Key (pending — awaiting `/gsd:plan-phase 12`)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-20 — Milestone v3.1 started
+Status: Roadmap created; phases 12-15 pending
+Last activity: 2026-05-20 — Roadmap created (20 v3.1 requirements mapped to Phases 12-15)
 
-### v3.1 Target Features (to be split into phases by roadmapper)
+### v3.1 Roadmap Summary (created 2026-05-20)
 
-- **JUNO-CAL-v31** — Juno Content Calendar (Tab 2 paper-planner UI, port of v2.1 Phase 6 behind multi-tenant helpers)
-- **JUNO-SWEEP-v31** — Juno Weekly Viral Sweeper (Sunday 08:00 PT cron at lock 1021; defence-sector X queries; Sonnet 4.6 angles)
-- **TENANT-BRAND-v31** — Per-company branding (Juno logo + wordmark + color palette; semantic-token resolution by `:company` route)
-- **TENANT-KEY-v31** — Per-tenant Anthropic API key (`SEVA_ANTHROPIC_API_KEY` + `JUNO_ANTHROPIC_API_KEY`; cost-attribution split; fallback to shared key when unset)
+- **Phase 12: Per-tenant Anthropic API Key** (KEY-01..04) — `get_anthropic_client(company_id)` resolver + grep gate + Railway env wiring; fallback to shared key when per-tenant unset; smallest scope, lands first to unblock cost-attribution for downstream LLM calls
+- **Phase 13: Per-company Branding** (BRAND-01..05) — `companyBrandConfig.ts` registry (extends Phase 9 D-08 `companySectionConfig.ts` pattern); Juno wordmark + logo + defence-industry color palette via Tailwind v4 semantic tokens; CI grep gate forbids `if (company === 'juno')` branches
+- **Phase 14: Juno Content Calendar (Tab 2)** (JCAL-01..05) — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD via existing `scoped_calendar_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests
+- **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** (JSWEEP-01..06) — Sunday 08:00 PT cron at reserved lock 1021; defence-sector X queries (set TBD in discuss-phase); Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; largest phase, lands last
+
+**Coverage:** 20/20 v3.1 requirements mapped (5 JCAL + 6 JSWEEP + 5 BRAND + 4 KEY) — see `.planning/REQUIREMENTS.md` Traceability table.
 
 ### v3.0.1 Roadmap Summary (archived — shipped 2026-05-20)
 
@@ -435,9 +437,11 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T16:32:44.415Z
+Last session: 2026-05-20T18:30:00.000Z
 Last activity: 2026-05-20
-Stopped At: Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
+Stopped At: v3.1 roadmap created. ROADMAP.md updated with Phase 12-15 detail blocks (Per-tenant Anthropic API Key, Per-company Branding, Juno Content Calendar, Juno Weekly Viral Sweeper). REQUIREMENTS.md traceability table updated — all 20 v3.1 requirements mapped to phases (KEY → 12, BRAND → 13, JCAL → 14, JSWEEP → 15). Progress table extended with rows 12-15 Pending. Next step → `/gsd:plan-phase 12` to decompose KEY-01..04 into executable plans (smallest phase, pure plumbing; expected 1-2 hr).
+
+Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
 Prior activity: 2026-04-22 — Completed quick-260422-mfg (full rename `sub_video_clip` → `sub_gold_media` across scheduler + backend + frontend + DB). **Origin:** follow-up (b) from the zid debug session — `scheduler/agents/content/video_clip.py` hard-coded `CONTENT_TYPE="video_clip"` and `AGENT_NAME="sub_video_clip"` while `frontend/src/config/agentTabs.ts` L32 already showed `label: 'Gold Media'` and CLAUDE.md enumerated "gold media" as a canonical content type; the split wasted cycles in the zid debug session (debugger hunted for a `gold_media.py` file that didn't exist). Ran via `/gsd:quick --discuss` workflow; user responded "All clear" to the 3 gray-area AskUserQuestion batch, locking 8 decisions (D-01 through D-08) to Recommended paths: D-01 full rename, D-02 Alembic migration (auditable, vs one-off railway-run UPDATE), D-03 test file renamed, D-04 frontend component file renamed, D-05 worker.py "Gold Media" display unchanged, D-06 lock value 1015 preserved, D-07 `VIDEO_ACCOUNTS` → `GOLD_MEDIA_ACCOUNTS`, D-08 no backward-compat aliases. **Changes:** 3 git-renamed files (history preserved — `scheduler/agents/content/gold_media.py` 88% similarity `git log --follow` reaches vxg 68b21d1 + eoe 762b08b, `scheduler/tests/test_gold_media.py` 61%, `frontend/src/components/content/GoldMediaPreview.tsx` 90%) + 16 modified files across all 4 layers + 1 new Alembic migration `0008_rename_video_clip_to_gold_media.py` (single-headed chain confirmed via `alembic heads` = `0008 (head)`; upgrade updates `content_bundles.content_type` then `agent_runs.agent_name`; downgrade symmetric reverse). Planner extended rename scope for zero-grep hygiene consistency: internal helpers `_search_video_clips` → `_search_gold_media_clips`, `_draft_video_caption` → `_draft_gold_media_caption`, constant `VIDEO_CLIP_SCORE` → `GOLD_MEDIA_SCORE` (value 7.5 unchanged; only symbol moves). **Gates all 9 green:** scheduler 109/109 pytest + ruff clean; backend 69 passed + 5 skipped + ruff clean + alembic heads = 0008; frontend 52/52 vitest + tsc + lint + build all clean. **Zero-grep:** 0 matches for `video_clip`, `sub_video_clip`, `VideoClipPreview`, `VIDEO_ACCOUNTS`, `VIDEO_CLIP_SCORE`, `_search_video_clips`, `_draft_video_caption` across `scheduler/` + `backend/app/` + `frontend/src/` (0008 migration is sole permitted location for old strings by design). 2 commits on main: `e835b61` (refactor) + `69efac1` (SUMMARY). **Five of five zid follow-ups now addressed at the code level:** zid + krz + l40 + lbb + mfg. **Remaining:** (a) sub_gold_media (post-rename) consistent 0-items behavior — deferred as separate `/gsd:debug` investigation path (probe X API quota, `GOLD_MEDIA_ACCOUNTS` availability, analyst-quality-gate rejection rate from vxg). This rename was purely cosmetic/structural; 0-items is a distinct investigation.
 
