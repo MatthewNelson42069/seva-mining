@@ -1077,17 +1077,24 @@ async def _build_juno_world_events_section(
                 "world_events_total_seen": 0,
                 "world_events_survived": 0,
                 "world_events_categories": {},
+                "haiku_validation_errors": [],
             },
         )
 
     survived: list[tuple[dict, DefenceRelevance]] = []
     categories: dict[str, int] = {}
+    # CLEANUP-05 — collect Haiku ValidationError entries per-call for
+    # surfacing into agent_runs.notes['haiku_validation_errors']. The
+    # accumulator is OWNED by this function; classify_story appends to it
+    # on schema-mismatch and continues to fail-closed (return None).
+    validation_errors: list[dict] = []
     for entry in all_entries[:JUNO_WORLD_EVENTS_CLASSIFIER_CAP]:
         try:
             result = await classify_story(
                 client,
                 title=entry.get("title", ""),
                 snippet=entry.get("summary", ""),
+                validation_errors=validation_errors,
             )
         except Exception as exc:  # noqa: BLE001 — fail-closed per entry
             logger.warning(
@@ -1106,6 +1113,7 @@ async def _build_juno_world_events_section(
                 "world_events_total_seen": len(all_entries),
                 "world_events_survived": 0,
                 "world_events_categories": {},
+                "haiku_validation_errors": validation_errors,
             },
         )
 
@@ -1132,6 +1140,7 @@ async def _build_juno_world_events_section(
     diagnostic["world_events_total_seen"] = len(all_entries)
     diagnostic["world_events_survived"] = len(survived)
     diagnostic["world_events_categories"] = categories
+    diagnostic["haiku_validation_errors"] = validation_errors
     return (text, diagnostic)
 
 
@@ -1342,6 +1351,11 @@ async def run_juno_daily_summary() -> None:
         "serpapi_query_count": serpapi_count,
         "is_morning_fire": is_morning_fire,
         "overall_status": overall_status,
+        # CLEANUP-05 (Phase 11) — Haiku ValidationError observability.
+        # Empty list on the happy path; populated only when Haiku returns
+        # schema-violating structured output. Behavioral fail-closed is
+        # preserved upstream in classify_story.
+        "haiku_validation_errors": list(world_diag.get("haiku_validation_errors", []) or []),
     }
 
     try:
