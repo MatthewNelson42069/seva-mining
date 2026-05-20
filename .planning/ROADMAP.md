@@ -269,7 +269,10 @@ Plans:
 4. Attempting to PATCH a Seva row via `/api/juno/calendar/{seva_item_id}` returns 404 — server-side `Depends(get_current_company)` + `scoped_calendar_*()` helpers correctly enforce tenant existence isolation (verified by `backend/tests/test_calendar_tenant_isolation.py`)
 5. Full regression suites GREEN + the new isolation tests pass: backend stays at 184+ + new cross-tenant tests, frontend at 168+ + new isolation scenario; `scripts/verify-tenant-isolation.sh` continues to exit 0 (no new raw `select(CalendarItem)` outside `scoped.py`)
 
-**Plans:** TBD (planner decomposition pending)
+**Plans:** 1 plan
+
+Plans:
+- [ ] 14-01-PLAN.md — Lift Juno calendar gate (delete short-circuit at ContentCalendarPage.tsx:42-54), add frontend RTL test (per-tenant TanStack Query key isolation), add backend cross-tenant test (PATCH+DELETE 404 both directions), relax JCAL-01 wording per D-06
 
 **Complexity:** S-M (most logic ALREADY EXISTS — v2.1 Phase 6 is fully functional under Phase 9's multi-tenant routing; v3.1 Phase 14 is verification + isolation tests + empty-state copy registry + Juno-specific UAT, not new feature build)
 **Estimated duration:** 2-3 hours
