@@ -224,12 +224,10 @@ async def test_run_juno_daily_summary_idempotency(caplog):
 
 
 # ---------------------------------------------------------------------------
-# Phase 10 Wave 0 RED tests — Wave 2 (10-03-PLAN.md) lands the real
-# synthesis path and removes the per-function pytest.skip() lines below.
-#
-# Each test body is COMPLETE — Wave 2 only deletes the skip line to turn
-# the test GREEN. Per-function skip (rather than module-level) preserves
-# the Phase 9 GREEN tests above.
+# Phase 10 Wave 2 GREEN tests — landed in 10-03-PLAN.md alongside the real
+# synthesis path in scheduler/agents/daily_summary.py::run_juno_daily_summary.
+# Originally Wave 0 RED scaffolds (per-function skips); skips removed in
+# Wave 2 task.
 # ---------------------------------------------------------------------------
 
 
