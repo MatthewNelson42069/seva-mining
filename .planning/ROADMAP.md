@@ -456,10 +456,10 @@ Plans:
 4. Per-feed RSS health-check surfaces silent-feed-death: a feed returning `bozo=1 AND entries=[]` writes an entry to `agent_runs.errors` with the URL and `bozo_exception`; `status='partial'` row renders without the dead feed's stories rather than failing the whole cron; recent-history comparison alerts via existing WhatsApp failure-alert pattern (`WHA-03`) when a feed's entry count drops to 0 after recently returning ≥5
 5. `SELECT count(*) FROM daily_summaries GROUP BY company_id` after 7 days of production cron fires matches expected counts per tenant (Seva: 14 rows from 2x-daily; Juno: 14 rows from 2x-daily, both staggered ≥5 minutes apart per CONVENTIONS.md rate-limit rule); Seva renders byte-identical to pre-v3.0; `test_multitenant_isolation.py` continues to pass with real Juno content (no Seva cross-contamination)
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 
 - [x] 10-01-PLAN.md — Wave 0: Phase-0 RSS verification + 8 Wave 0 RED test files + companySectionConfig.ts production module (DEF-01..08 scaffolds)
-- [ ] 10-02-PLAN.md — Wave 1: Haiku 4.5 World Events classifier + populated JUNO_DEFENCE_FEEDS + JUNO_SERPAPI_QUERIES + production DEFENCE_NEWS_SYSTEM_PROMPT (DEF-01, DEF-02, DEF-03, DEF-06)
+- [x] 10-02-PLAN.md — Wave 1: Haiku 4.5 World Events classifier + populated JUNO_DEFENCE_FEEDS + JUNO_SERPAPI_QUERIES + production DEFENCE_NEWS_SYSTEM_PROMPT (DEF-01, DEF-02, DEF-03, DEF-06)
 - [ ] 10-03-PLAN.md — Wave 2: refusal-detector + extended run_juno_daily_summary with health-check + 3-section Sonnet synthesis (DEF-04, DEF-05, DEF-07)
 - [ ] 10-04-PLAN.md — Wave 3: SummaryCard.tsx per-tenant rendering + JUNO_CRON_ENABLED env-var gate + voice-calibration UAT (BLOCKING checkpoint) (DEF-08, DEF-10)
 - [ ] 10-05-PLAN.md — Wave 4: cron-enable + manual fire smoke + visual QA at 1440×900 (BLOCKING checkpoint) (DEF-09 + final verification)
@@ -509,7 +509,7 @@ Plans:
 | 7. Weekly Viral Sweeper | v2.1 | 6/6 | Complete | 2026-05-19 |
 | 8. UI Polish + Dead-Code Strip | v2.1 | 4/4 | Complete | 2026-05-19 |
 | 9. Multi-Tenant Foundation | v3.0 | 5/5 | Complete | 2026-05-19 |
-| 10. Juno Defence News Funnel | v3.0 | 1/5 | In Progress|  |
+| 10. Juno Defence News Funnel | v3.0 | 2/5 | In Progress|  |
 
 ---
 
