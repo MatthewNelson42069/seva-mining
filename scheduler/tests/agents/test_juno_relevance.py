@@ -1,9 +1,8 @@
-"""Wave 0 RED tests for scheduler/agents/juno_relevance.py (DEF-06).
+"""Wave 1 GREEN tests for scheduler/agents/juno_relevance.py (DEF-06).
 
-Production module (`scheduler/agents/juno_relevance.py`) lands in Wave 1
-(`.planning/phases/10-juno-defence-news-funnel/10-02-PLAN.md`). Wave 1's
-final task removes the module-level `pytest.skip(...)` line below to turn
-this entire file GREEN.
+Production module (`scheduler/agents/juno_relevance.py`) was landed by
+`10-02-PLAN.md` Task 1; the module-level skip from Wave 0 was removed in
+the same task to flip this entire file GREEN.
 
 Contracts asserted (verbatim from 10-CONTEXT.md §D-05/D-06/D-07):
 - DefenceRelevance Pydantic model with the 10-value Literal category enum
