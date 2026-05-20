@@ -1,59 +1,83 @@
-# Requirements: Seva Mining v3.0.1
+# Requirements: Seva Mining v3.1
 
-**Defined:** 2026-05-19
-**Core Value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry + world-events-relevant-to-defence intelligence for Juno. For v3.0.1, the operator's directive ("Juno should do the brief at 8am + 12pm PT every day") makes Canadian Procurement signal a both-fires deliverable rather than a morning-only artifact. Remaining four cleanups close documentation drift + dead code + observability gaps the v3.0 audit filed as non-blocking but worth landing before any v3.1 expansion work begins.
+**Defined:** 2026-05-20
+**Core Value:** Every piece of intelligence the dashboard surfaces must be genuinely valuable to the analyst for that company — gold-sector intelligence for Seva, defence-industry intelligence for Juno. v3.1 brings Juno to **feature parity** with Seva — content planner (Tab 2) + weekly viral content (Tab 3) + visual identity that doesn't borrow Seva's wordmark — and splits the shared Anthropic key per tenant so cost-attribution is clean. After v3.1 ships, Juno is a complete defence-industry equivalent of Seva, not a one-tab news brief.
 
-## v3.0.1 Requirements
+## v3.1 Requirements
 
-Five cleanup items closing v3.0 audit follow-ups. Each requirement maps to exactly one phase (Phase 11 — single cleanup phase).
+19 atomic requirements across 4 feature categories. All deferred items from the v3.0 audit's `tech_debt` tier (Juno expansion + per-tenant key) plus per-company branding. Phase numbering continues from Phase 11; v3.1 starts at **Phase 12**.
 
-### v3.0 Audit Cleanup (CLEANUP)
+### Juno Content Calendar (JCAL)
 
-Five small follow-ups from the v3.0 milestone audit (`milestones/v3.0-MILESTONE-AUDIT.md`). Independent of each other; can be batched in a single phase with parallel-where-possible waves.
+Port of Seva's v2.1 Phase 6 paper-planner work to Juno's tab 2. Multi-tenant scaffolding from v3.0 Phase 9 already in place (`scoped_*()` helpers + `/api/{company}/calendar` router prefix + `<Route path=":company">` wrapper); v3.1's job is making `/juno/calendar` actually function, not building the Calendar from scratch.
 
-- [x] **CLEANUP-01**: System removes the morning-only SerpAPI cost gate inside `scheduler/agents/daily_summary.py::_build_juno_canadian_procurement_section` (currently returns `("", {"skipped_reason": "non_morning_fire"}, 0)` when `is_morning_fire=False`). After change: BOTH daily Juno fires (08:05 PT + 12:05 PT) execute the 7 Canadian-procurement SerpAPI queries from `scheduler/companies/juno/serpapi.py::JUNO_SERPAPI_QUERIES`. Tests in `scheduler/tests/agents/test_juno_daily_summary.py` that assert noon-fire-skip-procurement MUST be updated in the same commit. Operator-facing UX: at 12:05 PT, the `/juno/` SummaryCard renders the full 3-section brief instead of the generic "No new Canadian defence procurement signals today" emptyFallback. Budget delta: Juno SerpAPI cost ~$5.25/mo → ~$8-9/mo (210 → ~420 calls/month, still inside $50/mo SerpAPI cap with ~$41 headroom).
+- [ ] **JCAL-01**: User opens `/juno/calendar` (Juno Tab 2) and sees the same weekly Mon-Sun paper-planner grid UI Seva users see — direct-edit textarea per day, current-week highlighted. Empty state copy: "No content planned for this week — start typing in any day to plan ahead." Currently this page renders a Phase 9 placeholder.
+- [ ] **JCAL-02**: User edits a day cell on the Juno calendar; auto-save fires on `blur` with optimistic UI; the persisted row in `calendar_items` carries `company_id='juno'` (verified via row-level `scoped_*()` helper, not raw `select(CalendarItem)`).
+- [ ] **JCAL-03**: User switches Juno → Seva via `CompanySwitcher`; calendar view immediately reflects Seva's content (TanStack Query keys keyed on `company_id` per Phase 9 `queryKeys.ts` pattern). Zero Juno bleed-through into Seva's view, zero Seva bleed-through into Juno's view (cross-tenant isolation test added).
+- [ ] **JCAL-04**: User week-navigates (prev / next / today) on the Juno calendar identically to Seva's calendar; URL state preserved on browser back/forward.
+- [ ] **JCAL-05**: All Juno calendar CRUD operations (GET range / POST / PATCH / DELETE) route through `/api/juno/calendar/*` with `Depends(get_current_company)` enforcing `company_id='juno'` server-side. Attempting to mutate a Seva row from `/api/juno/` (or vice versa) returns 404 (not 403 — tenant existence isolation).
 
-- [x] **CLEANUP-02**: System refreshes the archived `milestones/v3.0-REQUIREMENTS.md` traceability table — rows DEF-01 through DEF-07 currently say "Scaffolded (Wave 0 / 10-01 — RED tests + ...; production lands Wave 1/Wave 2)" but Phase 10 VERIFICATION.md status: passed and the bullet checkboxes are correctly `[x]`. Update the descriptive text to "Complete (2026-05-19, plan 10-02 / 10-03 — <evidence>)" matching the format used for DEF-08..10. Pure documentation edit; no code touched.
+### Juno Weekly Viral Sweeper (JSWEEP)
 
-- [x] **CLEANUP-03**: System removes the dead `run_juno_daily_summary` stub block at `scheduler/agents/daily_summary.py:762` (Phase 9 stub shadowed by Phase 10 live implementation at line 1150 via Python's last-wins semantics). Pre-removal: grep confirms no module imports the line-762 definition specifically (Python imports always resolve to last definition in a module). Post-removal: full scheduler pytest suite still GREEN; `scheduler/worker.py` `lazy import` of `run_juno_daily_summary` continues to resolve to the Phase 10 implementation. Reduces `daily_summary.py` line count by ~110 lines.
+Defence-sector parallel to Seva's v2.1 Phase 7 sweeper. Lock slot `juno_weekly_sweeper=1021` reserved in v3.0 Phase 9; `weekly_sweeps` table is already multi-tenant via Alembic 0014. v3.1's job is wiring the cron + defence-sector X queries + Sonnet synthesis + Tab 3 render.
 
-- [x] **CLEANUP-04**: System updates the frontmatter of both archived VALIDATION.md files in `milestones/v3.0-phases/`: `09-multi-tenant-foundation/09-VALIDATION.md` and `10-juno-defence-news-funnel/10-VALIDATION.md`. Flip `nyquist_compliant: false` → `true` and `wave_0_complete: false` → `true`. All Wave 0 RED tests across both phases flipped GREEN at consumer wave time (Phase 9 added 59 net passing scheduler tests; Phase 10 added 27 net passing frontend tests). The flags weren't updated at phase close — pure documentation drift. Two single-line edits per file.
+- [ ] **JSWEEP-01**: Operator can enable Juno sweeper cron via `JUNO_SWEEPER_CRON_ENABLED=true` env var in Railway (mirrors `JUNO_CRON_ENABLED` precedent from v3.0 Phase 10). When `false` (or unset), Juno cron does not register — production deploys default to disabled until operator-approved smoke fire passes.
+- [ ] **JSWEEP-02**: Sunday 08:00 PT America/Los_Angeles APScheduler cron fires at lock ID `1021`; runs `tweepy.AsyncClient.search_recent_tweets` against Juno-specific defence-sector X queries (specific query set defined during discuss-phase, candidates: defence-reporter handles, NATO/RUSI/CSIS official accounts, `#defence`/`#NATO` tags, defence-prime cashtags); computes virality cross-reference over the past 7 days of Juno's `daily_summaries.raw_sources_jsonb` Defence News + Canadian Procurement + World Events sub-arrays.
+- [ ] **JSWEEP-03**: Cron persists a `weekly_sweeps` row with `company_id='juno'`, status ∈ `(completed, partial, failed)` via the same status mapping as Seva sweeper. Idempotency-filter includes `'partial'` (Phase 9 critical-fix pattern preserved).
+- [ ] **JSWEEP-04**: Sonnet 4.6 produces exactly 3 content angles per sweep; each angle respects Juno's voice constraints from v3.0 Phase 10 D-01 (Janes/CSIS desk energy, explicit anti-tactical clause, no operational/OOB/force-posture content). Refusal-detector pattern from Phase 10 reused — retry-with-framing-nudge on detected refusal, `status='partial'` on second-attempt failure.
+- [ ] **JSWEEP-05**: User opens `/juno/sweeper` (Juno Tab 3) and sees the latest sweep card identically formatted to Seva's Tab 3 sweep card. Empty-state copy for first deploy: "Juno's first viral sweep runs Sunday 08:00 PT. Check back then." (or analogous Janes-voice copy).
+- [ ] **JSWEEP-06**: User can browse historical Juno sweeps via week-picker (same UI component as Seva Tab 3 history). Cross-tenant isolation: switching to `/seva/sweeper` shows only Seva sweeps; switching to `/juno/sweeper` shows only Juno sweeps. Zero leak.
 
-- [x] **CLEANUP-05**: System adds structured logging to the Haiku 4.5 classifier in `scheduler/agents/juno_relevance.py` when `pydantic.ValidationError` is raised on the structured-output `messages.parse(output_format=DefenceRelevance)` call. Current behavior: `try/except` fail-closed (item excluded from synthesis — dual-use exclusion goal satisfied behaviorally). NEW behavior: same fail-closed contract + a log entry written to `agent_runs.notes` shape `{"haiku_validation_errors": [{"input_excerpt": "<first 200 chars of news item>", "error_type": "<exc class name>", "error_msg": "<first 200 chars of exc str>"}]}`. Logging is observability-only — fail-closed contract MUST be preserved. Optional: tune Haiku `temperature` parameter (currently default ~1.0) to reduce schema-mismatch frequency; planner picks whether this lands in this requirement or defers.
+### Per-company Branding (BRAND)
 
-## v3.1+ Requirements
+`AppHeader.tsx` freeze formally lifted in v3.0 Phase 9. v3.1 extends the per-tenant pattern beyond `companySectionConfig.ts` (which currently covers section labels) to brand assets — wordmark + logo + color palette. Anti-pattern explicitly forbidden: `if (company === 'juno') {...}` branches inside components. Instead: semantic-config registry (`companyBrandConfig.ts` or similar) consulted by both the component AND the Tailwind CSS-token resolver.
 
-Deferred to future v3.x release. Tracked but NOT in v3.0.1 roadmap.
+- [ ] **BRAND-01**: User on any `/juno/*` route sees "Juno Industries" in the `AppHeader` wordmark slot (currently shows "Seva Mining"). User on any `/seva/*` route continues to see "Seva Mining" — zero regression from v3.0.
+- [ ] **BRAND-02**: User on `/juno/*` sees a Juno-specific color palette resolved through CSS tokens (`--color-brand-accent[-hover/-subtle]` per Phase 8 UI-01..04 pattern). Juno's palette is defence-industry appropriate — subdued / authoritative / not-Seva's-amber. Specific palette values defined during discuss-phase (candidates: navy / slate / desaturated steel-blue / muted-bronze).
+- [ ] **BRAND-03**: User on `/juno/*` sees a Juno-specific brand icon (logo) in `AppHeader`'s left-most slot. Juno logo asset stored at `frontend/public/brand/juno-icon.svg` (or analogous), Seva remains `seva-icon.svg`. Logo resolution driven by `:company` URL segment via the brand registry.
+- [ ] **BRAND-04**: User switches Seva → Juno via `CompanySwitcher`; wordmark + logo + accent color all flip simultaneously on route change, no flash-of-wrong-brand (FOWB) during transition. Verified by single-test scenario: route from `/seva/` to `/juno/`, assert no intermediate state.
+- [ ] **BRAND-05**: All brand resolution is config-driven, not component-branching. Grep for `company === 'juno'` or `company === 'seva'` inside `frontend/src/components/` returns zero hits in any `Brand*` / `AppHeader*` / `TabbedDashboard*` file (CI grep gate added if needed). The pattern is: components read `useCompanyBrand()` (or analogous hook) which consults `companyBrandConfig.ts`. Adding a future tenant requires only a registry entry.
 
-### Juno Expansion
-- **JUNO-CAL-v31**: Juno Content Calendar (Tab 2) — same paper-planner UI as Seva, scoped to Juno's calendar_items rows
-- **JUNO-SWEEP-v31**: Juno Weekly Viral Sweeper (Tab 3) — defence-sector X API queries + virality compute; lock slot `juno_weekly_sweeper=1021` already reserved in Phase 9
-- **TENANT-BRAND-v31**: Per-company branding (logos, color palettes, wordmarks) — Juno currently shows "Seva Mining" wordmark on `/juno/*` pages
-- **TENANT-VISITED-v31**: Last-visited tenant for bare `/` redirect — Zustand `lastVisitedCompany` already populated as switch-action byproduct in Phase 9
-- **TENANT-KEY-v31**: Per-tenant Anthropic API key — currently single shared key
+### Per-tenant Anthropic API Key (KEY)
+
+Currently `scheduler/agents/*.py` + `backend/app/*` all read `os.getenv("ANTHROPIC_API_KEY")` directly. v3.1 introduces a resolver pattern so each tenant's LLM calls bill to its own Anthropic dashboard. Fallback to shared key when per-tenant key unset preserves local-dev workflow and avoids hard-failing if operator hasn't yet split keys.
+
+- [ ] **KEY-01**: Operator sets `SEVA_ANTHROPIC_API_KEY` + `JUNO_ANTHROPIC_API_KEY` in Railway env vars. All Haiku 4.5 classifier calls (`scheduler/agents/juno_relevance.py`) + Sonnet 4.6 synthesis calls (`scheduler/agents/daily_summary.py` for both tenants + future Sweeper synthesis) resolve their Anthropic client via `get_anthropic_client(company_id)` — Seva calls bill to Seva's key, Juno calls bill to Juno's key.
+- [ ] **KEY-02**: When per-tenant env var is unset, `get_anthropic_client(company_id)` falls back to the shared `ANTHROPIC_API_KEY` gracefully (logs WARN once at startup with the fallback notice; does not hard-fail). This preserves local-dev workflow where typically only one key is set, and gives a safe rollout path: ship the resolver first, set per-tenant keys in prod second, no deploy gap.
+- [ ] **KEY-03**: All Anthropic call sites in scheduler + backend route through the resolver. Grep for `Anthropic(api_key=` returns hits ONLY inside the resolver module (`scheduler/anthropic_client.py` or analogous). CI grep gate added if needed (mirroring `scripts/verify-tenant-isolation.sh` from Phase 9).
+- [ ] **KEY-04**: Cost attribution works as expected — Seva's Anthropic dashboard shows only `seva_*` request IDs; Juno's dashboard shows only `juno_*` request IDs. Verified by manual fire of `run_daily_summary` (Seva) + `run_juno_daily_summary` (Juno) post-deploy and checking each Anthropic console's recent usage.
+
+## v3.2+ Requirements
+
+Deferred to future v3.2+ release. Tracked but NOT in v3.1 roadmap.
 
 ### Defence Sector Hardening
-- **DEF-TIER2-v31**: Tier-2 defence RSS feeds (Defense Daily, Inside Defense, National Defense Magazine, Defense Industry Daily, Shephard, Defense One) — if Tier-1 signal proves insufficient after first 2-4 weeks of production fires
+- **DEF-TIER2-v3X**: Tier-2 defence RSS feeds (Defense Daily, Inside Defense, National Defense Magazine, Defense Industry Daily, Shephard, Defense One). Decide after 2-4 weeks of v3.0/v3.0.1 Tier-1 production data on whether signal is thin enough to warrant expansion. May be added mid-v3.1 opportunistically if Tier-1 proves insufficient, but not scoped at milestone start.
 
-### v3.2+ Scaling
-- **TENANT-N-v32**: `companies` DB table replacing hardcoded `CHECK company_id IN ('seva','juno')` constraint — when scaling beyond N=2 tenants
+### Multi-tenant Scaling
+- **TENANT-N-v32**: `companies` DB table replacing hardcoded `CHECK company_id IN ('seva','juno')` constraint — when scaling beyond N=2 tenants. v3.2+.
+- **TENANT-VISITED-v31-redux**: Last-visited tenant for bare `/` redirect. Zustand `lastVisitedCompany` already populated as switch-action byproduct in Phase 9 — just needs a router-level redirect to consume it. Tiny gap. May fold into v3.1 Branding phase opportunistically if low-cost, otherwise v3.2.
+
+### Operator Tooling
+- **OPS-DASH-v3X**: Per-tenant cost dashboard (read Anthropic + SerpAPI usage by tenant via the per-tenant key separation). Useful but not a v3.1 deliverable.
 
 ## Out of Scope
 
-Explicitly excluded from v3.0.1. Documented to prevent scope creep.
+Explicitly excluded from v3.1. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Any new Juno features beyond the 5 audit cleanups | This is a patch release; new features go in v3.1 |
-| Per-company branding / Juno wordmark | TENANT-BRAND-v31 — deferred to v3.1 |
-| Juno Calendar / Juno Sweeper | JUNO-CAL-v31 / JUNO-SWEEP-v31 — deferred to v3.1 |
-| Tier-2 defence RSS feeds | DEF-TIER2-v31 — wait for Tier-1 production signal data first |
-| Companies DB table | TENANT-N-v32 — deferred to v3.2+ scaling milestone |
-| Per-tenant Anthropic API key | TENANT-KEY-v31 — deferred to v3.1 |
-| Operational/tactical intelligence in Juno briefs | Hard prohibition — Anthropic content-policy boundary preserved from v3.0 |
+| Tier-2 defence RSS feeds | DEF-TIER2-v3X — wait for Tier-1 production signal data; may fold in mid-v3.1 opportunistically if needed |
+| `companies` DB table | TENANT-N-v32 — deferred to v3.2+; N=2 hardcoded CHECK remains acceptable tech debt |
+| Last-visited tenant redirect | TENANT-VISITED-v31-redux — half-built in v3.0; if Branding phase has spare budget it may land, otherwise v3.2 |
+| Operational/tactical defence content | Hard prohibition — Anthropic content-policy boundary preserved across Calendar drafting + Sweeper synthesis |
 | Equity/financial signals on defence primes | Explicit anti-feature carried forward from v3.0 |
 | Mobile-responsive UI | Single-user desktop constraint preserved from v1.0 |
 | Autoposting to X/IG/LinkedIn | Hard prohibition per CLAUDE.md |
+| Per-tenant cost dashboard | OPS-DASH-v3X — useful but not v3.1 |
+| Cross-tenant analytics / unified dashboard | Out of scope permanently (single-operator-per-session UX) |
+| LinkedIn integration | Already excluded from v1.0 — not re-opening |
+| Reddit ingestion | Dropped per v2.1 X-API pivot — not re-opening |
 
 ## Traceability
 
@@ -61,17 +85,32 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CLEANUP-01 | Phase 11 | Complete |
-| CLEANUP-02 | Phase 11 | Complete |
-| CLEANUP-03 | Phase 11 | Complete |
-| CLEANUP-04 | Phase 11 | Complete |
-| CLEANUP-05 | Phase 11 | Complete |
+| JCAL-01 | TBD | Pending |
+| JCAL-02 | TBD | Pending |
+| JCAL-03 | TBD | Pending |
+| JCAL-04 | TBD | Pending |
+| JCAL-05 | TBD | Pending |
+| JSWEEP-01 | TBD | Pending |
+| JSWEEP-02 | TBD | Pending |
+| JSWEEP-03 | TBD | Pending |
+| JSWEEP-04 | TBD | Pending |
+| JSWEEP-05 | TBD | Pending |
+| JSWEEP-06 | TBD | Pending |
+| BRAND-01 | TBD | Pending |
+| BRAND-02 | TBD | Pending |
+| BRAND-03 | TBD | Pending |
+| BRAND-04 | TBD | Pending |
+| BRAND-05 | TBD | Pending |
+| KEY-01 | TBD | Pending |
+| KEY-02 | TBD | Pending |
+| KEY-03 | TBD | Pending |
+| KEY-04 | TBD | Pending |
 
 **Coverage:**
-- v3.0.1 requirements: 5 total (5 CLEANUP)
-- Mapped to phases: 5 (all → Phase 11)
-- Unmapped: 0 ✓
+- v3.1 requirements: 20 total (5 JCAL + 6 JSWEEP + 5 BRAND + 4 KEY)
+- Mapped to phases: 0 (pending roadmap creation)
+- Unmapped: 20 (will be filled by roadmapper)
 
 ---
-*Requirements defined: 2026-05-19*
-*Last updated: 2026-05-20 — Phase 11 complete; all 5 CLEANUP requirements satisfied (verifier 5/5 PASS)*
+*Requirements defined: 2026-05-20*
+*Last updated: 2026-05-20 — v3.1 Juno Feature Parity + Branding milestone scoped*
