@@ -49,6 +49,8 @@ os.environ.setdefault("FRONTEND_URL", "https://x.com")
 
 from anthropic import AsyncAnthropic  # noqa: E402
 
+from anthropic_client import get_anthropic_client  # noqa: E402
+
 from agents.daily_summary import (  # noqa: E402
     _build_juno_defence_news_section,
     _build_juno_world_events_section,
@@ -374,9 +376,10 @@ async def main() -> None:
         print("ERROR: ANTHROPIC_API_KEY not set in env", file=sys.stderr)
         sys.exit(1)
 
-    client = AsyncAnthropic(
-        api_key=settings.anthropic_api_key, timeout=JUNO_SONNET_TIMEOUT,
-    )
+    # v3.1 Phase 12 — Juno UAT script routes through per-tenant resolver so
+    # operator re-fires post-deploy attribute to JUNO_ANTHROPIC_API_KEY when set
+    # (graceful fallback to ANTHROPIC_API_KEY when unset).
+    client = get_anthropic_client("juno", timeout=JUNO_SONNET_TIMEOUT)
 
     # -------------------------------------------------------------------------
     # Section 1: Defence News (Stories 1-2)
