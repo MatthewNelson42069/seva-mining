@@ -16,6 +16,8 @@ Every piece of intelligence the dashboard surfaces must be genuinely valuable to
 
 ## Current State
 
+🚧 **v3.1 in progress — Phase 12 shipped 2026-05-20** — Per-tenant Anthropic API Key resolver landed (KEY-01..04 verified PASS by gsd-verifier, 16/16 must-haves). `scheduler/anthropic_client.py` resolver routes every Anthropic call through `get_anthropic_client(company_id: Literal["seva","juno"], *, timeout)`; 5 production sites refactored (3 Seva + 2 Juno); 3 dead functions + 1 orphan helper excised from `content_agent.py`; CI grep gate `scripts/verify-anthropic-resolver.sh` enforces resolver-only Anthropic instantiation; `scheduler/worker.py::_validate_env` surfaces per-tenant + STRICT env-var status at boot. Operator post-deploy actions pending (Railway env-var config + Anthropic console attribution check + `ANTHROPIC_RESOLVER_STRICT=true` flip + CI integration). Next phase: 13 (Per-company Branding).
+
 ✅ **v3.0.1 shipped 2026-05-20** — v3.0 audit cleanup complete (5/5 CLEANUP requirements verified PASS by gsd-verifier). All regression gates GREEN: backend 184 pass / scheduler 331 pass (+3 from new Haiku ValidationError observability tests) / frontend 168 pass. Production cron LIVE — `JUNO_CRON_ENABLED=true` flipped in Railway 2026-05-20; next 08:05 PT America/Los_Angeles cron writes the first real Juno defence intelligence brief.
 
 ✅ **v3.0 shipped 2026-05-19** — multi-tenant platform live. Seva + Juno toggle operational. Audit verdict: `tech_debt` — 20/20 requirements satisfied, 0 critical blockers, 8 non-blocking follow-ups (5 closed in v3.0.1; 3 deferred to v3.1+). See [`milestones/v3.0-MILESTONE-AUDIT.md`](milestones/v3.0-MILESTONE-AUDIT.md).
@@ -280,4 +282,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-20 — v3.0.1 milestone shipped (5/5 CLEANUP requirements verified PASS; phase 11 closed). v3.1 milestone scoped: Juno Feature Parity + Branding (JUNO-CAL-v31, JUNO-SWEEP-v31, TENANT-BRAND-v31, TENANT-KEY-v31). Phase counter continues from Phase 12.*
+*Last updated: 2026-05-20 — v3.1 Phase 12 shipped (per-tenant Anthropic resolver; 4/4 KEY requirements verified PASS, 16/16 must-haves). Operator post-deploy Railway env-var config pending. Next phase: 13 (Per-company Branding — BRAND-01..05).*
