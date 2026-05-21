@@ -53,7 +53,6 @@ from anthropic_client import get_anthropic_client  # noqa: E402
 
 from agents.daily_summary import (  # noqa: E402
     _build_juno_defence_news_section,
-    _build_juno_world_events_section,
     JUNO_SONNET_MODEL,
     JUNO_SONNET_MAX_PROCUREMENT,
     JUNO_SONNET_TIMEOUT,

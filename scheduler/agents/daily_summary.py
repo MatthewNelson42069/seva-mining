@@ -54,7 +54,6 @@ from agents.juno_relevance import (
     classify_story,
     survives_threshold,
     DefenceRelevance,
-    HAIKU_MODEL,
 )
 from companies.juno import feeds as juno_feeds
 from companies.juno import serpapi as juno_serpapi_cfg
