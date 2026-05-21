@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
-stopped_at: Completed 15-01-PLAN.md (D-03a substrate writer extension)
-last_updated: "2026-05-21T00:45:22.071Z"
+stopped_at: Completed 15-05-PLAN.md (juno_weekly_sweeper orchestrator + 17 unit tests)
+last_updated: "2026-05-21T00:58:24.769Z"
 last_activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 14
-  completed_plans: 11
+  completed_plans: 12
 ---
 
 # Project State
@@ -168,6 +168,7 @@ Last activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno test
 | Phase 15-juno-weekly-viral-sweeper P04 | 138 | 1 tasks | 1 files |
 | Phase 15-juno-weekly-viral-sweeper P02 | 4 | 2 tasks | 4 files |
 | Phase 15-juno-weekly-viral-sweeper P01 | 12 | 2 tasks | 2 files |
+| Phase 15-juno-weekly-viral-sweeper P05 | 6.5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -385,6 +386,8 @@ Recent decisions affecting current work:
 - [Phase 15-juno-weekly-viral-sweeper]: Plan 15-04: backend cross-tenant test mirrors Phase 14 D-05 fixture pattern verbatim; semantic adapted from '404 on cross-tenant UUID' to 'total == 0 on wrong tenant prefix' since /api/{company}/weekly-sweeps is GET-only (no PATCH/DELETE surface)
 - [Phase 15-juno-weekly-viral-sweeper]: JUNO_SWEEPER_SYSTEM_PROMPT and JUNO_SWEEPER_X_QUERY constants landed (Plan 15-02) with verbatim FORBID anti-tactical clause string-equality contract grep-verified (2 occurrences) and 261-char corrected X query (11 handles + 2 hashtags, well under 512-char Basic-tier cap)
 - [Phase 15-juno-weekly-viral-sweeper]: D-03a Option 1 applied: extended Phase 10 _build_juno_*_section writers to return entries alongside (md, diag); orchestrator threads entries into raw_sources_jsonb top-level keys (defence_news/canadian_procurement/world_events). Unblocks Plan 15-05 sweeper virality compute substrate read.
+- [Phase 15-juno-weekly-viral-sweeper]: D-06 LOCKED: imported canonical_url + _sunday_of_this_week from agents.weekly_sweeper (no Seva file edit); identity-assertion test guards against future copy-paste refactors
+- [Phase 15-juno-weekly-viral-sweeper]: Insufficient-signal status mapping for Juno = 'partial' (NOT 'completed' as Seva does) — D-03b backfill window visibility + alignment with Phase 9 idempotency-filter-includes-partial pattern
 
 ### Pending Todos
 
@@ -465,9 +468,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T00:45:22.066Z
+Last session: 2026-05-21T00:58:14.554Z
 Last activity: 2026-05-20
-Stopped At: Completed 15-01-PLAN.md (D-03a substrate writer extension)
+Stopped At: Completed 15-05-PLAN.md (juno_weekly_sweeper orchestrator + 17 unit tests)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
