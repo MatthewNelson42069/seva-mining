@@ -55,7 +55,7 @@ Five pre-existing tech-debt items surfaced by the v3.1 milestone audit (`.planni
 
 - [ ] **CLEAN-02**: Backend ruff cleanup — fix 17 `UP017` (`datetime.UTC` migration) + 1 E501 in `backend/app/main.py` + `backend/app/models/weekly_sweep.py` + any other pre-Phase-14 files. After change: `cd backend && uv run ruff check` exits 0. Auto-fixable via `uv run ruff check --fix`.
 
-- [ ] **CLEAN-03**: Scheduler ruff cleanup — remove F401 unused imports: `HAIKU_MODEL` in `scheduler/agents/daily_summary.py:57`, `select` in `scheduler/agents/weekly_sweeper.py`, `_build_juno_world_events_section` in `scheduler/scripts/uat_voice_calibration.py`. After change: `cd scheduler && uv run ruff check` exits 0.
+- [x] **CLEAN-03**: Scheduler ruff cleanup — remove F401 unused imports: `HAIKU_MODEL` in `scheduler/agents/daily_summary.py:57`, `select` in `scheduler/agents/weekly_sweeper.py`, `_build_juno_world_events_section` in `scheduler/scripts/uat_voice_calibration.py`. After change: `cd scheduler && uv run ruff check` exits 0.
 
 - [ ] **CLEAN-04**: Scheduler test RuntimeWarning cleanup — fix the 4 AsyncMock `RuntimeWarning: coroutine was never awaited` in `scheduler/tests/agents/test_daily_summary_prune.py`. Likely cause: `AsyncMock` configured to return coroutines but test code calls `.return_value` synchronously. After change: scheduler pytest output shows 0 RuntimeWarnings (or matches documented pre-existing baseline).
 
@@ -121,7 +121,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 | JSWEEP-06 | Phase 15 | Complete |
 | CLEAN-01 | Phase 16 | Pending |
 | CLEAN-02 | Phase 16 | Pending |
-| CLEAN-03 | Phase 16 | Pending |
+| CLEAN-03 | Phase 16 | Complete |
 | CLEAN-04 | Phase 16 | Pending |
 | CLEAN-05 | Phase 16 | Pending |
 

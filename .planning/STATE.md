@@ -4,8 +4,8 @@ milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
 stopped_at: "Completed 15-07-PLAN.md (operator voice UAT APPROVED 2026-05-21 — interpretation b: code+test correctness; smoke fire deferred; Phase 15 closes at 7/7 plans code-side; operator out-of-band Railway env flip pending)"
-last_updated: "2026-05-21T01:19:05.060Z"
-last_activity: 2026-05-21 — Plan 15-06 landed via parallel Wave 2 executor (commits 343c711 feat + ec4ade7 test; 363/363 scheduler tests pass; production cron registered behind JUNO_SWEEPER_CRON_ENABLED gate default-disabled awaiting Plan 15-07 voice UAT + operator Railway env flip)
+last_updated: "2026-05-21T02:45:33.180Z"
+last_activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpretation b — code+test correctness basis; substantive smoke fire deferred to post-D-03b-backfill-window opportune moment); Phase 15 closes code-side at 7/7 plans; verifier next
 progress:
   total_phases: 4
   completed_phases: 4
@@ -171,6 +171,7 @@ Last activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpr
 | Phase 15-juno-weekly-viral-sweeper P05 | 6.5min | 2 tasks | 2 files |
 | Phase 15-juno-weekly-viral-sweeper P06 | 3 min | 2 tasks | 2 files |
 | Phase 15-juno-weekly-viral-sweeper P07 | 5min | 1 tasks | 1 files |
+| Phase 16-v3.1-audit-cleanup-bundle P03 | 4min | 1 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -392,6 +393,7 @@ Recent decisions affecting current work:
 - [Phase 15-juno-weekly-viral-sweeper]: Insufficient-signal status mapping for Juno = 'partial' (NOT 'completed' as Seva does) — D-03b backfill window visibility + alignment with Phase 9 idempotency-filter-includes-partial pattern
 - [Phase 15-juno-weekly-viral-sweeper]: Use os.getenv pattern for JUNO_SWEEPER_CRON_ENABLED (NOT Settings field) per RESEARCH §6 Open Q 4 LOCKED — pattern parity with Phase 10's JUNO_CRON_ENABLED gate; behavior identical, no scheduler/config.py edit needed
 - [Phase 15-juno-weekly-viral-sweeper]: Phase 15 voice UAT APPROVED by operator 2026-05-21; code-side complete; cron registration env-gated (JUNO_SWEEPER_CRON_ENABLED unset = disabled until operator out-of-band Railway flip)
+- [Phase 16-v3.1-audit-cleanup-bundle]: 16-03: ruff --fix is canonical F401 removal path; auth-gate is tool exit code not enumerated count (Rule 3 deviation included models/weekly_sweep.py)
 
 ### Pending Todos
 

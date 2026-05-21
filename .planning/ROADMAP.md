@@ -428,12 +428,12 @@ Plans:
 5. `grep -c "Coming in Phase 10" frontend/src/pages/SummaryFeedPage.tsx` returns 0 (stale copy gone); replaced with semantically correct tenant-aware copy OR block deleted entirely
 6. All existing tests still GREEN: frontend 181+ / backend 191+ / scheduler 363+ (zero regressions)
 
-**Plans:** 5 plans (Wave 1, parallel-safe)
+**Plans:** 1/5 plans executed
 
 Plans:
 - [ ] 16-01-PLAN.md — CLEAN-01: frontend ESLint cleanup (15 errors across 4 frontend files); mirrors Phase 11 single-task plan shape
 - [ ] 16-02-PLAN.md — CLEAN-02: backend ruff cleanup (17 UP017/I001/E501 errors across 4 backend files)
-- [ ] 16-03-PLAN.md — CLEAN-03: scheduler ruff F401 cleanup (6 unused imports across 4 scheduler files)
+- [x] 16-03-PLAN.md — CLEAN-03: scheduler ruff F401 cleanup (6 unused imports across 4 scheduler files)
 - [ ] 16-04-PLAN.md — CLEAN-04: scheduler test RuntimeWarning fix (4 unawaited coroutines in test_daily_summary_prune.py)
 - [ ] 16-05-PLAN.md — CLEAN-05: SummaryFeedPage stale Phase-9-era empty-state copy replacement (1 frontend production file)
 
@@ -473,7 +473,7 @@ Plans:
 | 13. Per-company Branding | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 1/1 | Complete   | 2026-05-20 |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 7/7 | Complete   | 2026-05-21 |
-| 16. v3.1 Audit Cleanup Bundle | v3.1 | 0/? | Pending    | - |
+| 16. v3.1 Audit Cleanup Bundle | v3.1 | 1/5 | In Progress|  |
 
 ---
 
