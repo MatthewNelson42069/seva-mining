@@ -61,13 +61,15 @@ export function SummaryFeedPage() {
 
   if (summaries.length === 0) {
     if (companyId === 'juno') {
-      // v3.0 Phase 9 — Juno News Funnel empty-state. Phase 10 (DEF-01..10)
-      // populates real defence-sector content; until then this copy renders
-      // when the cron writes zero rows or hasn't fired yet for Juno.
+      // v3.1 Phase 16 (CLEAN-05) — Juno daily cron is live (Phase 10 shipped 2026-05-19,
+      // Phase 12 per-tenant key wiring shipped 2026-05-20). Crons fire at 08:05 PT and
+      // 12:05 PT America/Los_Angeles. This branch renders when the cron has not yet
+      // produced a row for the current 60-day window (e.g., first-deploy backfill gap,
+      // or a stretch where every defence-news fire returned empty-after-classifier).
       return (
         <div className="max-w-[720px] mx-auto py-8 px-4">
           <p className="text-sm text-muted-foreground">
-            Coming in Phase 10 — Defence-sector ingestion not yet enabled.
+            No defence-industry briefs for this window yet — Juno's daily cron fires at 08:05 and 12:05 PT America/Los_Angeles.
           </p>
         </div>
       )

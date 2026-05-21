@@ -72,21 +72,16 @@ def _build_session_factory(
     if agent_run_obj is None:
         agent_run_obj = _make_agent_run_obj()
 
-    # We use a counter to return different behaviours per session context entry
-    sessions_created: list[AsyncMock] = []
-
-    def _make_session():
-        s = AsyncMock()
-        sessions_created.append(s)
-        return s
-
     # Build sessions upfront (3 are needed)
     sess1 = AsyncMock()  # insert agent_run
     sess2 = AsyncMock()  # DELETE
     sess3 = AsyncMock()  # telemetry update
 
     # Session 1: add + commit + refresh
-    sess1.add = AsyncMock()
+    # NOTE: `session.add()` is SYNC even on AsyncSession (SQLAlchemy queues the
+    # object without I/O), so it must be a MagicMock — not AsyncMock — or it
+    # returns an un-awaited coroutine and triggers RuntimeWarning. See CLEAN-04.
+    sess1.add = MagicMock()
     sess1.commit = AsyncMock()
 
     async def _refresh(obj):
@@ -232,7 +227,9 @@ async def test_prune_writes_failure_telemetry_on_exception():
 
     # Replicate the 3-session flow but have session 2 (DELETE) raise
     sess1 = AsyncMock()
-    sess1.add = AsyncMock()
+    # `session.add()` is sync — MagicMock, not AsyncMock (see CLEAN-04 note in
+    # _build_session_factory above).
+    sess1.add = MagicMock()
     sess1.commit = AsyncMock()
     sess1.refresh = AsyncMock()
 
