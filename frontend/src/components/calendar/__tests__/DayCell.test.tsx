@@ -145,3 +145,71 @@ describe('DayCell auto-save branches', () => {
     expect(cell.className).not.toContain('ring-amber-500')
   })
 })
+
+describe('DayCell defence badge (quick-260520-srt)', () => {
+  /**
+   * Cross-tenant isolation tests + badge render/no-render assertions.
+   *
+   * D-10 invariant: Seva calendar must remain byte-identical — no defence
+   * badges ever render for companyId === 'seva'.
+   *
+   * Priority check: Nov 8 has both a fixed entry (Indigenous Veterans Day)
+   * and falls within Veterans' Week range. The badge should display the
+   * fixed entry first (companyId === 'juno' renders defenceBadges[0]).
+   */
+
+  it('juno + matching date → badge renders with Remembrance Day', () => {
+    // Nov 11 2026
+    renderCell({
+      companyId: 'juno',
+      date: new Date(2026, 10, 11),
+      item: null,
+      weekRange: { start: '2026-11-09', end: '2026-11-15' },
+      isToday: false,
+    })
+    const badge = screen.getByTestId('defence-badge')
+    expect(badge).toBeTruthy()
+    expect(badge.textContent).toBe('Remembrance Day')
+    // Verify muted token (text-zinc-500) is present on the badge element
+    expect(badge.className).toContain('text-zinc-500')
+  })
+
+  it('seva + matching date → badge does NOT render (D-10 invariant)', () => {
+    // Same date (Nov 11 2026), companyId: 'seva'
+    renderCell({
+      companyId: 'seva',
+      date: new Date(2026, 10, 11),
+      item: null,
+      weekRange: { start: '2026-11-09', end: '2026-11-15' },
+      isToday: false,
+    })
+    const badge = screen.queryByText('Remembrance Day')
+    expect(badge).toBeNull()
+  })
+
+  it('juno + non-matching date → defence-badge slot is absent', () => {
+    // Mar 15 2026 — no defence date
+    renderCell({
+      companyId: 'juno',
+      date: new Date(2026, 2, 15),
+      item: null,
+      weekRange: { start: '2026-03-09', end: '2026-03-15' },
+      isToday: false,
+    })
+    const badge = screen.queryByTestId('defence-badge')
+    expect(badge).toBeNull()
+  })
+
+  it('priority ordering — Nov 8 shows Indigenous Veterans Day (fixed), not Veterans\' Week (range)', () => {
+    // Nov 8 2026: fixed entry (Indigenous Veterans Day) wins in position 0
+    renderCell({
+      companyId: 'juno',
+      date: new Date(2026, 10, 8),
+      item: null,
+      weekRange: { start: '2026-11-02', end: '2026-11-08' },
+      isToday: false,
+    })
+    expect(screen.queryByText('Indigenous Veterans Day')).toBeTruthy()
+    expect(screen.queryByText("Veterans' Week")).toBeNull()
+  })
+})

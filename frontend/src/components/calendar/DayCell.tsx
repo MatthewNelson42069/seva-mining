@@ -9,6 +9,7 @@ import {
   useDeleteCalendarItem,
   useUpdateCalendarItem,
 } from '@/hooks/useCalendarMutations'
+import { getDefenceDateBadges } from '@/data/junoDefenceCalendarDates'
 
 interface DayCellProps {
   companyId: CompanyId
@@ -91,6 +92,17 @@ export function DayCell({ companyId, date, item, weekRange, isToday }: DayCellPr
   const dayLabel = format(date, 'EEE') // 'Mon', 'Tue', ...
   const dayNumber = format(date, 'd') // '18', '19', ...
 
+  // Phase-13 + quick-260520-srt: defence-history badge slot.
+  // Tenant-gated to Juno via the existing companyId prop (NOT useCompanyBrand
+  // — DayCell receives companyId from WeeklyGrid, matching the Phase 6
+  // prop-passing contract). Seva calendar must render byte-identically
+  // to its pre-quick-260520-srt output (v3.0 D-10 invariant).
+  const defenceBadges =
+    companyId === 'juno'
+      ? getDefenceDateBadges(date.getFullYear(), date.getMonth() + 1, date.getDate())
+      : []
+  const defenceBadge = defenceBadges[0] ?? null // priority: fixed > movable > range (already ordered by lookup)
+
   return (
     <div
       className={cn(
@@ -118,6 +130,15 @@ export function DayCell({ companyId, date, item, weekRange, isToday }: DayCellPr
           {dayNumber}
         </span>
       </div>
+      {defenceBadge && (
+        <div
+          data-testid="defence-badge"
+          className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500 truncate"
+          title={defenceBadge.description}
+        >
+          {defenceBadge.name}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         value={current}
