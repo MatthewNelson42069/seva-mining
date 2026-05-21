@@ -273,6 +273,35 @@ def _make_juno_daily_summary_job(engine):
     return job
 
 
+def _make_juno_weekly_sweeper_job(engine):
+    """Create the juno_weekly_sweeper job callback (advisory-lock wrapped).
+
+    v3.1 Phase 15 (JSWEEP-01). Mirrors _make_juno_daily_summary_job exactly,
+    swapping the lock ID (1021 vs 1020) and the inner entry point
+    (run_juno_weekly_sweeper vs run_juno_daily_summary).
+
+    The factory CLOSES OVER the engine. company_id='juno' is baked into
+    the entry point name; no APScheduler args= injection needed (matches
+    the Phase 9 D-01 pattern for per-company jobs).
+
+    run_juno_weekly_sweeper is imported lazily at call time so worker.py
+    module import does not pay the juno_weekly_sweeper module's import
+    cost on Railway boot.
+    """
+
+    async def job():
+        async with engine.connect() as conn:
+            from agents.juno_weekly_sweeper import run_juno_weekly_sweeper  # lazy
+            await with_advisory_lock(
+                conn,
+                JOB_LOCK_IDS["juno_weekly_sweeper"],
+                "juno_weekly_sweeper",
+                run_juno_weekly_sweeper,
+            )
+
+    return job
+
+
 def _make_daily_summary_prune_job(engine):
     """Create the daily_summary_prune job callback (advisory-lock wrapped).
 
@@ -387,10 +416,10 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
     - daily_summary_prune: cron at 03:00 America/Los_Angeles (Phase 4 OPS-01).
     - weekly_sweeper: cron Sun 08:00 America/Los_Angeles (Phase 7 Plan 05).
     - juno_daily_summary: cron at 08:05 + 12:05 America/Los_Angeles
-      (v3.0 Phase 9 — TENANT-08, 5-min stagger from Seva per D-01a).
-
-    juno_weekly_sweeper (lock 1021) is reserved in JOB_LOCK_IDS but NOT
-    registered as a job — slot-only per v3.0 Phase 9 D-01.
+      (v3.0 Phase 9 — TENANT-08, 5-min stagger from Seva per D-01a; env-gated
+      by JUNO_CRON_ENABLED).
+    - juno_weekly_sweeper: cron Sun 08:00 America/Los_Angeles (v3.1 Phase 15
+      JSWEEP-01; env-gated by JUNO_SWEEPER_CRON_ENABLED).
 
     Phase 8 UI-06 (260519): all v1.0 content sub-agent crons fully retired
     (source files + tests + lock IDs 1010-1016 stripped). Historical lineage:
@@ -507,6 +536,42 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         id="weekly_sweeper",
         name="Weekly Viral Sweeper — Sun 08:00 America/Los_Angeles",
     )
+
+    # v3.1 Phase 15 — Juno Weekly Viral Sweeper at Sunday 08:00 PT.
+    # JSWEEP-01 — JUNO_SWEEPER_CRON_ENABLED env var gates registration.
+    # Mirrors Phase 10's JUNO_CRON_ENABLED precedent verbatim (worker.py:458).
+    # Production deploys default to DISABLED so the operator must explicitly
+    # opt in AFTER voice UAT approves (.planning/phases/15-juno-weekly-viral-sweeper/15-07-PLAN.md).
+    # Rollback is a single env-var unset (no redeploy needed).
+    # Same-time fire as Seva weekly_sweeper (Sun 08:00 PT) is safe — independent
+    # advisory locks (1019 Seva vs 1021 Juno) isolate them; max_instances=1 is
+    # per-job-id not global. 08:00 PT is outside the DST-ambiguous 01:00-02:00
+    # window (MOD-1 — safe). Lock ID 1021 (JOB_LOCK_IDS["juno_weekly_sweeper"])
+    # was already reserved in Phase 9 D-01; OPS-02 uniqueness assertion holds.
+    juno_sweeper_cron_enabled = os.getenv("JUNO_SWEEPER_CRON_ENABLED", "false").lower() == "true"
+    if juno_sweeper_cron_enabled:
+        logger.info(
+            "juno_weekly_sweeper cron ENABLED via JUNO_SWEEPER_CRON_ENABLED=true env var"
+        )
+        scheduler.add_job(
+            _make_juno_weekly_sweeper_job(engine),
+            trigger=CronTrigger(
+                day_of_week='sun',
+                hour=8,
+                minute=0,
+                timezone='America/Los_Angeles',
+            ),
+            id="juno_weekly_sweeper",
+            name="Weekly Viral Sweeper — Juno — Sun 08:00 America/Los_Angeles",
+            max_instances=1,
+            misfire_grace_time=1800,
+        )
+    else:
+        logger.info(
+            "juno_weekly_sweeper cron DISABLED — set JUNO_SWEEPER_CRON_ENABLED=true in "
+            "Railway env after voice UAT approves "
+            "(.planning/phases/15-juno-weekly-viral-sweeper/voice_calibration_uat.md)"
+        )
 
     for job_id, run_fn, name, lock_id, cron_kwargs in CONTENT_CRON_AGENTS:
         scheduler.add_job(
@@ -650,6 +715,19 @@ async def _validate_env() -> None:
         "true (resolver will RAISE on per-tenant key miss)"
         if settings.anthropic_resolver_strict
         else "false (resolver will fall back gracefully)",
+    )
+
+    # v3.1 Phase 15 — JUNO_SWEEPER_CRON_ENABLED gate visibility at boot (JSWEEP-01).
+    # Mirrors the JUNO_CRON_ENABLED Phase 10 precedent. Read via os.getenv (NOT
+    # Settings — pattern parity locked per RESEARCH §6 Open Question 4).
+    # Surfaces the gate status at boot so the operator can confirm Railway
+    # configuration without grepping the APScheduler job-registered log lines.
+    juno_sweeper_cron_enabled = os.getenv("JUNO_SWEEPER_CRON_ENABLED", "false").lower() == "true"
+    logger.info(
+        "ENV JUNO_SWEEPER_CRON_ENABLED: %s",
+        "true (juno_weekly_sweeper cron WILL register at Sun 08:00 PT)"
+        if juno_sweeper_cron_enabled
+        else "false (juno_weekly_sweeper cron disabled — flip after voice UAT)",
     )
 
     market_data = {
