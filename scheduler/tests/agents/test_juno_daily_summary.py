@@ -24,6 +24,7 @@ existing daily_summary test pattern.
 """
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import sys
@@ -459,3 +460,298 @@ async def test_idempotency_window_with_partial():
     summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
     assert len(agent_run_rows) == 0
     assert len(summary_rows) == 0
+
+
+# ---------------------------------------------------------------------------
+# v3.1 Phase 15 D-03a — story-array substrate persistence tests.
+#
+# These tests guard the contract that every NEW Juno daily_summaries row's
+# raw_sources_jsonb carries three top-level keys (defence_news,
+# canadian_procurement, world_events) — each a list of story dicts — in
+# addition to the existing diagnostic-counts-only payload that Phase 10
+# wrote. The Phase 15 sweeper module (scheduler/agents/juno_weekly_sweeper.py,
+# Plan 15-05) reads these keys at runtime for its virality compute
+# substrate; without this persistence, the sweeper's virality compute
+# would always return 0 cross-referenced stories and every sweep would
+# trip the insufficient-signal path with status='partial' indefinitely.
+#
+# See .planning/phases/15-juno-weekly-viral-sweeper/15-RESEARCH.md §3 for
+# the substrate-contradiction analysis that drove this plan.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_juno_daily_summary_persists_defence_news_entries_in_raw_sources():
+    """D-03a: happy-path defence-news entries land in raw_sources_jsonb['defence_news'].
+
+    Mocks the three section builders to return populated entries. Asserts the
+    persisted DailySummary row's raw_sources_jsonb carries the three new
+    top-level keys with the expected entry lists.
+    """
+    from agents.daily_summary import run_juno_daily_summary
+    from models.daily_summary import DailySummary
+
+    factory, _session, added_rows, _agent_run = _mock_session_factory(
+        idempotency_returns_existing=False
+    )
+
+    # Force defence_entries non-empty so status mapping does NOT map to
+    # 'failed' (which would short-circuit the notes_dict assembly path
+    # we're trying to inspect). 5 fake entries through feedparser.parse.
+    fake_entries = [
+        MagicMock(
+            title=f"Defence story {i}",
+            link=f"https://example.com/defence/{i}",
+            summary=f"defence snippet {i}",
+        )
+        for i in range(5)
+    ]
+    fake_feed = MagicMock(bozo=0, entries=fake_entries)
+
+    # The story dicts that the (mocked) Defence section builder will return.
+    defence_entries_persisted = [
+        {
+            "source_name": "Defense News",
+            "title": "Lockheed wins F-35 follow-on",
+            "summary": "DoD awards $5.5B for Lot 18-19.",
+            "link": "https://defensenews.com/story-1",
+            "published": "2026-05-20",
+        },
+        {
+            "source_name": "Breaking Defense",
+            "title": "RTX missile production scale-up",
+            "summary": "Patriot interceptor output doubling.",
+            "link": "https://breakingdefense.com/story-2",
+            "published": "2026-05-20",
+        },
+    ]
+    procurement_entries_persisted = [
+        {
+            "source_name": "Canada.ca",
+            "title": "DND awards $200M radar contract",
+            "summary": "Domestic supplier wins NORAD modernization Lot 2.",
+            "link": "https://canada.ca/dnd/contract-1",
+            "published": "2026-05-19",
+        }
+    ]
+    world_entries_persisted = [
+        {
+            "source_name": "Reuters",
+            "title": "Black Sea tensions escalate",
+            "summary": "NATO advisor convoy redirected.",
+            "link": "https://reuters.com/world-1",
+            "published": "2026-05-20",
+            "category": "active_conflict",
+            "confidence": 0.92,
+        }
+    ]
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
+        "feedparser.parse", return_value=fake_feed
+    ), patch(
+        "agents.daily_summary.get_anthropic_client"
+    ) as MockClient, patch(
+        "agents.daily_summary._build_juno_defence_news_section",
+        new=AsyncMock(
+            return_value=(
+                "### 🛡️ Defence News\n- mock",
+                {"refusal_detected": False},
+                defence_entries_persisted,
+            )
+        ),
+    ), patch(
+        "agents.daily_summary._build_juno_canadian_procurement_section",
+        new=AsyncMock(
+            return_value=(
+                "### 🇨🇦 Canadian Procurement\n- mock",
+                {"serpapi_hit_count": 1},
+                2,
+                procurement_entries_persisted,
+            )
+        ),
+    ), patch(
+        "agents.daily_summary._build_juno_world_events_section",
+        new=AsyncMock(
+            return_value=(
+                "### 🌐 World Events Relevant to Defence\n- mock",
+                {
+                    "world_events_total_seen": 5,
+                    "world_events_survived": 1,
+                    "world_events_categories": {"active_conflict": 1},
+                    "haiku_validation_errors": [],
+                },
+                world_entries_persisted,
+            )
+        ),
+    ):
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock()
+        MockClient.return_value = mock_client
+        await run_juno_daily_summary()
+
+    summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
+    assert len(summary_rows) == 1, (
+        f"Expected 1 DailySummary row added; got {len(summary_rows)}"
+    )
+    row = summary_rows[0]
+    assert row.company_id == "juno"
+    raw = row.raw_sources_jsonb
+
+    # The three new top-level keys MUST exist on every NEW Juno row.
+    assert "defence_news" in raw, (
+        "D-03a contract: raw_sources_jsonb missing 'defence_news' key — "
+        "Phase 15 sweeper virality compute substrate read will return []."
+    )
+    assert "canadian_procurement" in raw, (
+        "D-03a contract: raw_sources_jsonb missing 'canadian_procurement' key."
+    )
+    assert "world_events" in raw, (
+        "D-03a contract: raw_sources_jsonb missing 'world_events' key."
+    )
+
+    # And they MUST carry the entries returned by the section builders.
+    assert raw["defence_news"] == defence_entries_persisted
+    assert raw["canadian_procurement"] == procurement_entries_persisted
+    assert raw["world_events"] == world_entries_persisted
+
+    # Sanity — the Phase 10 diagnostic keys still exist alongside (no regression).
+    assert "defence_diagnostic" in raw
+    assert "procurement_diagnostic" in raw
+    assert "world_events_diagnostic" in raw
+
+
+@pytest.mark.asyncio
+async def test_run_juno_daily_summary_persists_three_keys_even_on_empty_substrate():
+    """D-03b backfill-window: the three keys EXIST (as []) even when sections refuse.
+
+    Mocks all section builders to return empty entries (refusal path,
+    no-SerpAPI-client path, no-world-events path). Asserts the three keys
+    are still present in raw_sources_jsonb as empty lists — NOT undefined.
+
+    This is the precondition that lets the sweeper read
+    raw.get('defence_news', []) and trust the result.
+    """
+    from agents.daily_summary import run_juno_daily_summary
+    from models.daily_summary import DailySummary
+
+    factory, _session, added_rows, _agent_run = _mock_session_factory(
+        idempotency_returns_existing=False
+    )
+
+    # Non-empty defence_entries so status doesn't map to 'failed' — but the
+    # section builder returns empty entries (simulating a refusal-detector
+    # exhaustion or some upstream skip).
+    fake_entries = [
+        MagicMock(
+            title=f"Defence story {i}",
+            link=f"https://example.com/defence/{i}",
+            summary=f"snippet {i}",
+        )
+        for i in range(3)
+    ]
+    fake_feed = MagicMock(bozo=0, entries=fake_entries)
+
+    with patch("agents.daily_summary.AsyncSessionLocal", factory), patch(
+        "feedparser.parse", return_value=fake_feed
+    ), patch(
+        "agents.daily_summary.get_anthropic_client"
+    ) as MockClient, patch(
+        "agents.daily_summary._build_juno_defence_news_section",
+        new=AsyncMock(
+            return_value=(None, {"refusal_detected": True}, [])
+        ),
+    ), patch(
+        "agents.daily_summary._build_juno_canadian_procurement_section",
+        new=AsyncMock(
+            return_value=("", {"skipped_reason": "no_serpapi_client"}, 0, [])
+        ),
+    ), patch(
+        "agents.daily_summary._build_juno_world_events_section",
+        new=AsyncMock(
+            return_value=(
+                "",
+                {
+                    "reason": "no_world_events_ingested",
+                    "world_events_total_seen": 0,
+                    "world_events_survived": 0,
+                    "world_events_categories": {},
+                    "haiku_validation_errors": [],
+                },
+                [],
+            )
+        ),
+    ):
+        mock_client = MagicMock()
+        mock_client.messages.create = AsyncMock()
+        MockClient.return_value = mock_client
+        await run_juno_daily_summary()
+
+    summary_rows = [r for r in added_rows if isinstance(r, DailySummary)]
+    assert len(summary_rows) == 1
+    raw = summary_rows[0].raw_sources_jsonb
+
+    # The three keys MUST be present, even when arrays are empty (D-03b
+    # backfill-window expectation — sweeper code does raw.get(k, []) and
+    # would silently mask a missing key, so the explicit presence guard
+    # belongs here).
+    assert "defence_news" in raw and raw["defence_news"] == []
+    assert "canadian_procurement" in raw and raw["canadian_procurement"] == []
+    assert "world_events" in raw and raw["world_events"] == []
+
+
+def test_section_builder_return_tuple_lengths():
+    """D-03a regression guard: section builders persist entries.
+
+    The Phase 15 sweeper module's virality compute substrate read depends
+    on the three _build_juno_*_section functions returning entries as part
+    of their return tuple. This test inspects the function signatures /
+    source to confirm the (md, diag, entries) — or 4-tuple including
+    serpapi_count for procurement — shape is preserved against future
+    refactors that might revert to the Phase 10 2/3-tuple form.
+    """
+    from agents.daily_summary import (
+        _build_juno_canadian_procurement_section,
+        _build_juno_defence_news_section,
+        _build_juno_world_events_section,
+    )
+
+    # Annotation introspection — return-tuple length must include the
+    # entries position. We accept either the canonical PEP-604 tuple form
+    # in the annotation OR a fallback grep of the function body's literal
+    # return tuple shape.
+    src_defence = inspect.getsource(_build_juno_defence_news_section)
+    assert "list[dict]" in src_defence, (
+        "D-03a guard: _build_juno_defence_news_section return annotation "
+        "missing 'list[dict]' — entries position dropped? See "
+        ".planning/phases/15-juno-weekly-viral-sweeper/15-RESEARCH.md §3"
+    )
+
+    src_procurement = inspect.getsource(_build_juno_canadian_procurement_section)
+    assert "list[dict]" in src_procurement, (
+        "D-03a guard: _build_juno_canadian_procurement_section return "
+        "annotation missing 'list[dict]' — entries position dropped?"
+    )
+
+    src_world = inspect.getsource(_build_juno_world_events_section)
+    assert "list[dict]" in src_world, (
+        "D-03a guard: _build_juno_world_events_section return annotation "
+        "missing 'list[dict]' — entries position dropped?"
+    )
+
+    # Belt-and-suspenders: the file-level notes_dict assembly must persist
+    # the three keys under the run_juno_daily_summary orchestrator path.
+    from agents import daily_summary
+
+    src_module = inspect.getsource(daily_summary)
+    assert '"defence_news":' in src_module, (
+        "D-03a guard: run_juno_daily_summary notes_dict missing "
+        "'defence_news' key write — sweeper substrate read will return []."
+    )
+    assert '"canadian_procurement":' in src_module, (
+        "D-03a guard: run_juno_daily_summary notes_dict missing "
+        "'canadian_procurement' key write."
+    )
+    assert '"world_events":' in src_module, (
+        "D-03a guard: run_juno_daily_summary notes_dict missing "
+        "'world_events' key write."
+    )
