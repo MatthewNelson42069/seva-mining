@@ -53,7 +53,7 @@ Five pre-existing tech-debt items surfaced by the v3.1 milestone audit (`.planni
 
 - [ ] **CLEAN-01**: Frontend ESLint cleanup — fix 15 errors in `frontend/src/pages/SummaryFeedPage.test.tsx` + `frontend/src/pages/PerAgentQueuePage.tsx`. After change: `cd frontend && npm run lint` exits 0. Most errors are auto-fixable via `npx eslint --fix`.
 
-- [ ] **CLEAN-02**: Backend ruff cleanup — fix 17 `UP017` (`datetime.UTC` migration) + 1 E501 in `backend/app/main.py` + `backend/app/models/weekly_sweep.py` + any other pre-Phase-14 files. After change: `cd backend && uv run ruff check` exits 0. Auto-fixable via `uv run ruff check --fix`.
+- [x] **CLEAN-02**: Backend ruff cleanup — fix 17 `UP017` (`datetime.UTC` migration) + 1 E501 in `backend/app/main.py` + `backend/app/models/weekly_sweep.py` + any other pre-Phase-14 files. After change: `cd backend && uv run ruff check` exits 0. Auto-fixable via `uv run ruff check --fix`.
 
 - [x] **CLEAN-03**: Scheduler ruff cleanup — remove F401 unused imports: `HAIKU_MODEL` in `scheduler/agents/daily_summary.py:57`, `select` in `scheduler/agents/weekly_sweeper.py`, `_build_juno_world_events_section` in `scheduler/scripts/uat_voice_calibration.py`. After change: `cd scheduler && uv run ruff check` exits 0.
 
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 | JSWEEP-05 | Phase 15 | Complete |
 | JSWEEP-06 | Phase 15 | Complete |
 | CLEAN-01 | Phase 16 | Pending |
-| CLEAN-02 | Phase 16 | Pending |
+| CLEAN-02 | Phase 16 | Complete |
 | CLEAN-03 | Phase 16 | Complete |
 | CLEAN-04 | Phase 16 | Complete |
 | CLEAN-05 | Phase 16 | Pending |

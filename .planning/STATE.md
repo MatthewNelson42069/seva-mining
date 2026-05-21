@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
-stopped_at: Completed 16-04-PLAN.md (CLEAN-04)
-last_updated: "2026-05-21T02:46:26.901Z"
+stopped_at: "Completed 16-02-PLAN.md (Wave 1 parallel: CLEAN-02 ruff cleanup)"
+last_updated: "2026-05-21T02:46:31.911Z"
 last_activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpretation b — code+test correctness basis; substantive smoke fire deferred to post-D-03b-backfill-window opportune moment); Phase 15 closes code-side at 7/7 plans; verifier next
 progress:
   total_phases: 4
@@ -397,6 +397,7 @@ Recent decisions affecting current work:
 - [Phase 15-juno-weekly-viral-sweeper]: Phase 15 voice UAT APPROVED by operator 2026-05-21; code-side complete; cron registration env-gated (JUNO_SWEEPER_CRON_ENABLED unset = disabled until operator out-of-band Railway flip)
 - [Phase 16-v3.1-audit-cleanup-bundle]: 16-03: ruff --fix is canonical F401 removal path; auth-gate is tool exit code not enumerated count (Rule 3 deviation included models/weekly_sweep.py)
 - [Phase 16-v3.1-audit-cleanup-bundle]: CLEAN-04: session.add() is sync on AsyncSession — use MagicMock not AsyncMock for the .add mock to avoid RuntimeWarning
+- [Phase 16-v3.1-audit-cleanup-bundle]: Backend ruff: trust tool exit code over audit-narrative counts (drift-tolerant gate) — Audit said '17 UP017 + 1 E501'; live ruff showed 2 UP017 + 5 I001 + 5 E501 + 5 manual-after-autofix surfaces across 7 files (not 4). Plan's authoritative gate is 'ruff exits 0', not 'fix exactly these counts'.
 
 ### Pending Todos
 
@@ -477,9 +478,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T02:46:11.505Z
+Last session: 2026-05-21T02:46:28.445Z
 Last activity: 2026-05-20
-Stopped At: Completed 16-04-PLAN.md (CLEAN-04)
+Stopped At: Completed 16-02-PLAN.md (Wave 1 parallel: CLEAN-02 ruff cleanup)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
