@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
-stopped_at: Completed 15-05-PLAN.md (juno_weekly_sweeper orchestrator + 17 unit tests)
-last_updated: "2026-05-21T00:58:24.769Z"
+stopped_at: Completed 15-06-PLAN.md (juno_weekly_sweeper cron registration + 4 env-gate tests)
+last_updated: "2026-05-21T01:05:52.285Z"
 last_activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 14
-  completed_plans: 12
+  completed_plans: 13
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 ## Current Position
 
-Phase: Phase 13 — Per-company Branding COMPLETE (3/3 plans landed, BRAND-01..05 all satisfied, operator visual QA 10/10 PASS at 1440x900) → Phase 14 — Juno Content Calendar (Tab 2) next
-Plan: 13-03 complete → Phase 14 Plan 14-01 next (after phase-level verifier confirms Phase 13 closure)
-Status: Phase 13 COMPLETE — Plan 13-03 GREEN; 1 new test file + 1 modified; 175/175 frontend tests pass (Phase 12 baseline 168 + 7 new); D-09 byte-identical + D-10 branchlessness contracts honored; operator visual QA 10/10 PASS at 1440x900; BRAND-01..05 all satisfied + TENANT-VISITED-v31-redux closed; Phase 13 ready for phase-level verifier
-Last activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
+Phase: Phase 15 — Juno Weekly Viral Sweeper — Wave 2 plans LANDING (15-05 + 15-06 complete; 15-07 voice UAT next as Wave 3)
+Plan: 15-06 complete (cron registration + 4 env-gate tests; commits 343c711 + ec4ade7) → Plan 15-07 voice UAT checkpoint next (Wave 3)
+Status: Plan 15-06 GREEN — scheduler/worker.py +82/-4 LOC (_make_juno_weekly_sweeper_job factory + JUNO_SWEEPER_CRON_ENABLED-gated registration block at Sun 08:00 PT America/Los_Angeles under lock 1021); scheduler/tests/test_worker.py +150 LOC (4 new tests); scheduler suite 359 → 363 passed (+4); D-10 byte-identical contract held (9 protected files untouched); OPS-02 lock-uniqueness still passes; CI grep gates (verify-tenant-isolation + verify-anthropic-resolver) PASS
+Last activity: 2026-05-21 — Plan 15-06 landed via parallel Wave 2 executor (commits 343c711 feat + ec4ade7 test; 363/363 scheduler tests pass; production cron registered behind JUNO_SWEEPER_CRON_ENABLED gate default-disabled awaiting Plan 15-07 voice UAT + operator Railway env flip)
 
 ### v3.1 Roadmap Summary (created 2026-05-20)
 
@@ -169,6 +169,7 @@ Last activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno test
 | Phase 15-juno-weekly-viral-sweeper P02 | 4 | 2 tasks | 4 files |
 | Phase 15-juno-weekly-viral-sweeper P01 | 12 | 2 tasks | 2 files |
 | Phase 15-juno-weekly-viral-sweeper P05 | 6.5min | 2 tasks | 2 files |
+| Phase 15-juno-weekly-viral-sweeper P06 | 3 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -388,6 +389,7 @@ Recent decisions affecting current work:
 - [Phase 15-juno-weekly-viral-sweeper]: D-03a Option 1 applied: extended Phase 10 _build_juno_*_section writers to return entries alongside (md, diag); orchestrator threads entries into raw_sources_jsonb top-level keys (defence_news/canadian_procurement/world_events). Unblocks Plan 15-05 sweeper virality compute substrate read.
 - [Phase 15-juno-weekly-viral-sweeper]: D-06 LOCKED: imported canonical_url + _sunday_of_this_week from agents.weekly_sweeper (no Seva file edit); identity-assertion test guards against future copy-paste refactors
 - [Phase 15-juno-weekly-viral-sweeper]: Insufficient-signal status mapping for Juno = 'partial' (NOT 'completed' as Seva does) — D-03b backfill window visibility + alignment with Phase 9 idempotency-filter-includes-partial pattern
+- [Phase 15-juno-weekly-viral-sweeper]: Use os.getenv pattern for JUNO_SWEEPER_CRON_ENABLED (NOT Settings field) per RESEARCH §6 Open Q 4 LOCKED — pattern parity with Phase 10's JUNO_CRON_ENABLED gate; behavior identical, no scheduler/config.py edit needed
 
 ### Pending Todos
 
@@ -468,9 +470,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T00:58:14.554Z
+Last session: 2026-05-21T01:05:52.280Z
 Last activity: 2026-05-20
-Stopped At: Completed 15-05-PLAN.md (juno_weekly_sweeper orchestrator + 17 unit tests)
+Stopped At: Completed 15-06-PLAN.md (juno_weekly_sweeper cron registration + 4 env-gate tests)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 

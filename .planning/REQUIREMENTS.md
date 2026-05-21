@@ -21,7 +21,7 @@ Port of Seva's v2.1 Phase 6 paper-planner work to Juno's tab 2. Multi-tenant sca
 
 Defence-sector parallel to Seva's v2.1 Phase 7 sweeper. Lock slot `juno_weekly_sweeper=1021` reserved in v3.0 Phase 9; `weekly_sweeps` table is already multi-tenant via Alembic 0014. v3.1's job is wiring the cron + defence-sector X queries + Sonnet synthesis + Tab 3 render.
 
-- [ ] **JSWEEP-01**: Operator can enable Juno sweeper cron via `JUNO_SWEEPER_CRON_ENABLED=true` env var in Railway (mirrors `JUNO_CRON_ENABLED` precedent from v3.0 Phase 10). When `false` (or unset), Juno cron does not register — production deploys default to disabled until operator-approved smoke fire passes.
+- [x] **JSWEEP-01**: Operator can enable Juno sweeper cron via `JUNO_SWEEPER_CRON_ENABLED=true` env var in Railway (mirrors `JUNO_CRON_ENABLED` precedent from v3.0 Phase 10). When `false` (or unset), Juno cron does not register — production deploys default to disabled until operator-approved smoke fire passes.
 - [x] **JSWEEP-02**: Sunday 08:00 PT America/Los_Angeles APScheduler cron fires at lock ID `1021`; runs `tweepy.AsyncClient.search_recent_tweets` against Juno-specific defence-sector X queries (specific query set defined during discuss-phase, candidates: defence-reporter handles, NATO/RUSI/CSIS official accounts, `#defence`/`#NATO` tags, defence-prime cashtags); computes virality cross-reference over the past 7 days of Juno's `daily_summaries.raw_sources_jsonb` Defence News + Canadian Procurement + World Events sub-arrays.
 - [x] **JSWEEP-03**: Cron persists a `weekly_sweeps` row with `company_id='juno'`, status ∈ `(completed, partial, failed)` via the same status mapping as Seva sweeper. Idempotency-filter includes `'partial'` (Phase 9 critical-fix pattern preserved).
 - [x] **JSWEEP-04**: Sonnet 4.6 produces exactly 3 content angles per sweep; each angle respects Juno's voice constraints from v3.0 Phase 10 D-01 (Janes/CSIS desk energy, explicit anti-tactical clause, no operational/OOB/force-posture content). Refusal-detector pattern from Phase 10 reused — retry-with-framing-nudge on detected refusal, `status='partial'` on second-attempt failure.
@@ -99,7 +99,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 | JCAL-03 | Phase 14 | Complete |
 | JCAL-04 | Phase 14 | Complete |
 | JCAL-05 | Phase 14 | Complete |
-| JSWEEP-01 | Phase 15 | Pending |
+| JSWEEP-01 | Phase 15 | Complete |
 | JSWEEP-02 | Phase 15 | Complete |
 | JSWEEP-03 | Phase 15 | Complete |
 | JSWEEP-04 | Phase 15 | Complete |
