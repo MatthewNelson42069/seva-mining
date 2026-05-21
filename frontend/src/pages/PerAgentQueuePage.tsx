@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { getAgentRuns } from '@/api/settings'
 import type { AgentRunResponse } from '@/api/types'
 import { findTabBySlug, CONTENT_AGENT_TABS } from '@/config/agentTabs'
+import { parseRunNotes } from './perAgentQueueHelpers'
 
 /** Group items under the agent run that produced them.
  *  Each item is assigned to the most recent run whose started_at <= item.created_at.
@@ -49,31 +50,6 @@ function groupByRun(
     result.push(groups.get(NO_RUN_KEY)!)
   }
   return result
-}
-
-/** Parse structured run telemetry added in debug-260422-gmb for sub_gold_media.
- *  Shape: {x_candidates, llm_accepted, compliance_blocked, queued}.
- *  Returns formatted subtitle string, or null if notes is absent/malformed/has no known fields.
- *  Format: "N candidates · N accepted · N queued" (blocked suppressed when 0 per D-02).
- */
-export function parseRunNotes(notes: string | null | undefined): string | null {
-  if (!notes) return null
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(notes)
-  } catch {
-    return null
-  }
-  if (!parsed || typeof parsed !== 'object') return null
-  const n = parsed as Record<string, unknown>
-  const parts: string[] = []
-  if (typeof n.x_candidates === 'number') parts.push(`${n.x_candidates} candidates`)
-  if (typeof n.llm_accepted === 'number') parts.push(`${n.llm_accepted} accepted`)
-  if (typeof n.compliance_blocked === 'number' && n.compliance_blocked > 0) {
-    parts.push(`${n.compliance_blocked} blocked`)
-  }
-  if (typeof n.queued === 'number') parts.push(`${n.queued} queued`)
-  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 function RunHeader({

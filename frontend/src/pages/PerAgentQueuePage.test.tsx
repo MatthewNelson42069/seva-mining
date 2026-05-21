@@ -2,7 +2,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { PerAgentQueuePage, parseRunNotes } from './PerAgentQueuePage'
+import { PerAgentQueuePage } from './PerAgentQueuePage'
+import { parseRunNotes } from './perAgentQueueHelpers'
 import type { QueueListResponse, AgentRunResponse, DraftItemResponse } from '@/api/types'
 
 vi.mock('@/api/queue', () => ({

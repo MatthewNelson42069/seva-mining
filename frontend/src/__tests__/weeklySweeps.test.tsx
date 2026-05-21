@@ -9,18 +9,17 @@ import type { WeeklySweepCard } from '@/api/weeklySweeps'
 import { SweeperCard } from '@/components/viral/SweeperCard'
 import WeeklyViralSweeperPage from '@/pages/WeeklyViralSweeperPage'
 
+type UseWeeklySweepsResult = ReturnType<typeof weeklySweepsApi.useWeeklySweeps>
+
 function makeWrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  // eslint-disable-next-line react/display-name
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   )
 }
 
-function mockUseWeeklySweeps(value: Partial<ReturnType<typeof weeklySweepsApi.useWeeklySweeps>>) {
-  vi.spyOn(weeklySweepsApi, 'useWeeklySweeps').mockReturnValue(
-    value as ReturnType<typeof weeklySweepsApi.useWeeklySweeps>,
-  )
+function mockUseWeeklySweeps(value: Partial<UseWeeklySweepsResult>) {
+  vi.spyOn(weeklySweepsApi, 'useWeeklySweeps').mockReturnValue(value as UseWeeklySweepsResult)
 }
 
 function mkSweep(overrides: Partial<WeeklySweepCard> = {}): WeeklySweepCard {
@@ -49,7 +48,7 @@ describe('WeeklyViralSweeperPage', () => {
       data: { sweeps: [], total: 0 },
       isLoading: false,
       error: null,
-    } as any)
+    } as Partial<UseWeeklySweepsResult>)
     render(<WeeklyViralSweeperPage />, { wrapper: makeWrapper() })
     expect(screen.getByText(/Sweeper has not run yet/i)).toBeInTheDocument()
     // SWEEP-14 copy includes the PT fire time
@@ -63,7 +62,7 @@ describe('WeeklyViralSweeperPage', () => {
       data: { sweeps, total: 1 },
       isLoading: false,
       error: null,
-    } as any)
+    } as Partial<UseWeeklySweepsResult>)
     render(<WeeklyViralSweeperPage />, { wrapper: makeWrapper() })
     // The card title should match the latest sweep
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(/Weekly Sweep/i)
@@ -81,7 +80,7 @@ describe('WeeklyViralSweeperPage', () => {
       data: { sweeps, total: 3 },
       isLoading: false,
       error: null,
-    } as any)
+    } as Partial<UseWeeklySweepsResult>)
     render(<WeeklyViralSweeperPage />, { wrapper: makeWrapper() })
     const select = screen.getByRole('combobox') as HTMLSelectElement
     expect(select).toBeInTheDocument()
@@ -93,7 +92,7 @@ describe('WeeklyViralSweeperPage', () => {
       data: undefined,
       isLoading: true,
       error: null,
-    } as any)
+    } as Partial<UseWeeklySweepsResult>)
     render(<WeeklyViralSweeperPage />, { wrapper: makeWrapper() })
     expect(screen.getByText(/Loading/i)).toBeInTheDocument()
   })
@@ -103,7 +102,7 @@ describe('WeeklyViralSweeperPage', () => {
       data: undefined,
       isLoading: false,
       error: new Error('boom'),
-    } as any)
+    } as Partial<UseWeeklySweepsResult>)
     render(<WeeklyViralSweeperPage />, { wrapper: makeWrapper() })
     expect(screen.getByText(/Failed to load/i)).toBeInTheDocument()
   })

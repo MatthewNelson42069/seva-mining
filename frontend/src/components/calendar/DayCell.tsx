@@ -50,7 +50,12 @@ export function DayCell({ companyId, date, item, weekRange, isToday }: DayCellPr
 
   // Reconcile local state when the persisted item changes (e.g. after
   // optimistic invalidation refetch, week navigation, or another tab's edit).
+  // v2.1 Phase 6 pattern: sync local textarea state when the server-side row
+  // changes. Refactoring to a derive-from-props key+remount pattern would lose
+  // the user's in-flight edits during a background refetch — this synchronous
+  // setState IS the intended reconciliation, not a cascade-render bug.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrent(item?.body ?? '')
   }, [item?.id, item?.body])
 
