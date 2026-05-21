@@ -1,4 +1,4 @@
-"""Make calendar_items.title nullable and add UNIQUE(date) — v2.1 Phase 6 (CAL schema reconciliation).
+"""Make calendar_items.title nullable + UNIQUE(date) — Phase 6 CAL reconciliation.
 
 Phase 6, Plan 01. Reconciles the locked Phase 5 schema with the simplified
 single-text-blob-per-day model from 06-CONTEXT.md decisions D-02 (single row

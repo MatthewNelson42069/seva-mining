@@ -12,7 +12,8 @@ Pitfall P4 defense: CalendarItemUpdate intentionally has NO `updated_at`
 field — the router handler sets it explicitly on every PATCH.
 """
 import uuid
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 

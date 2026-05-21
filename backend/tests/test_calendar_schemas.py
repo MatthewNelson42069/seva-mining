@@ -1,5 +1,6 @@
 """Pydantic schema tests for backend/app/schemas/calendar.py — Phase 6 Plan 01."""
-from datetime import date as date_type, datetime
+from datetime import date as date_type
+from datetime import datetime
 from uuid import uuid4
 
 import pytest

@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Date, DateTime
+from sqlalchemy import Date
 
 
 @pytest.fixture(scope="module")
@@ -36,10 +36,10 @@ def _columns_by_name(model_cls) -> dict[str, str]:
 
 
 def test_calendar_item_parity(scheduler_path):
-    from app.models.calendar_item import CalendarItem as BackendCI
-
     # Import scheduler version after sys.path patch
     from models.calendar_item import CalendarItem as SchedulerCI
+
+    from app.models.calendar_item import CalendarItem as BackendCI
 
     assert BackendCI.__tablename__ == SchedulerCI.__tablename__ == "calendar_items"
 
@@ -51,14 +51,15 @@ def test_calendar_item_parity(scheduler_path):
     )
     for name in backend_cols:
         assert backend_cols[name] == scheduler_cols[name], (
-            f"Column {name}: backend type={backend_cols[name]!r} scheduler type={scheduler_cols[name]!r}"
+            f"Column {name}: backend type={backend_cols[name]!r} "
+            f"scheduler type={scheduler_cols[name]!r}"
         )
 
 
 def test_weekly_sweep_parity(scheduler_path):
-    from app.models.weekly_sweep import WeeklySweep as BackendWS
-
     from models.weekly_sweep import WeeklySweep as SchedulerWS
+
+    from app.models.weekly_sweep import WeeklySweep as BackendWS
 
     assert BackendWS.__tablename__ == SchedulerWS.__tablename__ == "weekly_sweeps"
 
@@ -68,27 +69,32 @@ def test_weekly_sweep_parity(scheduler_path):
     assert set(backend_cols.keys()) == set(scheduler_cols.keys())
     for name in backend_cols:
         assert backend_cols[name] == scheduler_cols[name], (
-            f"Column {name}: backend type={backend_cols[name]!r} scheduler type={scheduler_cols[name]!r}"
+            f"Column {name}: backend type={backend_cols[name]!r} "
+            f"scheduler type={scheduler_cols[name]!r}"
         )
 
 
 def test_calendar_item_uses_date_not_datetime(scheduler_path):
     """Pitfall P2: `date` column MUST be Date (NOT DateTime) on both sides."""
-    from app.models.calendar_item import CalendarItem as BackendCI
     from models.calendar_item import CalendarItem as SchedulerCI
 
+    from app.models.calendar_item import CalendarItem as BackendCI
+
     assert isinstance(BackendCI.__table__.c.date.type, Date), (
-        f"Backend CalendarItem.date type is {type(BackendCI.__table__.c.date.type).__name__}; expected Date"
+        f"Backend CalendarItem.date type is "
+        f"{type(BackendCI.__table__.c.date.type).__name__}; expected Date"
     )
     assert isinstance(SchedulerCI.__table__.c.date.type, Date), (
-        f"Scheduler CalendarItem.date type is {type(SchedulerCI.__table__.c.date.type).__name__}; expected Date"
+        f"Scheduler CalendarItem.date type is "
+        f"{type(SchedulerCI.__table__.c.date.type).__name__}; expected Date"
     )
 
 
 def test_weekly_sweep_uses_date_for_week_boundaries(scheduler_path):
     """week_start and week_end MUST be Date, not DateTime (same TZ off-by-one risk)."""
-    from app.models.weekly_sweep import WeeklySweep as BackendWS
     from models.weekly_sweep import WeeklySweep as SchedulerWS
+
+    from app.models.weekly_sweep import WeeklySweep as BackendWS
 
     for cls, label in [(BackendWS, "backend"), (SchedulerWS, "scheduler")]:
         for col_name in ("week_start", "week_end"):
@@ -121,9 +127,9 @@ def test_daily_summary_parity(scheduler_path):
     names, and column types — including the v3.0 Phase 9 addition of
     `company_id VARCHAR(20) NOT NULL DEFAULT 'seva'`.
     """
-    from app.models.daily_summary import DailySummary as BackendDS
-
     from models.daily_summary import DailySummary as SchedulerDS
+
+    from app.models.daily_summary import DailySummary as BackendDS
 
     assert BackendDS.__tablename__ == SchedulerDS.__tablename__ == "daily_summaries"
 

@@ -55,7 +55,7 @@ Sources:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -144,7 +144,7 @@ async def both_tenant_rows(tenant_session_factory):
     test combination verifies the slice of these 6 rows visible from its
     own tenant prefix.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows = [
         DailySummary(
             id=uuid.uuid4(),
@@ -409,7 +409,7 @@ async def test_patch_calendar_item_cannot_cross_tenant(
     on top of the URL prefix.
     """
     # Seed a Juno calendar_item with a known UUID directly.
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     juno_uuid = uuid.uuid4()
     async with tenant_session_factory() as session:
         session.add(
