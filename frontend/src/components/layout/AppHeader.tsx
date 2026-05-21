@@ -1,17 +1,17 @@
-import { useNavigate } from 'react-router-dom'
-import { useAppStore } from '@/stores'
 import { CompanySwitcher } from './CompanySwitcher'
 import { useCompanyBrand } from '@/hooks/useCompanyBrand'
 
+/**
+ * Application header — cookie-token auth model (quick-260521-9ze).
+ *
+ * Logout button REMOVED: with cookie-token auth, there is no client-side
+ * logout action (the HttpOnly cookie cannot be cleared from JS). Token
+ * rotation is operator-controlled via Railway env var (see SUMMARY.md).
+ * Per v3.0 Phase 9 freeze-lift: surgical edit — only the Logout button
+ * and its handler are removed; brand mark + CompanySwitcher unchanged.
+ */
 export function AppHeader() {
-  const navigate = useNavigate()
-  const clearToken = useAppStore((s) => s.clearToken)
   const brand = useCompanyBrand()
-
-  function handleLogout() {
-    clearToken()
-    navigate('/login')
-  }
 
   return (
     <header className="border-b border-zinc-800 bg-zinc-900 sticky top-0 z-10">
@@ -27,14 +27,6 @@ export function AppHeader() {
 
         {/* v3.0 freeze-lift (Phase 9) — see 09-CONTEXT.md D-02 */}
         <CompanySwitcher />
-
-        {/* Logout */}
-        <button
-          onClick={handleLogout}
-          className="text-sm text-zinc-400 hover:text-zinc-100 transition-colors"
-        >
-          Log out
-        </button>
       </div>
     </header>
   )

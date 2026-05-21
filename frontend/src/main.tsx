@@ -2,8 +2,12 @@ import React, { Component, type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
+import { bootstrapTokenRedirect } from '@/lib/bootstrap'
 import App from './App'
 import './index.css'
+
+// Re-export for backwards compatibility with any direct import of main.tsx
+export { bootstrapTokenRedirect }
 
 class GlobalErrorBoundary extends Component<
   { children: ReactNode },
@@ -39,13 +43,17 @@ const queryClient = new QueryClient({
   },
 })
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <GlobalErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <App />
-        <Toaster position="bottom-right" richColors />
-      </QueryClientProvider>
-    </GlobalErrorBoundary>
-  </React.StrictMode>,
-)
+// Bootstrap: intercept ?token= before React mounts
+if (!bootstrapTokenRedirect()) {
+  // Normal app boot
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <GlobalErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <App />
+          <Toaster position="bottom-right" richColors />
+        </QueryClientProvider>
+      </GlobalErrorBoundary>
+    </React.StrictMode>,
+  )
+}

@@ -99,8 +99,7 @@ export const REJECTION_CATEGORIES = [
 ] as const
 export type RejectionCategory = typeof REJECTION_CATEGORIES[number]
 
-export interface LoginRequest { password: string }
-export interface TokenResponse { access_token: string; token_type: string }
+// LoginRequest and TokenResponse removed — cookie-token auth (quick-260521-9ze)
 
 export interface DailyDigestResponse {
   id: string

@@ -1,34 +1,22 @@
-export interface AuthSlice {
-  token: string | null
-  isAuthenticated: boolean
-  setToken: (token: string) => void
-  clearToken: () => void
-}
+/**
+ * Auth slice — deprecated (quick-260521-9ze).
+ *
+ * Cookie-token auth model replaces JWT/localStorage auth.
+ * The auth slice is now empty — no token, no isAuthenticated, no setToken.
+ * Auth is handled transparently by the HttpOnly cookie set during
+ * ?token= bootstrap. The backend returns 403 on missing/invalid cookie;
+ * apiFetch redirects to /access-denied automatically.
+ *
+ * The AuthSlice interface and createAuthSlice factory remain exported
+ * so the combined store type in index.ts does not break existing
+ * component imports (e.g. Sidebar.tsx references) until a full cleanup.
+ */
 
-function getStoredToken(): string | null {
-  try {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
-  } catch {
-    return null
-  }
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface AuthSlice {}
 
 export function createAuthSlice(
-  set: (fn: (state: AuthSlice) => Partial<AuthSlice>, replace?: boolean) => void
+  _set: unknown,
 ): AuthSlice {
-  const storedToken = getStoredToken()
-  return {
-    token: storedToken,
-    isAuthenticated: !!storedToken,
-
-    setToken: (token) => {
-      localStorage.setItem('access_token', token)
-      set(() => ({ token, isAuthenticated: true }))
-    },
-
-    clearToken: () => {
-      localStorage.removeItem('access_token')
-      set(() => ({ token: null, isAuthenticated: false }))
-    },
-  }
+  return {}
 }

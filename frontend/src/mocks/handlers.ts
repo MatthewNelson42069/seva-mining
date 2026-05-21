@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw'
 import type {
-  DraftItemResponse, QueueListResponse, TokenResponse,
+  DraftItemResponse, QueueListResponse,
   WatchlistResponse, KeywordResponse,
 } from '@/api/types'
 
@@ -52,18 +52,6 @@ export const handlers = [
     const item = mockItems.find(i => i.id === params.id)
     if (!item) return new HttpResponse(null, { status: 404 })
     return HttpResponse.json({ ...item, status: 'rejected' } as DraftItemResponse)
-  }),
-
-  http.post('/auth/login', async ({ request }) => {
-    const body = await request.json() as { password: string }
-    if (body.password === 'test-password') {
-      const response: TokenResponse = {
-        access_token: 'mock-jwt-token-for-testing',
-        token_type: 'bearer',
-      }
-      return HttpResponse.json(response)
-    }
-    return new HttpResponse(null, { status: 401 })
   }),
 
   http.get('/digests/latest', () => {

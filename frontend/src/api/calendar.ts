@@ -78,18 +78,16 @@ export async function deleteCalendarItem(
 ): Promise<void> {
   // apiFetch always parses res.json(); but the 204 No Content response has
   // no body. We use a thin local fetch here to handle that special case.
-  const token = localStorage.getItem('access_token')
+  // Cookie-token auth (quick-260521-9ze): credentials:'include' sends the
+  // HttpOnly seva_auth_token cookie. No Authorization header, no localStorage.
   const baseUrl = import.meta.env.VITE_API_URL ?? ''
   const res = await fetch(`${baseUrl}/api/${companyId}/calendar/${id}`, {
     method: 'DELETE',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    credentials: 'include',
   })
-  if (res.status === 401) {
-    localStorage.removeItem('access_token')
-    window.location.href = '/login'
-    throw new Error('Unauthorized')
+  if (res.status === 403) {
+    window.location.href = '/access-denied'
+    throw new Error('Access required')
   }
   if (!res.ok) throw new Error(`API error ${res.status}`)
   // 204 No Content — nothing to parse

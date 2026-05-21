@@ -1,19 +1,16 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { FileText, Newspaper, Settings, LogOut } from 'lucide-react'
-import { useAppStore } from '@/stores'
+import { NavLink } from 'react-router-dom'
+import { FileText, Newspaper, Settings } from 'lucide-react'
 import { useQueueCounts } from '@/hooks/useQueueCounts'
 import { CONTENT_AGENT_TABS } from '@/config/agentTabs'
 import { cn } from '@/lib/utils'
 
+/**
+ * Sidebar — cookie-token auth model (quick-260521-9ze).
+ * Logout button REMOVED: cookie auth has no client-side logout.
+ * Token rotation is operator-controlled via Railway env var.
+ */
 export function Sidebar() {
-  const navigate = useNavigate()
-  const clearToken = useAppStore((s) => s.clearToken)
   const counts = useQueueCounts()
-
-  function handleLogout() {
-    clearToken()
-    navigate('/login')
-  }
 
   function countLabel(n: number, hasMore: boolean) {
     if (n === 0) return null
@@ -101,17 +98,6 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      {/* Footer: logout */}
-      <div className="px-3 mt-4">
-        <button
-          onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-zinc-500 hover:bg-white/5 hover:text-zinc-300 transition-colors"
-        >
-          <LogOut className="size-4" />
-          Log out
-        </button>
-      </div>
     </aside>
   )
 }

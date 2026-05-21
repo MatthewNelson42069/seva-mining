@@ -13,7 +13,7 @@
  *       /viral       -> /seva/viral     (D-06)
  *       /queue       -> /seva           (D-06; legacy v2.0)
  *       /agents/:slug -> /seva          (D-06; legacy v2.0)
- *       /digest, /settings, /login      — unchanged (NOT tenant-scoped)
+ *       /digest, /settings, /access-denied — unchanged (NOT tenant-scoped)
  */
 import { describe, expect, it, beforeEach } from 'vitest'
 
@@ -21,17 +21,13 @@ import { describe, expect, it, beforeEach } from 'vitest'
 // Wave 0 test files). The `AppRoutes` named export is shipped by Wave 3.
 const appRoutesPath = '@/App'
 
-// Auth setup: the :company route + /digest + /settings live inside
-// <ProtectedRoute>, which redirects to /login when isAuthenticated is
-// false. Tests need a stub access_token so the ProtectedRoute resolves
-// to <Outlet />. The bookmark grace <Navigate> elements live OUTSIDE
-// ProtectedRoute, so /, /calendar, /viral, /queue, /agents/:slug fire
-// even without this — but setting auth uniformly keeps the test setup
-// simple.
+// Auth setup: cookie-token auth model (quick-260521-9ze) — no ProtectedRoute.
+// All routes are accessible without any auth setup in the router tree.
+// apiFetch handles 403 → /access-denied at fetch time, not route time.
+// No-op beforeEach kept for test structure symmetry.
 beforeEach(async () => {
-  localStorage.setItem('access_token', 'test-token')
-  const { useAppStore } = await import('@/stores')
-  useAppStore.setState({ token: 'test-token', isAuthenticated: true })
+  // No-op: cookie auth is handled by the browser's HttpOnly cookie.
+  // No localStorage setup needed.
 })
 
 describe('App router bookmark grace (TENANT-06)', () => {
