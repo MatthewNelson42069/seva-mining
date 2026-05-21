@@ -24,8 +24,12 @@ async def test_token_set_valid_sets_cookie_and_redirects(client):
         follow_redirects=False,
     )
     assert response.status_code == 302
-    # Location header points to /
-    assert response.headers.get("location") == "/"
+    # Location header is an ABSOLUTE URL on the Vercel frontend host so the
+    # browser doesn't resolve "/" against the BACKEND origin (which would
+    # land the operator on the API domain seeing a JSON 404).
+    location = response.headers.get("location", "")
+    assert location.endswith("/")
+    assert "://" in location  # absolute URL with scheme
     # Cookie is set
     set_cookie = response.headers.get("set-cookie", "")
     assert "seva_auth_token=" in set_cookie
@@ -45,7 +49,32 @@ async def test_token_set_valid_custom_next(client):
         follow_redirects=False,
     )
     assert response.status_code == 302
-    assert "/juno/calendar" in response.headers.get("location", "")
+    location = response.headers.get("location", "")
+    assert location.endswith("/juno/calendar")
+    assert "://" in location  # absolute URL with scheme
+
+
+@pytest.mark.asyncio
+async def test_token_set_open_redirect_rejected(client):
+    """GET /auth/token-set?token=<valid>&next=https://evil.com → 400.
+
+    Open-redirect defense: `next` must be a same-origin path starting with
+    a single '/' (no scheme, no protocol-relative '//'). Without this
+    check, the bookmark URL could be weaponized for phishing.
+    """
+    token = "test-dashboard-token-for-tests-xyz"
+    # Absolute URL with scheme
+    r1 = await client.get(
+        f"/auth/token-set?token={token}&next=https://evil.com/x",
+        follow_redirects=False,
+    )
+    assert r1.status_code == 400
+    # Protocol-relative URL
+    r2 = await client.get(
+        f"/auth/token-set?token={token}&next=//evil.com/x",
+        follow_redirects=False,
+    )
+    assert r2.status_code == 400
 
 
 @pytest.mark.asyncio
