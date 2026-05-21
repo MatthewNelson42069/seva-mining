@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
-stopped_at: "Completed 15-07-PLAN.md (operator voice UAT APPROVED 2026-05-21 — interpretation b: code+test correctness; smoke fire deferred; Phase 15 closes at 7/7 plans code-side; operator out-of-band Railway env flip pending)"
-last_updated: "2026-05-21T02:45:33.180Z"
+stopped_at: Completed 16-04-PLAN.md (CLEAN-04)
+last_updated: "2026-05-21T02:46:26.901Z"
 last_activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpretation b — code+test correctness basis; substantive smoke fire deferred to post-D-03b-backfill-window opportune moment); Phase 15 closes code-side at 7/7 plans; verifier next
 progress:
   total_phases: 4
@@ -172,6 +172,8 @@ Last activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpr
 | Phase 15-juno-weekly-viral-sweeper P06 | 3 min | 2 tasks | 2 files |
 | Phase 15-juno-weekly-viral-sweeper P07 | 5min | 1 tasks | 1 files |
 | Phase 16-v3.1-audit-cleanup-bundle P03 | 4min | 1 tasks | 5 files |
+| Phase 16-v3.1-audit-cleanup-bundle P04 | 9min | 1 tasks | 1 files |
+| Phase 16-v3.1-audit-cleanup-bundle P02 | 2 min | 1 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -394,6 +396,7 @@ Recent decisions affecting current work:
 - [Phase 15-juno-weekly-viral-sweeper]: Use os.getenv pattern for JUNO_SWEEPER_CRON_ENABLED (NOT Settings field) per RESEARCH §6 Open Q 4 LOCKED — pattern parity with Phase 10's JUNO_CRON_ENABLED gate; behavior identical, no scheduler/config.py edit needed
 - [Phase 15-juno-weekly-viral-sweeper]: Phase 15 voice UAT APPROVED by operator 2026-05-21; code-side complete; cron registration env-gated (JUNO_SWEEPER_CRON_ENABLED unset = disabled until operator out-of-band Railway flip)
 - [Phase 16-v3.1-audit-cleanup-bundle]: 16-03: ruff --fix is canonical F401 removal path; auth-gate is tool exit code not enumerated count (Rule 3 deviation included models/weekly_sweep.py)
+- [Phase 16-v3.1-audit-cleanup-bundle]: CLEAN-04: session.add() is sync on AsyncSession — use MagicMock not AsyncMock for the .add mock to avoid RuntimeWarning
 
 ### Pending Todos
 
@@ -474,9 +477,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T01:18:59.323Z
+Last session: 2026-05-21T02:46:11.505Z
 Last activity: 2026-05-20
-Stopped At: Completed 15-07-PLAN.md (operator voice UAT APPROVED 2026-05-21 — interpretation b: code+test correctness; smoke fire deferred; Phase 15 closes at 7/7 plans code-side; operator out-of-band Railway env flip pending)
+Stopped At: Completed 16-04-PLAN.md (CLEAN-04)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 

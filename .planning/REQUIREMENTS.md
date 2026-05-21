@@ -57,7 +57,7 @@ Five pre-existing tech-debt items surfaced by the v3.1 milestone audit (`.planni
 
 - [x] **CLEAN-03**: Scheduler ruff cleanup — remove F401 unused imports: `HAIKU_MODEL` in `scheduler/agents/daily_summary.py:57`, `select` in `scheduler/agents/weekly_sweeper.py`, `_build_juno_world_events_section` in `scheduler/scripts/uat_voice_calibration.py`. After change: `cd scheduler && uv run ruff check` exits 0.
 
-- [ ] **CLEAN-04**: Scheduler test RuntimeWarning cleanup — fix the 4 AsyncMock `RuntimeWarning: coroutine was never awaited` in `scheduler/tests/agents/test_daily_summary_prune.py`. Likely cause: `AsyncMock` configured to return coroutines but test code calls `.return_value` synchronously. After change: scheduler pytest output shows 0 RuntimeWarnings (or matches documented pre-existing baseline).
+- [x] **CLEAN-04**: Scheduler test RuntimeWarning cleanup — fix the 4 AsyncMock `RuntimeWarning: coroutine was never awaited` in `scheduler/tests/agents/test_daily_summary_prune.py`. Likely cause: `AsyncMock` configured to return coroutines but test code calls `.return_value` synchronously. After change: scheduler pytest output shows 0 RuntimeWarnings (or matches documented pre-existing baseline).
 
 - [ ] **CLEAN-05**: Replace stale Phase-9-era empty-state copy at `frontend/src/pages/SummaryFeedPage.tsx:63-74` ("Coming in Phase 10 — Defence-sector ingestion not yet enabled."). Phase 10 shipped 2026-05-19 and Phase 12 production cron flipped 2026-05-20, so this copy is dead-text. Renders only when `summaries.length === 0` for Juno but says something semantically wrong. Either rewrite to tenant-aware empty-state copy ("No defence-industry briefs for this window yet — the next cron fires {time}." or analogous) OR delete the block entirely. Closes integration-checker's Flow A step 4 PARTIAL finding from v3.1 audit.
 
@@ -122,7 +122,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 | CLEAN-01 | Phase 16 | Pending |
 | CLEAN-02 | Phase 16 | Pending |
 | CLEAN-03 | Phase 16 | Complete |
-| CLEAN-04 | Phase 16 | Pending |
+| CLEAN-04 | Phase 16 | Complete |
 | CLEAN-05 | Phase 16 | Pending |
 
 **Coverage:**
