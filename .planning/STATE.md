@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
-stopped_at: Completed 15-juno-weekly-viral-sweeper/15-03-PLAN.md (Wave 1 parallel executor)
-last_updated: "2026-05-21T00:44:22.315Z"
+stopped_at: Completed 15-01-PLAN.md (D-03a substrate writer extension)
+last_updated: "2026-05-21T00:45:22.071Z"
 last_activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 11
 ---
 
 # Project State
@@ -165,6 +165,9 @@ Last activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno test
 | Phase 13-per-company-branding P03 | 35 | 4 tasks | 2 files |
 | Phase 14-juno-content-calendar P01 | 6 | 4 tasks | 5 files |
 | Phase 15-juno-weekly-viral-sweeper P15-03 | 4min | 2 tasks | 2 files |
+| Phase 15-juno-weekly-viral-sweeper P04 | 138 | 1 tasks | 1 files |
+| Phase 15-juno-weekly-viral-sweeper P02 | 4 | 2 tasks | 4 files |
+| Phase 15-juno-weekly-viral-sweeper P01 | 12 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -379,6 +382,9 @@ Recent decisions affecting current work:
 - [Phase 13]: operator approved Phase 13 visual QA 2026-05-20 — Juno navy palette (oklch(0.58 0.14 245)) reads institutional defence; FOWB-free transitions verified manually at 1440x900 (all 6 MUST-PASS + all 4 SHOULD-PASS items confirmed)
 - [Phase 14-juno-content-calendar]: Phase 14 Plan 01: deleted 13-line Phase 9 D-09 Juno calendar short-circuit at ContentCalendarPage.tsx:42-54 per D-01; added 3 frontend RTL + 4 backend pytest cross-tenant isolation tests per D-04/D-05; surgically relaxed REQUIREMENTS.md JCAL-01 wording per D-06 with *(D-06)* annotation; D-07 byte-identical zero-regression contract preserved (12 critical files unchanged). Frontend 175→178 tests, backend 184→188 tests, all JCAL-01..05 behaviorally satisfied. Ready for phase-14 verifier.
 - [Phase 15-juno-weekly-viral-sweeper]: 15-03: deleted Phase 9 D-09 Juno sweeper short-circuit; renamed inner Seva-only component to TenantWeeklyViralSweeperPage with prop-driven companyId; added 3 RTL tests for per-tenant TanStack Query key isolation (JSWEEP-05/06 frontend portion)
+- [Phase 15-juno-weekly-viral-sweeper]: Plan 15-04: backend cross-tenant test mirrors Phase 14 D-05 fixture pattern verbatim; semantic adapted from '404 on cross-tenant UUID' to 'total == 0 on wrong tenant prefix' since /api/{company}/weekly-sweeps is GET-only (no PATCH/DELETE surface)
+- [Phase 15-juno-weekly-viral-sweeper]: JUNO_SWEEPER_SYSTEM_PROMPT and JUNO_SWEEPER_X_QUERY constants landed (Plan 15-02) with verbatim FORBID anti-tactical clause string-equality contract grep-verified (2 occurrences) and 261-char corrected X query (11 handles + 2 hashtags, well under 512-char Basic-tier cap)
+- [Phase 15-juno-weekly-viral-sweeper]: D-03a Option 1 applied: extended Phase 10 _build_juno_*_section writers to return entries alongside (md, diag); orchestrator threads entries into raw_sources_jsonb top-level keys (defence_news/canadian_procurement/world_events). Unblocks Plan 15-05 sweeper virality compute substrate read.
 
 ### Pending Todos
 
@@ -459,9 +465,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T00:44:22.309Z
+Last session: 2026-05-21T00:45:22.066Z
 Last activity: 2026-05-20
-Stopped At: Completed 15-juno-weekly-viral-sweeper/15-03-PLAN.md (Wave 1 parallel executor)
+Stopped At: Completed 15-01-PLAN.md (D-03a substrate writer extension)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 

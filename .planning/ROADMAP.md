@@ -349,10 +349,10 @@ Plans:
 4. Operator-approved voice UAT artifact (`phases/15-juno-weekly-viral-sweeper/voice_calibration_uat.md`) shows 5/7+ automated criteria PASS plus operator-qualitative APPROVE for Janes/CSIS voice match + anti-tactical clause + no equity/financial signal on primes; voice UAT precedes `JUNO_SWEEPER_CRON_ENABLED=true` flip
 5. Full regression suites GREEN — scheduler stays at 331+ pass + the new `test_juno_weekly_sweeper.py` tests + worker count bumps; backend at 184+ + new isolation tests; frontend at 168+ + new sweeper isolation scenario test; `scripts/verify-tenant-isolation.sh` continues to exit 0; `scripts/verify-anthropic-resolver.sh` (Phase 12) continues to exit 0 (Juno sweeper Sonnet call resolves via `get_anthropic_client('juno')`)
 
-**Plans:** 3/7 plans executed
+**Plans:** 4/7 plans executed
 
 Plans:
-- [ ] 15-01-PLAN.md — Wave 1 — Extend Phase 10's Juno daily_summary substrate writer (`daily_summary.py::_build_juno_*_section`) to persist story-URL arrays into `raw_sources_jsonb.defence_news / canadian_procurement / world_events` keys (D-03a — RESEARCH §3 critical fix; Juno-only; Seva untouched) (JSWEEP-02)
+- [x] 15-01-PLAN.md — Wave 1 — Extend Phase 10's Juno daily_summary substrate writer (`daily_summary.py::_build_juno_*_section`) to persist story-URL arrays into `raw_sources_jsonb.defence_news / canadian_procurement / world_events` keys (D-03a — RESEARCH §3 critical fix; Juno-only; Seva untouched) (JSWEEP-02)
 - [x] 15-02-PLAN.md — Wave 1 — Add `JUNO_SWEEPER_SYSTEM_PROMPT` to `companies/juno/prompts.py` (D-04 verbatim anti-tactical string-equality contract) + create `companies/juno/x_queries.py` with `JUNO_SWEEPER_X_QUERY` (D-01 single combined query, D-02 final corrected 11-handle + 2-hashtag form per RESEARCH §1) + test files (JSWEEP-02, JSWEEP-04)
 - [x] 15-03-PLAN.md — Wave 1 — Delete the Juno short-circuit in `frontend/src/pages/WeeklyViralSweeperPage.tsx:48-60` + refactor `SevaWeeklyViralSweeperPage` to tenant-agnostic prop-driven component (D-08) + new RTL test for per-tenant TanStack Query key isolation (D-09 frontend) (JSWEEP-05, JSWEEP-06)
 - [x] 15-04-PLAN.md — Wave 1 — New `backend/tests/test_weekly_sweeps_cross_tenant.py` asserting GET-list cross-tenant isolation on `/api/{company}/weekly-sweeps` (D-09 backend; mirror Phase 14 D-05 pattern adapted for the GET-only surface area) (JSWEEP-06)
@@ -418,7 +418,7 @@ Plans:
 | 12. Per-tenant Anthropic API Key | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 13. Per-company Branding | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 1/1 | Complete   | 2026-05-20 |
-| 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 3/7 | In Progress|  |
+| 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 4/7 | In Progress|  |
 
 ---
 
