@@ -873,7 +873,14 @@ async def test_deliver_summary_teaser_called_on_success():
 
 
 def test_idempotency_window_is_30_minutes():
-    """IDEMPOTENCY_WINDOW_MIN must be 30 (matches misfire_grace_time — CRIT-3)."""
+    """IDEMPOTENCY_WINDOW_MIN must stay at 30 minutes — CRIT-3.
+
+    Originally specced to match misfire_grace_time (30 min). On 2026-05-21
+    misfire_grace_time was bumped to 14400s (4 hours) but IDEMPOTENCY_WINDOW_MIN
+    intentionally STAYS at 30: 08:00 PT and 12:00 PT fires are exactly 4 hours
+    apart, so a 240-min idempotency window would cause the 12:00 PT fire to
+    skip itself thinking the 08:00 PT row is a duplicate.
+    """
     assert IDEMPOTENCY_WINDOW_MIN == 30
 
 

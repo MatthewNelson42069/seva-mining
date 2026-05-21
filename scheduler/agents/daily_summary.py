@@ -80,7 +80,17 @@ GOLD_SCORE_FLOOR = 6.0          # GOLD-01 — locked in research SUMMARY.md
 GOLD_TOP_N = 20                 # quick-260518-fyq — bumped 12→20; analyst content was getting edged out on heavy M&A days (Equinox/Orla saturated 05-17 fires while Goldman gold-target story missed)
 SONNET_MODEL = "claude-sonnet-4-6"  # locked — Sonnet for the WRITE call only
 SONNET_MAX_TOKENS = 1500        # quick-260512-of1 — bumped from 800; bull-thesis brief is structurally larger
-IDEMPOTENCY_WINDOW_MIN = 30     # CRIT-3 — match misfire_grace_time
+IDEMPOTENCY_WINDOW_MIN = 30     # CRIT-3 — see note below
+# Originally specced to match misfire_grace_time (which was 1800s = 30 min).
+# On 2026-05-21 misfire_grace_time was bumped to 14400s (4 hours) to recover
+# from a deploy-cadence outage. IDEMPOTENCY_WINDOW_MIN intentionally STAYS
+# at 30 minutes — bumping it to 240 would cause the 12:00 PT scheduled fire
+# to skip itself when the 08:00 PT fire is exactly 4 hours older (within
+# the new window), losing one of two daily summaries. Trade-off: in the
+# narrow case where a delayed-catchup fire for 08:00 PT lands within 30 min
+# of 12:00 PT, the 12:00 PT fire will skip (idempotency). That's acceptable —
+# better one summary than zero. A future hardening could make the check
+# period_label-aware so 08:00 PT and 12:00 PT fires never collide.
 
 # v3.0 Phase 10 (DEF-04..07) — Juno synthesis token budget per section.
 # Token math: 3 sections × ~1500 tokens × ~$3/M output = ~$0.01/fire ≈ $0.60/mo

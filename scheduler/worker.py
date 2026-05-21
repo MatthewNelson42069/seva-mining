@@ -446,7 +446,13 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
         job_defaults={
             "coalesce": True,
             "max_instances": 1,
-            "misfire_grace_time": 1800,
+            # Bumped 1800 (30 min) → 14400 (4 hours) on 2026-05-21 after
+            # diagnosing 2 days of skipped fires caused by deploy cadence
+            # close to cron windows (08:00/12:00 PT for Seva, 08:05/12:05
+            # PT for Juno). With coalesce=True, a 4-hour grace recovers
+            # fires that were missed because the scheduler was restarting
+            # during the cron window — without firing the same slot twice.
+            "misfire_grace_time": 14400,
         },
         timezone="UTC",
     )
@@ -499,7 +505,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
             id="juno_daily_summary",
             name="Daily Summary — Juno — 08:05 + 12:05 America/Los_Angeles",
             max_instances=1,
-            misfire_grace_time=1800,
+            misfire_grace_time=14400,  # Bumped from 1800 (see job_defaults note above)
         )
     else:
         logger.info(
@@ -564,7 +570,7 @@ async def build_scheduler(engine) -> AsyncIOScheduler:
             id="juno_weekly_sweeper",
             name="Weekly Viral Sweeper — Juno — Sun 08:00 America/Los_Angeles",
             max_instances=1,
-            misfire_grace_time=1800,
+            misfire_grace_time=14400,  # Bumped from 1800 (see job_defaults note above)
         )
     else:
         logger.info(
