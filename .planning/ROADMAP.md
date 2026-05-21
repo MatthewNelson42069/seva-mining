@@ -75,6 +75,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 - [x] **Phase 13: Per-company Branding** — Juno wordmark + logo + color palette via `companyBrandConfig.ts` registry pattern (extends Phase 9 D-08 `companySectionConfig.ts` precedent); no `if (company === 'juno')` branches; CI grep gate (BRAND-01..05) — 3/3 plans complete; 175/175 frontend tests; operator visual QA 10/10 PASS; TENANT-VISITED-v31-redux closed
 - [x] **Phase 14: Juno Content Calendar (Tab 2)** — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD over Juno's `calendar_items` rows via existing `scoped_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests (JCAL-01..05) (completed 2026-05-20)
 - [x] **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** — Sunday 08:00 PT APScheduler cron at lock 1021; defence-sector X queries via `tweepy.AsyncClient.search_recent_tweets`; virality compute over Juno's `daily_summaries.raw_sources_jsonb`; Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; Tab 3 render (JSWEEP-01..06) (completed 2026-05-21)
+- [ ] **Phase 16: v3.1 Audit Cleanup Bundle** — Five pre-existing tech-debt items surfaced by v3.1 milestone audit (`.planning/v3.1-MILESTONE-AUDIT.md`): frontend ESLint cleanup (CLEAN-01), backend ruff cleanup (CLEAN-02), scheduler ruff cleanup (CLEAN-03), scheduler test RuntimeWarning cleanup (CLEAN-04), stale Phase-9-era SummaryFeedPage empty-state copy replacement (CLEAN-05). All items carry over from earlier milestones (pre-Phase 12/13/14); bundled into a single phase before v3.1 archive. Mirrors Phase 11's pattern (v3.0 audit cleanup bundle). Complexity S — most items are ruff/eslint auto-fixes; estimated 30-60 min execute. (CLEAN-01..05)
 
 ---
 
@@ -400,6 +401,52 @@ Plans:
 
 ---
 
+### Phase 16: v3.1 Audit Cleanup Bundle
+
+**Goal:** Close 5 pre-existing tech-debt items surfaced by the v3.1 milestone audit in a single small bundle phase before v3.1 milestone archive. After this phase: frontend lints clean, backend lints clean, scheduler lints clean, scheduler test RuntimeWarnings reduced to zero (or documented pre-existing baseline), and `frontend/src/pages/SummaryFeedPage.tsx:63-74` Phase-9-era empty-state copy is either rewritten to be tenant-aware or deleted entirely. v3.1 milestone closes at 5/5 phases complete with all carried-over tech debt addressed.
+
+**Depends on:** v3.1 phases 12, 13, 14, 15 all shipped (✓ 2026-05-20/21); v3.1 milestone audit complete (✓ 2026-05-21 — `.planning/v3.1-MILESTONE-AUDIT.md`).
+
+**Requirements:** CLEAN-01, CLEAN-02, CLEAN-03, CLEAN-04, CLEAN-05
+
+**Inputs:**
+- `.planning/v3.1-MILESTONE-AUDIT.md` — source of all 5 cleanup items
+- Each item references specific files + line numbers from the audit's `tech_debt.pre_existing_carried_over` block
+
+**Outputs:**
+- `frontend/src/pages/SummaryFeedPage.test.tsx` + `PerAgentQueuePage.tsx` — ESLint clean (CLEAN-01)
+- `backend/app/main.py` + `backend/app/models/weekly_sweep.py` (+ others) — ruff clean (CLEAN-02)
+- `scheduler/agents/daily_summary.py` + `scheduler/agents/weekly_sweeper.py` + `scheduler/scripts/uat_voice_calibration.py` — ruff F401 unused-import-clean (CLEAN-03)
+- `scheduler/tests/agents/test_daily_summary_prune.py` — AsyncMock RuntimeWarnings resolved (CLEAN-04)
+- `frontend/src/pages/SummaryFeedPage.tsx` — lines 63-74 rewritten or deleted (CLEAN-05)
+
+**Success Criteria** (what must be TRUE when this phase completes):
+1. `cd frontend && npm run lint` exits 0 (was: 15 errors)
+2. `cd backend && uv run ruff check` exits 0 (was: 17 UP017 + 1 E501)
+3. `cd scheduler && uv run ruff check` exits 0 for F401 (was: 3 unused imports)
+4. Scheduler pytest output shows 0 `RuntimeWarning: coroutine was never awaited` (was: 4)
+5. `grep -c "Coming in Phase 10" frontend/src/pages/SummaryFeedPage.tsx` returns 0 (stale copy gone); replaced with semantically correct tenant-aware copy OR block deleted entirely
+6. All existing tests still GREEN: frontend 181+ / backend 191+ / scheduler 363+ (zero regressions)
+
+**Plans:** TBD (planner decomposition pending — likely a single plan with 5 small tasks, mirroring Phase 11's shape)
+
+**UI hint**: no (most items are lint auto-fixes; CLEAN-05 touches a React file but only deletes/rewrites a string, not new visual surfaces)
+
+**Complexity:** S (pure cleanup; most items are auto-fixable; no new features; no schema changes; no new dependencies)
+**Estimated duration:** 30-60 minutes
+
+**Dependencies:**
+- v3.1 phases 12/13/14/15 complete (✓)
+- No external blockers; no operator UAT required
+- Items can land in parallel (file-disjoint) or sequentially in one plan
+
+**Gap-closure metadata:**
+- `gap_closure: true` (sourced from milestone audit)
+- Mirrors Phase 11's pattern (v3.0 audit cleanup) — Phase 11 closed 5 items from v3.0 audit; Phase 16 closes 5 items from v3.1 audit
+- Items are PRE-EXISTING (carried over from earlier milestones), NOT v3.1-introduced — but addressing them in v3.1's archive cycle preserves cleanliness
+
+---
+
 ## Progress
 
 | Phase | Milestone | Plans | Status | Completed |
@@ -419,6 +466,7 @@ Plans:
 | 13. Per-company Branding | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 1/1 | Complete   | 2026-05-20 |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 7/7 | Complete   | 2026-05-21 |
+| 16. v3.1 Audit Cleanup Bundle | v3.1 | 0/? | Pending    | - |
 
 ---
 

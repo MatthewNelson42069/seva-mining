@@ -47,6 +47,20 @@ Currently `scheduler/agents/*.py` + `backend/app/*` all read `os.getenv("ANTHROP
 - [x] **KEY-03**: All Anthropic call sites in scheduler + backend route through the resolver. Grep for `Anthropic(api_key=` returns hits ONLY inside the resolver module (`scheduler/anthropic_client.py` or analogous). CI grep gate added if needed (mirroring `scripts/verify-tenant-isolation.sh` from Phase 9).
 - [x] **KEY-04**: Cost attribution works as expected — Seva's Anthropic dashboard shows only `seva_*` request IDs; Juno's dashboard shows only `juno_*` request IDs. Verified by manual fire of `run_daily_summary` (Seva) + `run_juno_daily_summary` (Juno) post-deploy and checking each Anthropic console's recent usage.
 
+### v3.1 Audit Cleanup (CLEAN) — Phase 16
+
+Five pre-existing tech-debt items surfaced by the v3.1 milestone audit (`.planning/v3.1-MILESTONE-AUDIT.md`). Items carried over from earlier milestones (pre-Phase 12/13/14); addressed in a single bundle phase before v3.1 milestone archive. Mirrors Phase 11's pattern (v3.0 audit cleanup bundle).
+
+- [ ] **CLEAN-01**: Frontend ESLint cleanup — fix 15 errors in `frontend/src/pages/SummaryFeedPage.test.tsx` + `frontend/src/pages/PerAgentQueuePage.tsx`. After change: `cd frontend && npm run lint` exits 0. Most errors are auto-fixable via `npx eslint --fix`.
+
+- [ ] **CLEAN-02**: Backend ruff cleanup — fix 17 `UP017` (`datetime.UTC` migration) + 1 E501 in `backend/app/main.py` + `backend/app/models/weekly_sweep.py` + any other pre-Phase-14 files. After change: `cd backend && uv run ruff check` exits 0. Auto-fixable via `uv run ruff check --fix`.
+
+- [ ] **CLEAN-03**: Scheduler ruff cleanup — remove F401 unused imports: `HAIKU_MODEL` in `scheduler/agents/daily_summary.py:57`, `select` in `scheduler/agents/weekly_sweeper.py`, `_build_juno_world_events_section` in `scheduler/scripts/uat_voice_calibration.py`. After change: `cd scheduler && uv run ruff check` exits 0.
+
+- [ ] **CLEAN-04**: Scheduler test RuntimeWarning cleanup — fix the 4 AsyncMock `RuntimeWarning: coroutine was never awaited` in `scheduler/tests/agents/test_daily_summary_prune.py`. Likely cause: `AsyncMock` configured to return coroutines but test code calls `.return_value` synchronously. After change: scheduler pytest output shows 0 RuntimeWarnings (or matches documented pre-existing baseline).
+
+- [ ] **CLEAN-05**: Replace stale Phase-9-era empty-state copy at `frontend/src/pages/SummaryFeedPage.tsx:63-74` ("Coming in Phase 10 — Defence-sector ingestion not yet enabled."). Phase 10 shipped 2026-05-19 and Phase 12 production cron flipped 2026-05-20, so this copy is dead-text. Renders only when `summaries.length === 0` for Juno but says something semantically wrong. Either rewrite to tenant-aware empty-state copy ("No defence-industry briefs for this window yet — the next cron fires {time}." or analogous) OR delete the block entirely. Closes integration-checker's Flow A step 4 PARTIAL finding from v3.1 audit.
+
 ## v3.2+ Requirements
 
 Deferred to future v3.2+ release. Tracked but NOT in v3.1 roadmap.
@@ -105,10 +119,16 @@ Which phases cover which requirements. Updated during roadmap creation (2026-05-
 | JSWEEP-04 | Phase 15 | Complete |
 | JSWEEP-05 | Phase 15 | Complete |
 | JSWEEP-06 | Phase 15 | Complete |
+| CLEAN-01 | Phase 16 | Pending |
+| CLEAN-02 | Phase 16 | Pending |
+| CLEAN-03 | Phase 16 | Pending |
+| CLEAN-04 | Phase 16 | Pending |
+| CLEAN-05 | Phase 16 | Pending |
 
 **Coverage:**
-- v3.1 requirements: 20 total (5 JCAL + 6 JSWEEP + 5 BRAND + 4 KEY)
-- Mapped to phases: 20 ✓ (Phase 12: 4 KEY; Phase 13: 5 BRAND; Phase 14: 5 JCAL; Phase 15: 6 JSWEEP)
+- v3.1 requirements: 25 total (5 JCAL + 6 JSWEEP + 5 BRAND + 4 KEY + 5 CLEAN audit-cleanup)
+- Mapped to phases: 25 ✓ (Phase 12: 4 KEY; Phase 13: 5 BRAND; Phase 14: 5 JCAL; Phase 15: 6 JSWEEP; Phase 16: 5 CLEAN)
+- Complete: 20 (KEY/BRAND/JCAL/JSWEEP all `[x]`); Pending: 5 (CLEAN-01..05 — Phase 16)
 - Unmapped: 0 ✓
 - Orphans: 0 ✓
 
