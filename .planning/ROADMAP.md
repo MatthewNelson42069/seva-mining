@@ -75,7 +75,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 - [x] **Phase 13: Per-company Branding** — Juno wordmark + logo + color palette via `companyBrandConfig.ts` registry pattern (extends Phase 9 D-08 `companySectionConfig.ts` precedent); no `if (company === 'juno')` branches; CI grep gate (BRAND-01..05) — 3/3 plans complete; 175/175 frontend tests; operator visual QA 10/10 PASS; TENANT-VISITED-v31-redux closed
 - [x] **Phase 14: Juno Content Calendar (Tab 2)** — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD over Juno's `calendar_items` rows via existing `scoped_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests (JCAL-01..05) (completed 2026-05-20)
 - [x] **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** — Sunday 08:00 PT APScheduler cron at lock 1021; defence-sector X queries via `tweepy.AsyncClient.search_recent_tweets`; virality compute over Juno's `daily_summaries.raw_sources_jsonb`; Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; Tab 3 render (JSWEEP-01..06) (completed 2026-05-21)
-- [ ] **Phase 16: v3.1 Audit Cleanup Bundle** — Five pre-existing tech-debt items surfaced by v3.1 milestone audit (`.planning/v3.1-MILESTONE-AUDIT.md`): frontend ESLint cleanup (CLEAN-01), backend ruff cleanup (CLEAN-02), scheduler ruff cleanup (CLEAN-03), scheduler test RuntimeWarning cleanup (CLEAN-04), stale Phase-9-era SummaryFeedPage empty-state copy replacement (CLEAN-05). All items carry over from earlier milestones (pre-Phase 12/13/14); bundled into a single phase before v3.1 archive. Mirrors Phase 11's pattern (v3.0 audit cleanup bundle). Complexity S — most items are ruff/eslint auto-fixes; estimated 30-60 min execute. (CLEAN-01..05)
+- [x] **Phase 16: v3.1 Audit Cleanup Bundle** — Five pre-existing tech-debt items surfaced by v3.1 milestone audit (`.planning/v3.1-MILESTONE-AUDIT.md`): frontend ESLint cleanup (CLEAN-01), backend ruff cleanup (CLEAN-02), scheduler ruff cleanup (CLEAN-03), scheduler test RuntimeWarning cleanup (CLEAN-04), stale Phase-9-era SummaryFeedPage empty-state copy replacement (CLEAN-05). All items carry over from earlier milestones (pre-Phase 12/13/14); bundled into a single phase before v3.1 archive. Mirrors Phase 11's pattern (v3.0 audit cleanup bundle). Complexity S — most items are ruff/eslint auto-fixes; estimated 30-60 min execute. (CLEAN-01..05) (completed 2026-05-21)
 
 ---
 
@@ -428,14 +428,14 @@ Plans:
 5. `grep -c "Coming in Phase 10" frontend/src/pages/SummaryFeedPage.tsx` returns 0 (stale copy gone); replaced with semantically correct tenant-aware copy OR block deleted entirely
 6. All existing tests still GREEN: frontend 181+ / backend 191+ / scheduler 363+ (zero regressions)
 
-**Plans:** 3/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
-- [ ] 16-01-PLAN.md — CLEAN-01: frontend ESLint cleanup (15 errors across 4 frontend files); mirrors Phase 11 single-task plan shape
+- [x] 16-01-PLAN.md — CLEAN-01: frontend ESLint cleanup (15 errors across 4 frontend files); mirrors Phase 11 single-task plan shape
 - [x] 16-02-PLAN.md — CLEAN-02: backend ruff cleanup (17 UP017/I001/E501 errors across 4 backend files)
 - [x] 16-03-PLAN.md — CLEAN-03: scheduler ruff F401 cleanup (6 unused imports across 4 scheduler files)
 - [x] 16-04-PLAN.md — CLEAN-04: scheduler test RuntimeWarning fix (4 unawaited coroutines in test_daily_summary_prune.py)
-- [ ] 16-05-PLAN.md — CLEAN-05: SummaryFeedPage stale Phase-9-era empty-state copy replacement (1 frontend production file)
+- [x] 16-05-PLAN.md — CLEAN-05: SummaryFeedPage stale Phase-9-era empty-state copy replacement (1 frontend production file)
 
 **UI hint**: no (most items are lint auto-fixes; CLEAN-05 touches a React file but only deletes/rewrites a string, not new visual surfaces)
 
@@ -473,7 +473,7 @@ Plans:
 | 13. Per-company Branding | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 1/1 | Complete   | 2026-05-20 |
 | 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 7/7 | Complete   | 2026-05-21 |
-| 16. v3.1 Audit Cleanup Bundle | v3.1 | 3/5 | In Progress|  |
+| 16. v3.1 Audit Cleanup Bundle | v3.1 | 5/5 | Complete   | 2026-05-21 |
 
 ---
 

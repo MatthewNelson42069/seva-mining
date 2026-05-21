@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
-stopped_at: "Completed 16-02-PLAN.md (Wave 1 parallel: CLEAN-02 ruff cleanup)"
-last_updated: "2026-05-21T02:46:31.911Z"
+stopped_at: Completed 16-01-PLAN.md (CLEAN-01 frontend ESLint cleanup; lint 0 errors, tests 181/181, tsc clean — parallel Wave 1 with 16-02/03/04/05)
+last_updated: "2026-05-21T02:47:44.862Z"
 last_activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpretation b — code+test correctness basis; substantive smoke fire deferred to post-D-03b-backfill-window opportune moment); Phase 15 closes code-side at 7/7 plans; verifier next
 progress:
   total_phases: 4
@@ -174,6 +174,8 @@ Last activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpr
 | Phase 16-v3.1-audit-cleanup-bundle P03 | 4min | 1 tasks | 5 files |
 | Phase 16-v3.1-audit-cleanup-bundle P04 | 9min | 1 tasks | 1 files |
 | Phase 16-v3.1-audit-cleanup-bundle P02 | 2 min | 1 tasks | 7 files |
+| Phase 16-v3.1-audit-cleanup-bundle P05 | 4min | 1 tasks | 1 files |
+| Phase 16-v3.1-audit-cleanup-bundle P01 | 8min | 1 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -398,6 +400,7 @@ Recent decisions affecting current work:
 - [Phase 16-v3.1-audit-cleanup-bundle]: 16-03: ruff --fix is canonical F401 removal path; auth-gate is tool exit code not enumerated count (Rule 3 deviation included models/weekly_sweep.py)
 - [Phase 16-v3.1-audit-cleanup-bundle]: CLEAN-04: session.add() is sync on AsyncSession — use MagicMock not AsyncMock for the .add mock to avoid RuntimeWarning
 - [Phase 16-v3.1-audit-cleanup-bundle]: Backend ruff: trust tool exit code over audit-narrative counts (drift-tolerant gate) — Audit said '17 UP017 + 1 E501'; live ruff showed 2 UP017 + 5 I001 + 5 E501 + 5 manual-after-autofix surfaces across 7 files (not 4). Plan's authoritative gate is 'ruff exits 0', not 'fix exactly these counts'.
+- [Phase 16-v3.1-audit-cleanup-bundle]: 16-01: React Query hook test-mocks → 'as Partial<ReturnType<typeof hook>>' (NOT 'as any'); page non-component exports live in *Helpers.ts siblings to preserve Vite HMR; react/display-name unbacked-directive removal preferred over installing eslint-plugin-react
 
 ### Pending Todos
 
@@ -478,9 +481,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T02:46:28.445Z
+Last session: 2026-05-21T02:47:44.854Z
 Last activity: 2026-05-20
-Stopped At: Completed 16-02-PLAN.md (Wave 1 parallel: CLEAN-02 ruff cleanup)
+Stopped At: Completed 16-01-PLAN.md (CLEAN-01 frontend ESLint cleanup; lint 0 errors, tests 181/181, tsc clean — parallel Wave 1 with 16-02/03/04/05)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
