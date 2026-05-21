@@ -54,6 +54,7 @@ Sources:
 """
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime
 
@@ -69,7 +70,6 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.ext.compiler import compiles
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 from app.models.calendar_item import CalendarItem
@@ -215,11 +215,10 @@ async def tenant_authed_client(tenant_session_factory):
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    token = create_access_token()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
-        ac.headers.update({"Authorization": f"Bearer {token}"})
+        ac.cookies.set("seva_auth_token", os.environ["SEVA_DASHBOARD_TOKEN"])
         yield ac
     app.dependency_overrides.pop(get_db, None)
 

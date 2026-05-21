@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     database_url: str
     anthropic_api_key: str
     x_api_bearer_token: str
-    jwt_secret: str
-    dashboard_password: str     # bcrypt hash
+    jwt_secret: str         # DEPRECATED (quick-260521-9ze): kept so Railway boot doesn't crash
+    dashboard_password: str # DEPRECATED (quick-260521-9ze): kept so Railway boot doesn't crash
+    seva_dashboard_token: str   # Cookie-token auth — env var SEVA_DASHBOARD_TOKEN
     frontend_url: str = "http://localhost:5173"
 
     # Optional — routes that need these will fail gracefully if absent

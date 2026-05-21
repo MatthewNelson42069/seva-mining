@@ -4,7 +4,7 @@ Mounted under `/api/{company}` in main.py (TENANT-04). Endpoint:
   - GET /api/{company}/weekly-sweeps?limit=12 — returns the latest weekly
     sweep cards for `company` ordered by generated_at DESC.
 
-Auth: router-level `Depends(get_current_user)` matches summaries.py pattern.
+Auth: router-level `Depends(get_current_session_token)` matches summaries.py pattern.
 Tenant scope: `company: CompanyId = Depends(get_current_company)` per endpoint,
 routed through `scoped_weekly_sweeps(company)` so the CI grep gate finds zero
 raw select-of-WeeklySweep call sites here.
@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.companies import CompanyId
 from app.database import get_db
-from app.dependencies import get_current_company, get_current_user
+from app.dependencies import get_current_company, get_current_session_token
 from app.models.weekly_sweep import WeeklySweep
 from app.queries.scoped import scoped_weekly_sweeps
 from app.schemas.weekly_sweep import WeeklySweepCard, WeeklySweepFeedResponse
@@ -26,7 +26,7 @@ from app.schemas.weekly_sweep import WeeklySweepCard, WeeklySweepFeedResponse
 router = APIRouter(
     prefix="/weekly-sweeps",  # /api/{company} prefix added by main.py include_router
     tags=["weekly-sweeps"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_session_token)],
 )
 
 

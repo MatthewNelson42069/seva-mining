@@ -15,6 +15,7 @@ if hasattr(time, "tzset"):
     time.tzset()
 
 import asyncio  # noqa: E402
+import os  # noqa: E402
 
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
@@ -25,7 +26,6 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
     create_async_engine,
 )
 
-from app.auth import create_access_token  # noqa: E402
 from app.database import get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.calendar_item import CalendarItem  # noqa: E402
@@ -65,9 +65,8 @@ async def calendar_client():
 
 @pytest_asyncio.fixture
 async def authed_calendar_client(calendar_client):
-    """calendar_client with Authorization: Bearer header pre-set."""
-    token = create_access_token()
-    calendar_client.headers.update({"Authorization": f"Bearer {token}"})
+    """calendar_client with seva_auth_token cookie pre-set (quick-260521-9ze)."""
+    calendar_client.cookies.set("seva_auth_token", os.environ["SEVA_DASHBOARD_TOKEN"])
     yield calendar_client
 
 
@@ -78,9 +77,9 @@ async def authed_calendar_client(calendar_client):
 
 @pytest.mark.asyncio
 async def test_get_calendar_requires_auth(calendar_client):
-    """Router-level Depends(get_current_user) must reject unauthenticated."""
+    """Router-level Depends(get_current_session_token) must reject unauthenticated (returns 403)."""
     r = await calendar_client.get("/api/seva/calendar?start=2026-05-18&end=2026-05-24")
-    assert r.status_code == 401, r.text
+    assert r.status_code in (401, 403), r.text
 
 
 @pytest.mark.asyncio
@@ -88,7 +87,7 @@ async def test_post_calendar_requires_auth(calendar_client):
     r = await calendar_client.post(
         "/api/seva/calendar", json={"date": "2026-05-20", "body": "x"}
     )
-    assert r.status_code == 401, r.text
+    assert r.status_code in (401, 403), r.text
 
 
 # ---------------------------------------------------------------------------

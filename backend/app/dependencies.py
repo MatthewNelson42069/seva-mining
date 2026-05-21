@@ -1,24 +1,21 @@
-import jwt
-from fastapi import Depends, HTTPException, Path, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import secrets
 
-from app.auth import decode_token
+from fastapi import HTTPException, Path, Request, status
+
 from app.companies import ACTIVE_COMPANIES, CompanyId
+from app.config import get_settings
 
-bearer_scheme = HTTPBearer()
 
+async def get_current_session_token(request: Request) -> None:
+    """Validate the seva_auth_token cookie using timing-safe comparison.
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
-) -> str:
-    try:
-        payload = decode_token(credentials.credentials)
-        return payload["sub"]
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-        )
+    Raises 403 on missing cookie or token mismatch.
+    Replaces the old get_current_user JWT/Bearer dep (quick-260521-9ze).
+    """
+    cookie = request.cookies.get("seva_auth_token")
+    settings = get_settings()
+    if not cookie or not secrets.compare_digest(cookie, settings.seva_dashboard_token):
+        raise HTTPException(status_code=403, detail="Access required")
 
 
 # v3.0 Phase 9 — TENANT-04 — multi-tenant path-prefix dep (per 09-CONTEXT.md D-04).

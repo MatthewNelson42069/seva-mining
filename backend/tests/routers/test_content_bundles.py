@@ -9,6 +9,7 @@ The rendered_images DB column stays (operator-locked), but it is not part of
 the API response schema. The make_content_bundle helper still sets rendered_images
 on the mock object for DB-layer compatibility — it is simply not asserted via API.
 """
+import os
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -17,7 +18,6 @@ from uuid import UUID
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 
@@ -74,8 +74,8 @@ def make_mock_db(bundle: MagicMock | None = None) -> AsyncMock:
 
 
 def authed_headers() -> dict:
-    token = create_access_token()
-    return {"Authorization": f"Bearer {token}"}
+    """Return seva_auth_token cookie dict for cookie-based auth (quick-260521-9ze)."""
+    return {"seva_auth_token": os.environ["SEVA_DASHBOARD_TOKEN"]}
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ async def test_get_content_bundle_returns_full_bundle():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get(f"/content-bundles/{bundle_id}", headers=authed_headers())
+            resp = await ac.get(f"/content-bundles/{bundle_id}", cookies=authed_headers())
 
         assert resp.status_code == 200
         data = resp.json()
@@ -145,7 +145,7 @@ async def test_get_content_bundle_returns_404_for_missing():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get(f"/content-bundles/{uuid.uuid4()}", headers=authed_headers())
+            resp = await ac.get(f"/content-bundles/{uuid.uuid4()}", cookies=authed_headers())
 
         assert resp.status_code == 404
     finally:
@@ -169,7 +169,7 @@ async def test_get_content_bundle_rendered_images_not_in_response():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get(f"/content-bundles/{bundle_id}", headers=authed_headers())
+            resp = await ac.get(f"/content-bundles/{bundle_id}", cookies=authed_headers())
 
         assert resp.status_code == 200
         data = resp.json()

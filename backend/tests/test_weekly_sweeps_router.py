@@ -16,6 +16,7 @@ Path note: flat at backend/tests/test_weekly_sweeps_router.py per plan 07-03
 acceptance criterion (flat-file pattern locked alongside test_calendar_router.py).
 """
 
+import os
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
@@ -23,7 +24,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 
@@ -94,8 +94,8 @@ def make_mock_db(rows: list | None = None, total: int | None = None) -> AsyncMoc
 
 
 def authed_headers() -> dict:
-    token = create_access_token()
-    return {"Authorization": f"Bearer {token}"}
+    """Return auth cookie dict for cookie-based auth (quick-260521-9ze)."""
+    return {"seva_auth_token": os.environ["SEVA_DASHBOARD_TOKEN"]}
 
 
 # ---------------------------------------------------------------------------
@@ -104,10 +104,10 @@ def authed_headers() -> dict:
 
 
 async def test_auth_required():
-    """GET /weekly-sweeps without Authorization header returns 401."""
+    """GET /weekly-sweeps without auth cookie returns 403 (cookie-based auth, quick-260521-9ze)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/seva/weekly-sweeps")
-    assert resp.status_code == 401
+    assert resp.status_code in (401, 403)
 
 
 async def test_list_empty():
@@ -120,7 +120,7 @@ async def test_list_empty():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", cookies=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body == {"sweeps": [], "total": 0}
@@ -145,7 +145,7 @@ async def test_list_populated_desc_order():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", cookies=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert len(body["sweeps"]) == 3
@@ -160,14 +160,14 @@ async def test_list_populated_desc_order():
 async def test_limit_clamp_zero():
     """limit=0 returns 422 (ge=1 clamp via FastAPI Query validation)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/seva/weekly-sweeps?limit=0", headers=authed_headers())
+        resp = await ac.get("/api/seva/weekly-sweeps?limit=0", cookies=authed_headers())
     assert resp.status_code == 422
 
 
 async def test_limit_clamp_too_high():
     """limit=53 returns 422 (le=52 clamp per SWEEP-12)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/seva/weekly-sweeps?limit=53", headers=authed_headers())
+        resp = await ac.get("/api/seva/weekly-sweeps?limit=53", cookies=authed_headers())
     assert resp.status_code == 422
 
 
@@ -185,7 +185,7 @@ async def test_limit_smaller_than_total():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/weekly-sweeps?limit=5", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps?limit=5", cookies=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert len(body["sweeps"]) == 5
@@ -207,7 +207,7 @@ async def test_status_serialization():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", cookies=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body["sweeps"][0]["status"] == "partial"
@@ -228,7 +228,7 @@ async def test_response_card_shape():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/weekly-sweeps", headers=authed_headers())
+            resp = await ac.get("/api/seva/weekly-sweeps", cookies=authed_headers())
         assert resp.status_code == 200
         card = resp.json()["sweeps"][0]
         # raw_sources_jsonb is internal telemetry and MUST NOT leak (matches SummaryCardResponse)

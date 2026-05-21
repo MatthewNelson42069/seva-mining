@@ -17,6 +17,7 @@ semantic; different surface area.
 """
 from __future__ import annotations
 
+import os
 from datetime import UTC, date, datetime
 
 import pytest
@@ -31,7 +32,6 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.ext.compiler import compiles
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 from app.models.weekly_sweep import WeeklySweep
@@ -82,11 +82,10 @@ async def cross_tenant_client_and_session():
             yield session
 
     app.dependency_overrides[get_db] = override_get_db
-    token = create_access_token()
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as ac:
-        ac.headers.update({"Authorization": f"Bearer {token}"})
+        ac.cookies.set("seva_auth_token", os.environ["SEVA_DASHBOARD_TOKEN"])
         yield (ac, session_factory)
     app.dependency_overrides.pop(get_db, None)
     await engine.dispose()

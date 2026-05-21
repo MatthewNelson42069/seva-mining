@@ -2,6 +2,7 @@
 CRUD endpoint tests for watchlists, keywords, agent-runs, digests, and content.
 Requirements: EXEC-01 (agent-runs filter), AUTH-03 (all endpoints require auth)
 """
+import os
 from datetime import UTC, datetime
 
 import pytest
@@ -12,7 +13,6 @@ from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 
@@ -149,9 +149,8 @@ async def db_client():
 
 @pytest_asyncio.fixture
 async def authed_db_client(db_client):
-    """db_client with Authorization: Bearer header pre-set."""
-    token = create_access_token()
-    db_client.headers.update({"Authorization": f"Bearer {token}"})
+    """db_client with seva_auth_token cookie pre-set (quick-260521-9ze)."""
+    db_client.cookies.set("seva_auth_token", os.environ["SEVA_DASHBOARD_TOKEN"])
     yield db_client
 
 

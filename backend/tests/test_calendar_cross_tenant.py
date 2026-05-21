@@ -17,6 +17,8 @@ the not-found 404 branch.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -26,7 +28,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 from app.models.calendar_item import CalendarItem
@@ -70,9 +71,8 @@ async def cross_tenant_client():
 
 @pytest_asyncio.fixture
 async def authed_cross_tenant_client(cross_tenant_client):
-    """cross_tenant_client with Authorization: Bearer header pre-set."""
-    token = create_access_token()
-    cross_tenant_client.headers.update({"Authorization": f"Bearer {token}"})
+    """cross_tenant_client with seva_auth_token cookie pre-set (quick-260521-9ze)."""
+    cross_tenant_client.cookies.set("seva_auth_token", os.environ["SEVA_DASHBOARD_TOKEN"])
     yield cross_tenant_client
 
 

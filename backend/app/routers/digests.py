@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_session_token
 from app.models.daily_digest import DailyDigest
 from app.models.draft_item import DraftItem
 from app.schemas.daily_digest import DailyDigestResponse
@@ -14,7 +14,7 @@ from app.schemas.daily_digest import DailyDigestResponse
 router = APIRouter(
     prefix="/digests",
     tags=["digests"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_session_token)],
 )
 
 

@@ -13,7 +13,6 @@ from uuid import UUID
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 
@@ -82,10 +81,10 @@ def make_mock_db(item: MagicMock | None = None) -> AsyncMock:
     return mock_db
 
 
-def make_authed_headers() -> dict:
-    """Return Authorization header with a valid test JWT."""
-    token = create_access_token()
-    return {"Authorization": f"Bearer {token}"}
+def make_authed_cookies() -> dict:
+    """Return seva_auth_token cookie dict for cookie-based auth (quick-260521-9ze)."""
+    import os
+    return {"seva_auth_token": os.environ["SEVA_DASHBOARD_TOKEN"]}
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +173,7 @@ class TestStateMachine:
 
 @pytest.fixture
 def auth_headers():
-    return make_authed_headers()
+    return make_authed_cookies()
 
 
 class TestApproveTransition:
@@ -198,7 +197,7 @@ class TestApproveTransition:
         app.dependency_overrides[get_db] = override_get_db
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.patch(f"/items/{item_id}/approve", headers=auth_headers)
+                resp = await ac.patch(f"/items/{item_id}/approve", cookies=auth_headers)
             assert resp.status_code == 200
         finally:
             app.dependency_overrides.pop(get_db, None)
@@ -216,7 +215,7 @@ class TestApproveTransition:
         app.dependency_overrides[get_db] = override_get_db
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.patch(f"/items/{item_id}/approve", headers=auth_headers)
+                resp = await ac.patch(f"/items/{item_id}/approve", cookies=auth_headers)
             assert resp.status_code == 200
             # Confirm the ORM item status was set to approved
             assert item.status == "approved"
@@ -240,7 +239,7 @@ class TestApproveTransition:
                 resp = await ac.patch(
                     f"/items/{item_id}/approve",
                     json={"edited_text": "My polished version of the draft"},
-                    headers=auth_headers,
+                    cookies=auth_headers,
                 )
             assert resp.status_code == 200
             # edit_delta should be set to original first alternative
@@ -262,7 +261,7 @@ class TestApproveTransition:
         app.dependency_overrides[get_db] = override_get_db
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.patch(f"/items/{item_id}/approve", headers=auth_headers)
+                resp = await ac.patch(f"/items/{item_id}/approve", cookies=auth_headers)
             assert resp.status_code == 409
         finally:
             app.dependency_overrides.pop(get_db, None)
@@ -278,7 +277,7 @@ class TestApproveTransition:
         app.dependency_overrides[get_db] = override_get_db
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.patch(f"/items/{random_id}/approve", headers=auth_headers)
+                resp = await ac.patch(f"/items/{random_id}/approve", cookies=auth_headers)
             assert resp.status_code == 404
         finally:
             app.dependency_overrides.pop(get_db, None)
@@ -319,7 +318,7 @@ class TestRejectRequiresReason:
                 resp = await ac.patch(
                     f"/items/{item_id}/reject",
                     json={"category": "off-topic", "notes": "Not related to gold"},
-                    headers=auth_headers,
+                    cookies=auth_headers,
                 )
             assert resp.status_code == 200
         finally:
@@ -340,7 +339,7 @@ class TestRejectRequiresReason:
                 await ac.patch(
                     f"/items/{item_id}/reject",
                     json={"category": "low-quality", "notes": "Too vague"},
-                    headers=auth_headers,
+                    cookies=auth_headers,
                 )
             parsed = json.loads(item.rejection_reason)
             assert parsed["category"] == "low-quality"
@@ -364,7 +363,7 @@ class TestRejectRequiresReason:
                 resp = await ac.patch(
                     f"/items/{item_id}/reject",
                     json={},
-                    headers=auth_headers,
+                    cookies=auth_headers,
                 )
             assert resp.status_code == 422
         finally:
@@ -405,7 +404,7 @@ class TestQueueList:
         app.dependency_overrides[get_db] = override_get_db
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.get("/queue", headers=auth_headers)
+                resp = await ac.get("/queue", cookies=auth_headers)
             assert resp.status_code == 200
             data = resp.json()
             assert "items" in data
@@ -438,7 +437,7 @@ class TestQueueList:
         app.dependency_overrides[get_db] = override_get_db
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.get("/queue", headers=auth_headers)
+                resp = await ac.get("/queue", cookies=auth_headers)
             assert resp.status_code == 200
             data = resp.json()
             assert data["items"] == []
@@ -468,7 +467,7 @@ class TestQueueContentTypeFilter:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 resp = await ac.get(
                     "/queue?platform=content&content_type=thread",
-                    headers=auth_headers,
+                    cookies=auth_headers,
                 )
             assert resp.status_code == 200
             # Inspect the SQLAlchemy statement that was executed — must include
@@ -494,7 +493,7 @@ class TestQueueContentTypeFilter:
         app.dependency_overrides[get_db] = override_get_db
         try:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-                resp = await ac.get("/queue?platform=content", headers=auth_headers)
+                resp = await ac.get("/queue?platform=content", cookies=auth_headers)
             assert resp.status_code == 200
             executed_stmt = mock_db.execute.call_args.args[0]
             compiled_sql = str(
@@ -516,7 +515,7 @@ class TestQueueContentTypeFilter:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
                 resp = await ac.get(
                     "/queue?platform=content&content_type=bogus_unknown_type",
-                    headers=auth_headers,
+                    cookies=auth_headers,
                 )
             assert resp.status_code == 200
             data = resp.json()

@@ -6,7 +6,7 @@ Mounted under `/api/{company}` in main.py (TENANT-04). Endpoints:
   - PATCH  /api/{company}/calendar/{item_id}                          -> 200 + CalendarItemResponse
   - DELETE /api/{company}/calendar/{item_id}                          -> 204 No Content
 
-Auth: router-level Depends(get_current_user), mirroring summaries.py.
+Auth: router-level Depends(get_current_session_token), mirroring summaries.py.
 Tenant scope: per-endpoint `company: CompanyId = Depends(get_current_company)`.
 Every query is routed through `scoped_calendar(company)` so the CI grep gate
 (`scripts/verify-tenant-isolation.sh`) finds zero raw select-of-CalendarItem
@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.companies import CompanyId
 from app.database import get_db
-from app.dependencies import get_current_company, get_current_user
+from app.dependencies import get_current_company, get_current_session_token
 from app.models.calendar_item import CalendarItem
 from app.queries.scoped import scoped_calendar
 from app.schemas.calendar import (
@@ -53,7 +53,7 @@ from app.schemas.calendar import (
 router = APIRouter(
     prefix="/calendar",  # /api/{company} prefix added by main.py include_router
     tags=["calendar"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_session_token)],
 )
 
 

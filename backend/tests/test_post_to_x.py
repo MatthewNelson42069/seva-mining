@@ -24,6 +24,7 @@ Test cases (12 total):
 """
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from contextlib import asynccontextmanager
@@ -33,7 +34,6 @@ from uuid import UUID
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth import create_access_token
 from app.config import get_settings
 from app.database import get_db
 from app.main import app
@@ -109,8 +109,9 @@ def _make_mock_db(*, locked_item: MagicMock | None, bundle: MagicMock | None) ->
     return mock_db
 
 
-def _auth_headers() -> dict:
-    return {"Authorization": f"Bearer {create_access_token()}"}
+def _auth_cookies() -> dict:
+    """Return seva_auth_token cookie dict (quick-260521-9ze cookie auth)."""
+    return {"seva_auth_token": os.environ["SEVA_DASHBOARD_TOKEN"]}
 
 
 @asynccontextmanager
@@ -146,7 +147,7 @@ async def test_simulate_happy_breaking_news(monkeypatch):
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -176,7 +177,7 @@ async def test_simulate_happy_thread(monkeypatch):
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -211,7 +212,7 @@ async def test_idempotency_already_posted(monkeypatch):
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -234,7 +235,7 @@ async def test_not_found_404():
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{random_id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{random_id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 404
 
@@ -247,7 +248,7 @@ async def test_missing_content_bundle_id_400():
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 400
     assert "content_bundle_id" in resp.json()["detail"]
@@ -263,7 +264,7 @@ async def test_content_type_out_of_scope_400():
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 400
     detail = resp.json()["detail"]
@@ -301,7 +302,7 @@ async def test_real_happy_breaking_news(monkeypatch):
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -327,7 +328,7 @@ async def test_real_happy_thread(monkeypatch):
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -353,7 +354,7 @@ async def test_real_thread_partial_failure(monkeypatch):
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -380,7 +381,7 @@ async def test_real_post_single_tweet_429(monkeypatch):
 
     async with _override_db(mock_db):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.post(f"/items/{item.id}/post-to-x", headers=_auth_headers())
+            resp = await ac.post(f"/items/{item.id}/post-to-x", cookies=_auth_cookies())
 
     assert resp.status_code == 200, resp.text
     body = resp.json()

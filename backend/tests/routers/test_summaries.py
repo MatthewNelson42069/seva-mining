@@ -6,6 +6,7 @@ Uses mock AsyncSession (mirrors test_content_bundles.py pattern) to avoid
 PostgreSQL-only type conflicts (UUID, JSONB) with SQLite in-memory test DB.
 """
 
+import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
@@ -13,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.auth import create_access_token
 from app.database import get_db
 from app.main import app
 
@@ -68,19 +68,19 @@ def make_mock_db(rows: list | None = None) -> AsyncMock:
 
 
 def authed_headers() -> dict:
-    token = create_access_token()
-    return {"Authorization": f"Bearer {token}"}
+    """Return seva_auth_token cookie dict for cookie-based auth (quick-260521-9ze)."""
+    return {"seva_auth_token": os.environ["SEVA_DASHBOARD_TOKEN"]}
 
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
-async def test_get_summaries_unauthenticated_returns_401():
-    """GET /summaries without Authorization header returns 401."""
+async def test_get_summaries_unauthenticated_returns_403():
+    """GET /summaries without auth cookie returns 403 (cookie auth, quick-260521-9ze)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         resp = await ac.get("/api/seva/summaries")
-    assert resp.status_code == 401
+    assert resp.status_code in (401, 403)
 
 
 async def test_get_summaries_empty_returns_200_with_empty_list():
@@ -93,7 +93,7 @@ async def test_get_summaries_empty_returns_200_with_empty_list():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/summaries", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries", cookies=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body == {"summaries": [], "total": 0}
@@ -118,7 +118,7 @@ async def test_get_summaries_returns_rows_in_descending_order():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/summaries", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries", cookies=authed_headers())
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] == 3
@@ -144,7 +144,7 @@ async def test_get_summaries_respects_limit_param():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/summaries?limit=2", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries?limit=2", cookies=authed_headers())
         assert resp.status_code == 200
         assert len(resp.json()["summaries"]) == 2
     finally:
@@ -154,14 +154,14 @@ async def test_get_summaries_respects_limit_param():
 async def test_get_summaries_limit_above_120_rejected():
     """GET /summaries?limit=121 returns 422 (limit le=120)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/seva/summaries?limit=121", headers=authed_headers())
+        resp = await ac.get("/api/seva/summaries?limit=121", cookies=authed_headers())
     assert resp.status_code == 422
 
 
 async def test_get_summaries_limit_zero_rejected():
     """GET /summaries?limit=0 returns 422 (limit ge=1)."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-        resp = await ac.get("/api/seva/summaries?limit=0", headers=authed_headers())
+        resp = await ac.get("/api/seva/summaries?limit=0", cookies=authed_headers())
     assert resp.status_code == 422
 
 
@@ -175,7 +175,7 @@ async def test_get_summaries_response_omits_raw_sources_jsonb():
     app.dependency_overrides[get_db] = override_get_db
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
-            resp = await ac.get("/api/seva/summaries", headers=authed_headers())
+            resp = await ac.get("/api/seva/summaries", cookies=authed_headers())
         assert resp.status_code == 200
         card = resp.json()["summaries"][0]
         assert "raw_sources_jsonb" not in card

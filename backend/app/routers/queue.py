@@ -8,7 +8,7 @@ from sqlalchemy import String, and_, cast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_session_token
 from app.models.content_bundle import ContentBundle
 from app.models.draft_item import DraftItem, DraftStatus
 from app.schemas.draft_item import (
@@ -20,7 +20,7 @@ from app.schemas.draft_item import (
 
 router = APIRouter(
     tags=["queue"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_session_token)],
 )
 
 # D-11: Valid state transitions — only pending can be actioned

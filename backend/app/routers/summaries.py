@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.companies import CompanyId
 from app.database import get_db
-from app.dependencies import get_current_company, get_current_user
+from app.dependencies import get_current_company, get_current_session_token
 from app.models.daily_summary import DailySummary
 from app.queries.scoped import scoped_summaries
 from app.schemas.daily_summary import SummaryCardResponse, SummaryFeedResponse
@@ -26,7 +26,7 @@ from app.schemas.daily_summary import SummaryCardResponse, SummaryFeedResponse
 router = APIRouter(
     prefix="/summaries",  # /api/{company} prefix added by main.py include_router
     tags=["summaries"],
-    dependencies=[Depends(get_current_user)],  # FEED-05 — router-level auth
+    dependencies=[Depends(get_current_session_token)],  # FEED-05 — router-level auth
 )
 
 

@@ -54,6 +54,7 @@ os.environ["X_ACCESS_TOKEN_SECRET"] = "test-access-secret"
 os.environ["SERPAPI_API_KEY"] = "test-key"
 os.environ["JWT_SECRET"] = _TEST_JWT_SECRET
 os.environ["DASHBOARD_PASSWORD"] = _TEST_PASSWORD_HASH
+os.environ["SEVA_DASHBOARD_TOKEN"] = "test-dashboard-token-for-tests-xyz"
 os.environ["FRONTEND_URL"] = "http://localhost:3000"
 
 # ---------------------------------------------------------------------------
@@ -88,7 +89,6 @@ _sqla_async.create_async_engine = _sqlite_safe_create_async_engine
 # ---------------------------------------------------------------------------
 from httpx import ASGITransport, AsyncClient  # noqa: E402 (must follow engine patch)
 
-from app.auth import create_access_token  # noqa: E402 (must follow engine patch)
 from app.config import get_settings  # noqa: E402 (must follow engine patch)
 from app.database import get_db  # noqa: E402 (must follow engine patch)
 from app.main import app  # noqa: E402 (must follow engine patch)
@@ -174,14 +174,19 @@ async def client():
 
 @pytest.fixture
 def auth_token():
-    """Create a valid JWT token for testing (uses JWT_SECRET from env)."""
-    return create_access_token()
+    """Return the test dashboard token (cookie-based auth, quick-260521-9ze).
+
+    Was: create_access_token() (JWT). Now: the literal SEVA_DASHBOARD_TOKEN
+    value set in STEP 1 above. Still called `auth_token` to minimise diffs
+    in existing test helpers that call this fixture.
+    """
+    return os.environ["SEVA_DASHBOARD_TOKEN"]
 
 
 @pytest_asyncio.fixture
 async def authed_client(client, auth_token):
-    """HTTP test client with Authorization: Bearer header pre-set."""
-    client.headers.update({"Authorization": f"Bearer {auth_token}"})
+    """HTTP test client with seva_auth_token cookie pre-set."""
+    client.cookies.set("seva_auth_token", auth_token)
     yield client
 
 

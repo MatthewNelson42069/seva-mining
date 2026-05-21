@@ -22,7 +22,7 @@ internal tool with low write QPS. statement_timeout=15s is the worst-case bound.
 
 The route is registered with `prefix="/items"` and route path `/{item_id}/post-to-x`
 to match queue.py's convention. Auth-gated via the same router-level
-`Depends(get_current_user)` dependency every other mutating router uses.
+`Depends(get_current_session_token)` dependency every other mutating router uses.
 
 Per CONTEXT.md D1, D2, D3, D4, D5, D6, D7, D9, D11, D13, D14.
 """
@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_session_token
 from app.models.content_bundle import ContentBundle
 from app.models.draft_item import DraftItem
 from app.schemas.draft_item import ApprovalState, PostToXResponse
@@ -47,7 +47,7 @@ from app.services import x_poster
 router = APIRouter(
     prefix="/items",
     tags=["post-to-x"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_session_token)],
 )
 
 # Phase B scope: text-only content types only. Quotes + gold_history (B.5) and
