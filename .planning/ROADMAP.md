@@ -74,7 +74,7 @@ Full roadmap detail snapshot in this file under "v3.0.1" section (the v3.0.1 roa
 - [x] **Phase 12: Per-tenant Anthropic API Key** — Resolver + grep gate + Railway env wiring; `get_anthropic_client(company_id)` falls back to shared `ANTHROPIC_API_KEY` when per-tenant unset; all call sites routed through resolver (KEY-01..04) (completed 2026-05-20)
 - [x] **Phase 13: Per-company Branding** — Juno wordmark + logo + color palette via `companyBrandConfig.ts` registry pattern (extends Phase 9 D-08 `companySectionConfig.ts` precedent); no `if (company === 'juno')` branches; CI grep gate (BRAND-01..05) — 3/3 plans complete; 175/175 frontend tests; operator visual QA 10/10 PASS; TENANT-VISITED-v31-redux closed
 - [x] **Phase 14: Juno Content Calendar (Tab 2)** — Port of v2.1 Phase 6 paper-planner UI to `/juno/calendar`; full CRUD over Juno's `calendar_items` rows via existing `scoped_*()` helpers + `/api/{company}/calendar` router prefix; cross-tenant isolation tests (JCAL-01..05) (completed 2026-05-20)
-- [ ] **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** — Sunday 08:00 PT APScheduler cron at lock 1021; defence-sector X queries via `tweepy.AsyncClient.search_recent_tweets`; virality compute over Juno's `daily_summaries.raw_sources_jsonb`; Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; Tab 3 render (JSWEEP-01..06)
+- [x] **Phase 15: Juno Weekly Viral Sweeper (Tab 3)** — Sunday 08:00 PT APScheduler cron at lock 1021; defence-sector X queries via `tweepy.AsyncClient.search_recent_tweets`; virality compute over Juno's `daily_summaries.raw_sources_jsonb`; Sonnet 4.6 synthesis with Janes/CSIS voice + anti-tactical clause + refusal-detector pattern from Phase 10; `JUNO_SWEEPER_CRON_ENABLED` env gate; Tab 3 render (JSWEEP-01..06) (completed 2026-05-21)
 
 ---
 
@@ -349,7 +349,7 @@ Plans:
 4. Operator-approved voice UAT artifact (`phases/15-juno-weekly-viral-sweeper/voice_calibration_uat.md`) shows 5/7+ automated criteria PASS plus operator-qualitative APPROVE for Janes/CSIS voice match + anti-tactical clause + no equity/financial signal on primes; voice UAT precedes `JUNO_SWEEPER_CRON_ENABLED=true` flip
 5. Full regression suites GREEN — scheduler stays at 331+ pass + the new `test_juno_weekly_sweeper.py` tests + worker count bumps; backend at 184+ + new isolation tests; frontend at 168+ + new sweeper isolation scenario test; `scripts/verify-tenant-isolation.sh` continues to exit 0; `scripts/verify-anthropic-resolver.sh` (Phase 12) continues to exit 0 (Juno sweeper Sonnet call resolves via `get_anthropic_client('juno')`)
 
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 
 Plans:
 - [x] 15-01-PLAN.md — Wave 1 — Extend Phase 10's Juno daily_summary substrate writer (`daily_summary.py::_build_juno_*_section`) to persist story-URL arrays into `raw_sources_jsonb.defence_news / canadian_procurement / world_events` keys (D-03a — RESEARCH §3 critical fix; Juno-only; Seva untouched) (JSWEEP-02)
@@ -358,7 +358,7 @@ Plans:
 - [x] 15-04-PLAN.md — Wave 1 — New `backend/tests/test_weekly_sweeps_cross_tenant.py` asserting GET-list cross-tenant isolation on `/api/{company}/weekly-sweeps` (D-09 backend; mirror Phase 14 D-05 pattern adapted for the GET-only surface area) (JSWEEP-06)
 - [x] 15-05-PLAN.md — Wave 2 — New `scheduler/agents/juno_weekly_sweeper.py` orchestrator (D-06 — `run_juno_weekly_sweeper()` mirrors Seva sweeper shape; imports `canonical_url` + `_sunday_of_this_week` from `agents.weekly_sweeper` per D-06 LOCKED helper-share path; uses `get_anthropic_client('juno', ...)` hardcoded literal per Phase 12 D-07; wraps Sonnet via Phase 10 `call_with_refusal_guard`; idempotency-filter-includes-partial per Phase 9 critical-fix; virality compute over 3-sub-array union from Plan 15-01 substrate keys; `__main__` block for operator smoke fire per RESEARCH §6 Open Q 4) + comprehensive unit test file (JSWEEP-02, JSWEEP-03, JSWEEP-04)
 - [x] 15-06-PLAN.md — Wave 2 — Register cron in `scheduler/worker.py`: new `_make_juno_weekly_sweeper_job(engine)` factory + `JUNO_SWEEPER_CRON_ENABLED`-gated registration block at lock 1021, Sun 08:00 PT (default disabled per D-01 + D-07; mirrors Phase 10 `JUNO_CRON_ENABLED` env-gate pattern verbatim per RESEARCH §6 Open Q 4) + extend `scheduler/tests/test_worker.py` with 4 new env-gate tests (JSWEEP-01)
-- [ ] 15-07-PLAN.md — Wave 3 (checkpoint: human-verify, autonomous=false) — Operator voice UAT per D-07 step 3: manual smoke fire `python -m agents.juno_weekly_sweeper` against production DB → review 3 generated angles against 6 criteria (voice/Janes-CSIS, quantity exactly 3, X+news task contract, anti-equity, anti-tactical, refusal-detector behavior) → record verdict in `voice_calibration_uat.md` → on APPROVED, operator flips `JUNO_SWEEPER_CRON_ENABLED=true` in Railway (out-of-band per D-07 step 4)
+- [x] 15-07-PLAN.md — Wave 3 (checkpoint: human-verify, autonomous=false) — Operator voice UAT per D-07 step 3: manual smoke fire `python -m agents.juno_weekly_sweeper` against production DB → review 3 generated angles against 6 criteria (voice/Janes-CSIS, quantity exactly 3, X+news task contract, anti-equity, anti-tactical, refusal-detector behavior) → record verdict in `voice_calibration_uat.md` → on APPROVED, operator flips `JUNO_SWEEPER_CRON_ENABLED=true` in Railway (out-of-band per D-07 step 4)
 
 **Complexity:** L (largest v3.1 phase — 6 requirements; new scheduler agent module + system prompt + cron registration + tenant-aware X ingest + frontend page modifications + cross-tenant isolation tests + voice UAT precedent + operator-gated rollout via env var flip; defence-X-query set is the primary unresolved discuss-phase decision; benefits from being the last phase so Phase 12's per-tenant key resolver + Phase 13's branding + Phase 14's calendar isolation patterns are all production-tested by execution start)
 **Estimated duration:** 6-10 hours including voice UAT + operator approval cycle
@@ -418,7 +418,7 @@ Plans:
 | 12. Per-tenant Anthropic API Key | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 13. Per-company Branding | v3.1 | 3/3 | Complete   | 2026-05-20 |
 | 14. Juno Content Calendar (Tab 2) | v3.1 | 1/1 | Complete   | 2026-05-20 |
-| 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 6/7 | In Progress|  |
+| 15. Juno Weekly Viral Sweeper (Tab 3) | v3.1 | 7/7 | Complete   | 2026-05-21 |
 
 ---
 

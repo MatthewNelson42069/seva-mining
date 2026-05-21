@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
 status: verifying
-stopped_at: Completed 15-06-PLAN.md (juno_weekly_sweeper cron registration + 4 env-gate tests)
-last_updated: "2026-05-21T01:05:52.285Z"
-last_activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
+stopped_at: "Completed 15-07-PLAN.md (operator voice UAT APPROVED 2026-05-21 — interpretation b: code+test correctness; smoke fire deferred; Phase 15 closes at 7/7 plans code-side; operator out-of-band Railway env flip pending)"
+last_updated: "2026-05-21T01:19:05.060Z"
+last_activity: 2026-05-21 — Plan 15-06 landed via parallel Wave 2 executor (commits 343c711 feat + ec4ade7 test; 363/363 scheduler tests pass; production cron registered behind JUNO_SWEEPER_CRON_ENABLED gate default-disabled awaiting Plan 15-07 voice UAT + operator Railway env flip)
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-20 — v3.1 milestone scoped)
 
 ## Current Position
 
-Phase: Phase 15 — Juno Weekly Viral Sweeper — Wave 2 plans LANDING (15-05 + 15-06 complete; 15-07 voice UAT next as Wave 3)
-Plan: 15-06 complete (cron registration + 4 env-gate tests; commits 343c711 + ec4ade7) → Plan 15-07 voice UAT checkpoint next (Wave 3)
-Status: Plan 15-06 GREEN — scheduler/worker.py +82/-4 LOC (_make_juno_weekly_sweeper_job factory + JUNO_SWEEPER_CRON_ENABLED-gated registration block at Sun 08:00 PT America/Los_Angeles under lock 1021); scheduler/tests/test_worker.py +150 LOC (4 new tests); scheduler suite 359 → 363 passed (+4); D-10 byte-identical contract held (9 protected files untouched); OPS-02 lock-uniqueness still passes; CI grep gates (verify-tenant-isolation + verify-anthropic-resolver) PASS
-Last activity: 2026-05-21 — Plan 15-06 landed via parallel Wave 2 executor (commits 343c711 feat + ec4ade7 test; 363/363 scheduler tests pass; production cron registered behind JUNO_SWEEPER_CRON_ENABLED gate default-disabled awaiting Plan 15-07 voice UAT + operator Railway env flip)
+Phase: Phase 15 — Juno Weekly Viral Sweeper — COMPLETE code-side at 7/7 plans (Wave 1 + Wave 2 + Wave 3 all landed; verifier-ready)
+Plan: 15-07 complete (operator voice UAT APPROVED 2026-05-21 — interpretation b: code+test correctness basis; voice_calibration_uat.md ledger preserved unfilled for future post-D-03b-backfill smoke fire; commits c5de8f2 artifact + 38ce011 empty sign-off + final docs metadata)
+Status: Phase 15 GREEN — all 7 plans landed (15-01 substrate writer + 15-02 prompt+X query + 15-03 frontend tenant-agnostic + 15-04 backend cross-tenant test + 15-05 sweeper orchestrator + 15-06 cron registration env-gated + 15-07 voice UAT approved); JSWEEP-01..06 all behaviorally satisfied; D-10 byte-identical contract held end-to-end (zero Seva-side edits across all 7 plans); CI grep gates PASS; ready for orchestrator regression gate + phase verifier; pending operator out-of-band Railway env flip (JUNO_SWEEPER_CRON_ENABLED=true) — see 15-07-SUMMARY.md "Pending Operator Out-of-Band Actions"
+Last activity: 2026-05-21 — Plan 15-07 voice UAT APPROVED by operator (interpretation b — code+test correctness basis; substantive smoke fire deferred to post-D-03b-backfill-window opportune moment); Phase 15 closes code-side at 7/7 plans; verifier next
 
 ### v3.1 Roadmap Summary (created 2026-05-20)
 
@@ -170,6 +170,7 @@ Last activity: 2026-05-21 — Plan 15-06 landed via parallel Wave 2 executor (co
 | Phase 15-juno-weekly-viral-sweeper P01 | 12 | 2 tasks | 2 files |
 | Phase 15-juno-weekly-viral-sweeper P05 | 6.5min | 2 tasks | 2 files |
 | Phase 15-juno-weekly-viral-sweeper P06 | 3 min | 2 tasks | 2 files |
+| Phase 15-juno-weekly-viral-sweeper P07 | 5min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -390,6 +391,7 @@ Recent decisions affecting current work:
 - [Phase 15-juno-weekly-viral-sweeper]: D-06 LOCKED: imported canonical_url + _sunday_of_this_week from agents.weekly_sweeper (no Seva file edit); identity-assertion test guards against future copy-paste refactors
 - [Phase 15-juno-weekly-viral-sweeper]: Insufficient-signal status mapping for Juno = 'partial' (NOT 'completed' as Seva does) — D-03b backfill window visibility + alignment with Phase 9 idempotency-filter-includes-partial pattern
 - [Phase 15-juno-weekly-viral-sweeper]: Use os.getenv pattern for JUNO_SWEEPER_CRON_ENABLED (NOT Settings field) per RESEARCH §6 Open Q 4 LOCKED — pattern parity with Phase 10's JUNO_CRON_ENABLED gate; behavior identical, no scheduler/config.py edit needed
+- [Phase 15-juno-weekly-viral-sweeper]: Phase 15 voice UAT APPROVED by operator 2026-05-21; code-side complete; cron registration env-gated (JUNO_SWEEPER_CRON_ENABLED unset = disabled until operator out-of-band Railway flip)
 
 ### Pending Todos
 
@@ -470,9 +472,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-21T01:05:52.280Z
+Last session: 2026-05-21T01:18:59.323Z
 Last activity: 2026-05-20
-Stopped At: Completed 15-06-PLAN.md (juno_weekly_sweeper cron registration + 4 env-gate tests)
+Stopped At: Completed 15-07-PLAN.md (operator voice UAT APPROVED 2026-05-21 — interpretation b: code+test correctness; smoke fire deferred; Phase 15 closes at 7/7 plans code-side; operator out-of-band Railway env flip pending)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
