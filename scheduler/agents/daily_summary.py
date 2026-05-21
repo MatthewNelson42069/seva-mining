@@ -936,12 +936,19 @@ async def _run_juno_health_check(
 async def _build_juno_defence_news_section(
     client: AsyncAnthropic,
     entries: list[dict],
-) -> tuple[str | None, dict]:
+) -> tuple[str | None, dict, list[dict]]:
     """Call Sonnet 4.6 for the Defence News section.
 
-    Returns (markdown_or_None, diagnostic). On refusal: markdown=None,
-    diagnostic carries refusal flags. Caller writes SECTION_UNAVAILABLE_COPY
-    as the fallback.
+    Returns (markdown_or_None, diagnostic, persisted_entries). On refusal:
+    markdown=None, diagnostic carries refusal flags. Caller writes
+    SECTION_UNAVAILABLE_COPY as the fallback.
+
+    v3.1 Phase 15 D-03a: persisted_entries is the post-health-check filtered
+    entries list (capped at 30 to mirror the prompt-input cap) which the
+    orchestrator writes into raw_sources_jsonb['defence_news'] so that the
+    Phase 15 Sunday sweeper's virality compute substrate read returns the
+    real story URLs (not just diagnostic counts). See
+    .planning/phases/15-juno-weekly-viral-sweeper/15-RESEARCH.md §3.
     """
     bullets = "\n\n".join(
         f"- **{e.get('source_name','?')}**: {e.get('title','')}\n  "
@@ -954,7 +961,7 @@ async def _build_juno_defence_news_section(
         "`(Source Name)` attribution. Use the section header "
         f"`### 🛡️ Defence News`.\n\n{bullets or '(no stories ingested this fire)'}"
     )
-    return await call_with_refusal_guard(
+    text, diagnostic = await call_with_refusal_guard(
         client,
         model=JUNO_SONNET_MODEL,
         max_tokens=JUNO_SONNET_MAX_DEFENCE,
@@ -962,13 +969,15 @@ async def _build_juno_defence_news_section(
         user_prompt=user_prompt,
         section_name="defence_news",
     )
+    # v3.1 Phase 15 D-03a — persist story entries (cap mirrors bullets[:30]).
+    return (text, diagnostic, list(entries[:30]))
 
 
 async def _build_juno_canadian_procurement_section(
     client: AsyncAnthropic,
     serpapi_client: "serpapi.Client | None",
     is_morning_fire: bool,
-) -> tuple[str | None, dict, int]:
+) -> tuple[str | None, dict, int, list[dict]]:
     """Call SerpAPI for Canadian procurement queries + Sonnet 4.6
     synthesis with refusal-guard. Runs on BOTH daily fires (08:05 PT +
     12:05 PT) per CLEANUP-01 — operator preference is a full 3-section
@@ -978,10 +987,15 @@ async def _build_juno_canadian_procurement_section(
     `is_morning_fire` is retained on the signature for telemetry
     (`agent_runs.notes.is_morning_fire`) but no longer gates execution.
 
-    Returns (markdown_or_None, diagnostic, serpapi_count).
+    Returns (markdown_or_None, diagnostic, serpapi_count, persisted_entries).
+
+    v3.1 Phase 15 D-03a: persisted_entries normalizes the SerpAPI `flat`
+    hits to the same entry-dict shape used by the defence/world sections so
+    the sweeper's virality compute can treat all three substrates uniformly.
+    Capped at 20 to bound raw_sources_jsonb size (mirrors bullets[:20] cap).
     """
     if serpapi_client is None:
-        return ("", {"skipped_reason": "no_serpapi_client"}, 0)
+        return ("", {"skipped_reason": "no_serpapi_client"}, 0, [])
 
     queries = list(getattr(juno_serpapi_cfg, "JUNO_SERPAPI_QUERIES", []) or [])
     loop = asyncio.get_event_loop()
@@ -1050,21 +1064,42 @@ async def _build_juno_canadian_procurement_section(
         section_name="canadian_procurement",
     )
     diagnostic["serpapi_hit_count"] = len(flat)
-    return (text, diagnostic, serpapi_count)
+    # v3.1 Phase 15 D-03a — normalize SerpAPI hits to the standard entry-dict
+    # shape so the sweeper's virality compute (Plan 15-05) can union the
+    # three substrate sub-arrays uniformly. Cap at 20 (mirrors bullets[:20]).
+    procurement_entries: list[dict] = [
+        {
+            "source_name": (h.get("source") or {}).get("name", "SerpAPI"),
+            "title": h.get("title", ""),
+            "summary": (h.get("snippet", "") or "")[:1500],
+            "link": h.get("link", ""),
+            "published": h.get("date", ""),
+        }
+        for h in flat[:20]
+    ]
+    return (text, diagnostic, serpapi_count, procurement_entries)
 
 
 async def _build_juno_world_events_section(
     client: AsyncAnthropic,
     session: AsyncSession,
-) -> tuple[str | None, dict]:
+) -> tuple[str | None, dict, list[dict]]:
     """Ingest world-events RSS → Haiku classifier filter → Sonnet 4.6.
 
-    Returns (markdown_or_None, diagnostic). diagnostic carries:
+    Returns (markdown_or_None, diagnostic, persisted_entries). diagnostic
+    carries:
       - world_events_total_seen
       - world_events_survived (confidence >= 0.7 AND is_relevant AND
         category != not_relevant)
       - world_events_categories: dict of category → count
       - refusal_detected / first_attempt_excerpt (from call_with_refusal_guard)
+
+    v3.1 Phase 15 D-03a: persisted_entries normalizes the post-classifier
+    `survived` list to the same entry-dict shape used by the defence/
+    procurement sections (with extra `category` + `confidence` fields
+    retained from the classifier output). The orchestrator writes this into
+    raw_sources_jsonb['world_events'] for the sweeper's virality compute.
+    Capped at 25 to mirror the bullets[:25] prompt-input cap.
     """
     all_entries, _ec, _ff = await _run_juno_health_check(
         session, JUNO_WORLD_EVENTS_FEEDS
@@ -1079,6 +1114,7 @@ async def _build_juno_world_events_section(
                 "world_events_categories": {},
                 "haiku_validation_errors": [],
             },
+            [],
         )
 
     survived: list[tuple[dict, DefenceRelevance]] = []
@@ -1115,6 +1151,7 @@ async def _build_juno_world_events_section(
                 "world_events_categories": {},
                 "haiku_validation_errors": validation_errors,
             },
+            [],
         )
 
     bullets = "\n\n".join(
@@ -1141,7 +1178,22 @@ async def _build_juno_world_events_section(
     diagnostic["world_events_survived"] = len(survived)
     diagnostic["world_events_categories"] = categories
     diagnostic["haiku_validation_errors"] = validation_errors
-    return (text, diagnostic)
+    # v3.1 Phase 15 D-03a — normalize survived entries to standard shape +
+    # retain classifier category/confidence so the sweeper can weight by
+    # category if needed. Cap at 25 (mirrors bullets[:25]).
+    world_entries: list[dict] = [
+        {
+            "source_name": e.get("source_name", "?"),
+            "title": e.get("title", ""),
+            "summary": (e.get("summary", "") or "")[:1500],
+            "link": e.get("link", ""),
+            "published": e.get("published", ""),
+            "category": rel.category,
+            "confidence": float(rel.confidence),
+        }
+        for (e, rel) in survived[:25]
+    ]
+    return (text, diagnostic, world_entries)
 
 
 async def run_juno_daily_summary() -> None:
@@ -1247,6 +1299,12 @@ async def run_juno_daily_summary() -> None:
     defence_flags: list[str] = []
     defence_md: str | None = None
     defence_diag: dict = {}
+    # v3.1 Phase 15 D-03a — story-array substrate for the Sunday sweeper's
+    # virality compute. Initialized to [] so per-section exceptions leave the
+    # raw_sources_jsonb key as an empty list (NOT undefined) downstream.
+    defence_news_entries: list[dict] = []
+    procurement_entries: list[dict] = []
+    world_entries: list[dict] = []
     try:
         async with AsyncSessionLocal() as session:
             defence_entries, defence_counts, defence_flags = (
@@ -1255,8 +1313,10 @@ async def run_juno_daily_summary() -> None:
                     list(getattr(juno_feeds, "JUNO_DEFENCE_FEEDS", []) or []),
                 )
             )
-        defence_md, defence_diag = await _build_juno_defence_news_section(
-            anthropic_client, defence_entries
+        defence_md, defence_diag, defence_news_entries = (
+            await _build_juno_defence_news_section(
+                anthropic_client, defence_entries
+            )
         )
     except Exception as exc:  # noqa: BLE001 — per-section fail-closed
         logger.exception(
@@ -1270,7 +1330,7 @@ async def run_juno_daily_summary() -> None:
     procurement_diag: dict = {}
     serpapi_count = 0
     try:
-        procurement_md, procurement_diag, serpapi_count = (
+        procurement_md, procurement_diag, serpapi_count, procurement_entries = (
             await _build_juno_canadian_procurement_section(
                 anthropic_client, serpapi_client, is_morning_fire
             )
@@ -1287,8 +1347,10 @@ async def run_juno_daily_summary() -> None:
     world_diag: dict = {}
     try:
         async with AsyncSessionLocal() as session:
-            world_md, world_diag = await _build_juno_world_events_section(
-                anthropic_client, session
+            world_md, world_diag, world_entries = (
+                await _build_juno_world_events_section(
+                    anthropic_client, session
+                )
             )
     except Exception as exc:  # noqa: BLE001 — per-section fail-closed
         logger.exception(
@@ -1355,6 +1417,18 @@ async def run_juno_daily_summary() -> None:
         # schema-violating structured output. Behavioral fail-closed is
         # preserved upstream in classify_story.
         "haiku_validation_errors": list(world_diag.get("haiku_validation_errors", []) or []),
+        # v3.1 Phase 15 D-03a — story arrays for the Sweeper's virality
+        # compute substrate. Phase 10 stored only diagnostic counts; Phase
+        # 15 adds story-URL arrays so the Sunday sweeper can cross-reference
+        # X signals against the past 7 days of Juno daily-summary stories
+        # (defence_news + canadian_procurement + world_events union).
+        # See .planning/phases/15-juno-weekly-viral-sweeper/15-RESEARCH.md §3.
+        # D-03b: existing pre-Phase-15 Juno rows have empty arrays here —
+        # first 0-2 sweeps post-deploy may trip status='partial' with
+        # diagnostic note "substrate accumulating from new schema".
+        "defence_news": defence_news_entries,
+        "canadian_procurement": procurement_entries,
+        "world_events": world_entries,
     }
 
     try:
