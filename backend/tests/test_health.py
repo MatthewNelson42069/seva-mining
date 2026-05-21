@@ -18,8 +18,7 @@ os.environ.setdefault("X_API_BEARER_TOKEN", "test")
 os.environ.setdefault("X_API_KEY", "test")
 os.environ.setdefault("X_API_SECRET", "test")
 os.environ.setdefault("SERPAPI_API_KEY", "test")
-os.environ.setdefault("JWT_SECRET", "test")
-os.environ.setdefault("DASHBOARD_PASSWORD", "test")
+os.environ.setdefault("SEVA_DASHBOARD_TOKEN", "test-dashboard-token-for-tests-xyz")
 os.environ.setdefault("FRONTEND_URL", "https://test.sevamining.com")
 
 from app.main import app

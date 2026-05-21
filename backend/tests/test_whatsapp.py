@@ -27,8 +27,7 @@ def _make_settings() -> Settings:
         x_api_key="test-key",
         x_api_secret="test-secret",
         serpapi_api_key="test-key",
-        jwt_secret="a" * 32,  # >=32 bytes to pass _jwt_secret_min_length validator
-        dashboard_password="$2b$12$test",
+        seva_dashboard_token="test-dashboard-token-for-tests-xyz",
         frontend_url="http://localhost:3000",
     )
 

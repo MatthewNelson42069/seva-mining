@@ -18,8 +18,7 @@ def set_db_env(monkeypatch):
     monkeypatch.setenv("X_API_KEY", "keytest")
     monkeypatch.setenv("X_API_SECRET", "secrettest")
     monkeypatch.setenv("SERPAPI_API_KEY", "serpapitest")
-    monkeypatch.setenv("JWT_SECRET", "a" * 32)  # >=32 bytes to pass validator
-    monkeypatch.setenv("DASHBOARD_PASSWORD", "password")
+    monkeypatch.setenv("SEVA_DASHBOARD_TOKEN", "test-dashboard-token-for-tests-xyz")
     monkeypatch.setenv("FRONTEND_URL", "https://test.sevamining.com")
     from app.config import get_settings
     get_settings.cache_clear()

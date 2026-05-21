@@ -4,7 +4,6 @@ Shared test fixtures for backend tests.
 import os
 from pathlib import Path as _Path
 
-import bcrypt
 import pytest
 import pytest_asyncio
 
@@ -31,10 +30,6 @@ if not _REAL_DATABASE_URL:
 # ---------------------------------------------------------------------------
 # STEP 1: Set environment variables BEFORE any app imports
 # ---------------------------------------------------------------------------
-# 32 bytes — passes _jwt_secret_min_length validator
-_TEST_JWT_SECRET = "test-jwt-secret-for-tests-xxxxxx"
-_TEST_PASSWORD = "testpassword"
-_TEST_PASSWORD_HASH = bcrypt.hashpw(_TEST_PASSWORD.encode(), bcrypt.gensalt()).decode()
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 os.environ["DATABASE_URL"] = _TEST_DB_URL
@@ -52,8 +47,6 @@ os.environ["X_API_SECRET"] = "test-secret"
 os.environ["X_ACCESS_TOKEN"] = "test-access"
 os.environ["X_ACCESS_TOKEN_SECRET"] = "test-access-secret"
 os.environ["SERPAPI_API_KEY"] = "test-key"
-os.environ["JWT_SECRET"] = _TEST_JWT_SECRET
-os.environ["DASHBOARD_PASSWORD"] = _TEST_PASSWORD_HASH
 os.environ["SEVA_DASHBOARD_TOKEN"] = "test-dashboard-token-for-tests-xyz"
 os.environ["FRONTEND_URL"] = "http://localhost:3000"
 

@@ -1,6 +1,5 @@
 from functools import lru_cache
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,14 +8,16 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # Tolerate leftover env vars (e.g. DASHBOARD_PASSWORD, JWT_SECRET
+        # from the pre-260521-9ze password/JWT auth model) so Railway boot
+        # doesn't crash before those vars are scrubbed from the dashboard.
+        extra="ignore",
     )
 
     # Required — API cannot start without these
     database_url: str
     anthropic_api_key: str
     x_api_bearer_token: str
-    jwt_secret: str         # DEPRECATED (quick-260521-9ze): kept so Railway boot doesn't crash
-    dashboard_password: str # DEPRECATED (quick-260521-9ze): kept so Railway boot doesn't crash
     seva_dashboard_token: str   # Cookie-token auth — env var SEVA_DASHBOARD_TOKEN
     frontend_url: str = "http://localhost:5173"
 
@@ -63,16 +64,6 @@ class Settings(BaseSettings):
     # Vercel URL so dev environments without FEED_BASE_URL set still produce
     # working clickable links to the user's feed.
     feed_base_url: str = "https://seva-mining-smm.vercel.app"
-
-    @field_validator("jwt_secret")
-    @classmethod
-    def _jwt_secret_min_length(cls, v: str) -> str:
-        """HS256 requires >=32 bytes of entropy to avoid key-shorter-than-hash weakness."""
-        if len(v) < 32:
-            raise ValueError(
-                f"JWT_SECRET must be at least 32 bytes for SHA256 HMAC security (got {len(v)})"
-            )
-        return v
 
 
 @lru_cache

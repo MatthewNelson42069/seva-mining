@@ -36,8 +36,7 @@ def test_settings_loads_from_env(monkeypatch):
         "X_API_KEY": "keytest",
         "X_API_SECRET": "secrettest",
         "SERPAPI_API_KEY": "serpapitest",
-        "JWT_SECRET": "a" * 32,  # >=32 bytes to pass validator
-        "DASHBOARD_PASSWORD": "passwordtest",
+        "SEVA_DASHBOARD_TOKEN": "test-dashboard-token-for-tests-xyz",
         "FRONTEND_URL": "https://test.sevamining.com",
     }
     for k, v in required_vars.items():
@@ -48,45 +47,6 @@ def test_settings_loads_from_env(monkeypatch):
     settings = Settings()
     assert settings.database_url == required_vars["DATABASE_URL"]
     assert settings.anthropic_api_key == "sk-ant-test"
-
-
-def test_jwt_secret_valid_length_passes(monkeypatch):
-    """JWT_SECRET of exactly 32 bytes is accepted."""
-    required = {
-        "DATABASE_URL": "postgresql+asyncpg://test-pooler.neon.tech/testdb?sslmode=require",
-        "ANTHROPIC_API_KEY": "sk-ant-test",
-        "X_API_BEARER_TOKEN": "bearertest",
-        "JWT_SECRET": "a" * 32,  # exactly at boundary
-        "DASHBOARD_PASSWORD": "bcrypt-hash-placeholder",
-    }
-    for k, v in required.items():
-        monkeypatch.setenv(k, v)
-    from app.config import get_settings
-    get_settings.cache_clear()
-    from app.config import Settings
-    settings = Settings()
-    assert settings.jwt_secret == "a" * 32
-
-
-def test_jwt_secret_too_short_raises(monkeypatch):
-    """JWT_SECRET shorter than 32 bytes raises ValidationError with length in message."""
-    required = {
-        "DATABASE_URL": "postgresql+asyncpg://test-pooler.neon.tech/testdb?sslmode=require",
-        "ANTHROPIC_API_KEY": "sk-ant-test",
-        "X_API_BEARER_TOKEN": "bearertest",
-        "JWT_SECRET": "a" * 25,  # too short
-        "DASHBOARD_PASSWORD": "bcrypt-hash-placeholder",
-    }
-    for k, v in required.items():
-        monkeypatch.setenv(k, v)
-    from app.config import get_settings
-    get_settings.cache_clear()
-    from app.config import Settings
-    with pytest.raises(ValidationError) as exc_info:
-        Settings()
-    err_str = str(exc_info.value)
-    assert "JWT_SECRET must be at least 32 bytes" in err_str
-    assert "25" in err_str  # actual length surfaced
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +60,7 @@ def test_ontario_law_filter_model_default(monkeypatch):
         "DATABASE_URL": "postgresql+asyncpg://test-pooler.neon.tech/testdb?sslmode=require",
         "ANTHROPIC_API_KEY": "sk-ant-test",
         "X_API_BEARER_TOKEN": "bearertest",
-        "JWT_SECRET": "a" * 32,
-        "DASHBOARD_PASSWORD": "bcrypt-hash-placeholder",
+        "SEVA_DASHBOARD_TOKEN": "test-dashboard-token-for-tests-xyz",
     }
     for k, v in required.items():
         monkeypatch.setenv(k, v)
@@ -121,8 +80,7 @@ def test_ontario_law_filter_model_env_override(monkeypatch):
         "DATABASE_URL": "postgresql+asyncpg://test-pooler.neon.tech/testdb?sslmode=require",
         "ANTHROPIC_API_KEY": "sk-ant-test",
         "X_API_BEARER_TOKEN": "bearertest",
-        "JWT_SECRET": "a" * 32,
-        "DASHBOARD_PASSWORD": "bcrypt-hash-placeholder",
+        "SEVA_DASHBOARD_TOKEN": "test-dashboard-token-for-tests-xyz",
         "ONTARIO_LAW_FILTER_MODEL": "claude-haiku-test",
     }
     for k, v in required.items():
