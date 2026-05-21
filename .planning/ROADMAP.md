@@ -428,10 +428,14 @@ Plans:
 5. `grep -c "Coming in Phase 10" frontend/src/pages/SummaryFeedPage.tsx` returns 0 (stale copy gone); replaced with semantically correct tenant-aware copy OR block deleted entirely
 6. All existing tests still GREEN: frontend 181+ / backend 191+ / scheduler 363+ (zero regressions)
 
-**Plans:** 1 plan
+**Plans:** 5 plans (Wave 1, parallel-safe)
 
 Plans:
-- [ ] 16-01-PLAN.md — Audit cleanup bundle: 5 tasks (CLEAN-01..05) addressing frontend ESLint + backend ruff + scheduler F401 + scheduler test RuntimeWarnings + stale SummaryFeedPage.tsx empty-state copy; mirrors Phase 11 single-plan shape
+- [ ] 16-01-PLAN.md — CLEAN-01: frontend ESLint cleanup (15 errors across 4 frontend files); mirrors Phase 11 single-task plan shape
+- [ ] 16-02-PLAN.md — CLEAN-02: backend ruff cleanup (17 UP017/I001/E501 errors across 4 backend files)
+- [ ] 16-03-PLAN.md — CLEAN-03: scheduler ruff F401 cleanup (6 unused imports across 4 scheduler files)
+- [ ] 16-04-PLAN.md — CLEAN-04: scheduler test RuntimeWarning fix (4 unawaited coroutines in test_daily_summary_prune.py)
+- [ ] 16-05-PLAN.md — CLEAN-05: SummaryFeedPage stale Phase-9-era empty-state copy replacement (1 frontend production file)
 
 **UI hint**: no (most items are lint auto-fixes; CLEAN-05 touches a React file but only deletes/rewrites a string, not new visual surfaces)
 
