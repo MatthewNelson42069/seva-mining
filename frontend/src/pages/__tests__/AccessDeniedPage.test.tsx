@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 
 // We mock useCompanyBrand to control the wordmark without needing full router state.
 vi.mock('@/hooks/useCompanyBrand', () => ({
