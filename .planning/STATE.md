@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.1
 milestone_name: — Juno Feature Parity + Branding
-status: Phase 15 context gathered — ready to ui-phase or plan-phase
-stopped_at: Phase 15 (Juno Weekly Viral Sweeper) discuss-phase complete 2026-05-20. 10 decisions locked across 4 gray areas. THE BIG decision (defence-sector X queries) resolved with starter handle set (RUSI/CSIS/IISS/DefenseNews/BreakingDefense/DefenseScoop/JanesIntel/CDA_CDAI/canadaforces + #defence #NATO; cashtags EXCLUDED per anti-feature). New module `scheduler/agents/juno_weekly_sweeper.py` parallel to Phase 10 pattern. New `JUNO_SWEEPER_SYSTEM_PROMPT` in juno/prompts.py with Janes/CSIS voice + verbatim anti-tactical clause from Phase 10. Refusal-detector reused verbatim. Virality compute over 3-sub-array union (defence_news + canadian_procurement + world_events). Mirror Phase 10 operator rollout: deploy disabled → smoke fire → voice UAT → flip JUNO_SWEEPER_CRON_ENABLED. Frontend short-circuit removal at WeeklyViralSweeperPage.tsx:48-56 (mirrors Phase 14). Zero Seva-side changes (D-10). Next step → `/gsd:plan-phase 15` (or `/gsd:ui-phase 15` if you want a formal Tab 3 design contract).
-last_updated: "2026-05-21T01:00:00.000Z"
-last_activity: 2026-05-20 — Phase 15 discuss-phase complete; 10 decisions locked; largest v3.1 phase scoped; operator voice UAT precedent from Phase 10 mirrored
+status: verifying
+stopped_at: Completed 15-juno-weekly-viral-sweeper/15-03-PLAN.md (Wave 1 parallel executor)
+last_updated: "2026-05-21T00:44:22.315Z"
+last_activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno tests; AppHeader.brand.test.tsx NEW with 5 FOWB/dataset/title/favicon/cleanup tests; commits 9b3b24e + 76a1903 + 412e272 sign-off; 175/175 tests pass; operator visual QA approved)
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 14
+  completed_plans: 9
 ---
 
 # Project State
@@ -164,6 +164,7 @@ Last activity: 2026-05-20 — Plan 13-03 landed (AppHeader.test.tsx +2 Juno test
 | Phase 13 P02 | 2 | 3 tasks | 4 files |
 | Phase 13-per-company-branding P03 | 35 | 4 tasks | 2 files |
 | Phase 14-juno-content-calendar P01 | 6 | 4 tasks | 5 files |
+| Phase 15-juno-weekly-viral-sweeper P15-03 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -377,6 +378,7 @@ Recent decisions affecting current work:
 - [Phase 13]: Wave 2: CompanyBrandEffect mounted as Fragment sibling of CompanyScopedRoute (element={<><CompanyBrandEffect /><CompanyScopedRoute /></>}) — preserves SRP split between brand effect and route guard
 - [Phase 13]: operator approved Phase 13 visual QA 2026-05-20 — Juno navy palette (oklch(0.58 0.14 245)) reads institutional defence; FOWB-free transitions verified manually at 1440x900 (all 6 MUST-PASS + all 4 SHOULD-PASS items confirmed)
 - [Phase 14-juno-content-calendar]: Phase 14 Plan 01: deleted 13-line Phase 9 D-09 Juno calendar short-circuit at ContentCalendarPage.tsx:42-54 per D-01; added 3 frontend RTL + 4 backend pytest cross-tenant isolation tests per D-04/D-05; surgically relaxed REQUIREMENTS.md JCAL-01 wording per D-06 with *(D-06)* annotation; D-07 byte-identical zero-regression contract preserved (12 critical files unchanged). Frontend 175→178 tests, backend 184→188 tests, all JCAL-01..05 behaviorally satisfied. Ready for phase-14 verifier.
+- [Phase 15-juno-weekly-viral-sweeper]: 15-03: deleted Phase 9 D-09 Juno sweeper short-circuit; renamed inner Seva-only component to TenantWeeklyViralSweeperPage with prop-driven companyId; added 3 RTL tests for per-tenant TanStack Query key isolation (JSWEEP-05/06 frontend portion)
 
 ### Pending Todos
 
@@ -457,9 +459,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-05-20T22:25:20.745Z
+Last session: 2026-05-21T00:44:22.309Z
 Last activity: 2026-05-20
-Stopped At: Completed 14-01-PLAN.md — Juno content calendar gate removal; 4 tasks committed (1ec09ae feat, 75a3039 test, 6c7674d test, f063426 docs); frontend 178/178 + backend 188/188 GREEN; D-07 zero-regression preserved; ready for phase-14 verifier
+Stopped At: Completed 15-juno-weekly-viral-sweeper/15-03-PLAN.md (Wave 1 parallel executor)
 
 Prior activity: 2026-05-20T16:32:44.415Z — Completed 11-01-PLAN.md — CLEANUP-01 closed; SerpAPI morning-only gate removed in scheduler/agents/daily_summary.py with atomic test refresh; 328/328 scheduler tests GREEN; commit 1e2c03f.
 
