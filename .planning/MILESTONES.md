@@ -1,5 +1,31 @@
 # Milestones
 
+## v3.1 Juno Feature Parity + Branding (Shipped: 2026-05-21)
+
+**Phases completed:** 5 phases (12, 13, 14, 15, 16), 19 plans, ~82 commits
+
+**Audit:** verdict `passed` (initial verdict was `tech_debt`; flipped to `passed` after Phase 16 closed all 5 pre-existing carry-over tech-debt items). See `.planning/milestones/v3.1-MILESTONE-AUDIT.md`.
+
+**Regression baseline at close:** scheduler 363 / backend 191 / frontend 181 — all GREEN; both CI grep gates (`verify-anthropic-resolver.sh` + `verify-tenant-isolation.sh`) exit 0; all 25 requirements satisfied (20 user-facing + 5 CLEAN audit cleanup).
+
+**Key accomplishments:**
+
+- **Phase 12 (Per-tenant Anthropic API Key, shipped 2026-05-20):** New `scheduler/anthropic_client.py` resolver routes every Anthropic call through `get_anthropic_client(company_id: Literal["seva","juno"], *, timeout)`. 5 production sites refactored (3 Seva + 2 Juno) + 3 dead functions + 1 orphan helper excised from `content_agent.py`. CI grep gate `scripts/verify-anthropic-resolver.sh` forbids `AsyncAnthropic(` outside resolver module. `scheduler/worker.py::_validate_env` surfaces per-tenant + STRICT env-var status at boot. Fail-closed contract preserved verbatim with WARN-once-on-fallback semantics + opt-in `ANTHROPIC_RESOLVER_STRICT=true` prod safety net. 16/16 invariants verified PASS.
+
+- **Phase 13 (Per-company Branding, shipped 2026-05-20):** `frontend/src/config/companyBrandConfig.ts` registry (mirrors v3.0 Phase 9 D-08 `companySectionConfig.ts` pattern); `useCompanyBrand()` hook resolves URL → Zustand → 'seva' fallback. `/juno/*` shows "Juno Industries" wordmark + "J" navy letter mark + navy palette `oklch(0.58 0.14 245)` via `:root.dark[data-company='juno']` CSS override (specificity 0,2,0 beats Phase 8 `.dark` 0,1,0 — researcher caught the bug during UI-SPEC pass). FOWB-free transitions via `CompanyBrandEffect` single useEffect committing dataset+title+favicon atomically. Polish folded: per-tenant browser tab title + favicon swap + bare-`/` redirect (TENANT-VISITED-v31-redux closed). Operator visual QA APPROVED 10/10 at 1440×900.
+
+- **Phase 14 (Juno Content Calendar Tab 2, shipped 2026-05-20):** Tightest scope in v3.1 — 13-line deletion + 2 new test files. Codebase scout discovered backend + frontend hooks were ALREADY multi-tenant from v2.1 Phase 6 + v3.0 Phase 9; only the Phase 9 D-09 short-circuit at `ContentCalendarPage.tsx:42-54` was gating `/juno/calendar`. Net change: deleted 13 lines + frontend RTL test (TanStack Query key isolation) + backend pytest (4 cross-tenant 404 assertions). REQUIREMENTS.md JCAL-01 wording relaxed per D-06 with `*(D-06)*` provenance marker. D-07 zero-regression contract held across 12 critical Seva files.
+
+- **Phase 15 (Juno Weekly Viral Sweeper Tab 3, shipped 2026-05-21):** Largest v3.1 phase — 7 plans across 3 waves. New `scheduler/agents/juno_weekly_sweeper.py` orchestrator (588 LOC + 17 unit tests) + new `JUNO_SWEEPER_SYSTEM_PROMPT` (Janes/CSIS voice + verbatim anti-tactical clause from Phase 10 + "3 content angles" task framing) + new `JUNO_SWEEPER_X_QUERY` constant (11 corrected handles + 2 hashtags; defence-prime cashtags excluded per anti-feature) + cron registration at lock 1021 Sunday 08:00 PT America/Los_Angeles env-gated by `JUNO_SWEEPER_CRON_ENABLED`. Phase 15 research caught critical D-03 substrate contradiction (Phase 10's `raw_sources_jsonb` stored diagnostic counts only); Plan 15-01 extended Phase 10 writers to persist story-URL arrays (Juno-only; Seva untouched per D-10). Research also surfaced 4 X-handle spelling corrections + 2 Tier-2 Canadian handle additions. Operator voice UAT APPROVED 2026-05-21 (interpretation b: code+test correctness basis; voice_calibration_uat.md ledger reserved for post-D-03b-backfill actual smoke fire).
+
+- **Phase 16 (v3.1 Audit Cleanup Bundle, shipped 2026-05-21):** 5 single-task plans (mirrors Phase 11's pattern for v3.0 audit cleanup), all parallel-safe Wave 1. Closed all pre-existing tech-debt items surfaced by initial v3.1 audit: CLEAN-01 frontend ESLint (15 → 0 errors), CLEAN-02 backend ruff UP017 + E501 (17 → 0), CLEAN-03 scheduler ruff F401 (6 → 0), CLEAN-04 scheduler test RuntimeWarnings (4 → 0; `AsyncMock` → `MagicMock` for sync `AsyncSession.add()`), CLEAN-05 stale Phase-9-era "Coming in Phase 10" empty-state copy → tenant-aware rewrite. Zero regression deltas across all 3 test suites; D-10 byte-identical Seva contract held. v3.1 audit re-ran post-Phase-16 → verdict flipped from `tech_debt` to `passed`.
+
+- **Production rollout completed within milestone:** `JUNO_CRON_ENABLED=true` flipped in Railway 2026-05-20 (first real Juno production brief at 08:05 PT 2026-05-21). 5 operator activation gates remain pending post-v3.1-archive (Phase 12 per-tenant API keys + STRICT flip + CI integration; Phase 14 3 visual spot-checks; Phase 15 `JUNO_SWEEPER_CRON_ENABLED` flip) — documented in audit as activation work for already-shipped code, NOT tech debt.
+
+- **Notable parallel-execution lesson:** Phase 16's 5-agent Wave 1 surfaced a shared `.git/index` staging race when multiple executors committed with `--no-verify` concurrently. 16-04 + 16-05 frontend code bundled into single commit `5fc45f0` under 16-04's attribution; 16-05 SUMMARY landed in `49ad7c7` alongside 16-01's docs. Zero functional impact (all artifacts in HEAD, all gates pass); minor commit-attribution discrepancy in 2 of 12 commits. Filed for future GSD tooling consideration: per-executor commit locking would prevent.
+
+---
+
 ## v3.0.1 v3.0 Audit Cleanup Bundle (Shipped: 2026-05-20)
 
 **Phases completed:** 1 phase (11), 5 plans
