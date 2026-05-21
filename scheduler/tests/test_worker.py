@@ -1015,3 +1015,153 @@ async def test_juno_weekly_sweeper_NOT_registered():
     finally:
         if scheduler.running:
             scheduler.shutdown(wait=False)
+
+
+# ---------------------------------------------------------------------------
+# v3.1 Phase 15 — JUNO_SWEEPER_CRON_ENABLED env-gate tests (JSWEEP-01)
+#
+# Mirrors the Phase 10 JUNO_CRON_ENABLED env-gate test shape verbatim
+# (worker.py:458 precedent + tests above). Production deploys default to
+# DISABLED so the operator must explicitly opt in AFTER voice UAT
+# (.planning/phases/15-juno-weekly-viral-sweeper/15-07-PLAN.md) by flipping
+# JUNO_SWEEPER_CRON_ENABLED=true in Railway env. Rollback is a single
+# env-var unset (no redeploy needed). Lock ID 1021 was already reserved in
+# Phase 9 D-01 so OPS-02 uniqueness assertion is unchanged.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_juno_sweeper_cron_disabled_by_default():
+    """JSWEEP-01 — When JUNO_SWEEPER_CRON_ENABLED is unset (or 'false'),
+    build_scheduler() registers NO juno_weekly_sweeper job.
+
+    Production deploys default to disabled until operator approves voice UAT
+    (mirrors Phase 10 JUNO_CRON_ENABLED rollout pattern per D-07).
+    """
+    mock_engine = MagicMock()
+    # Clear both env vars — neither juno_daily_summary nor juno_weekly_sweeper register
+    env_clear = {"JUNO_CRON_ENABLED": "false", "JUNO_SWEEPER_CRON_ENABLED": "false"}
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "8"}),
+    ), patch.dict(os.environ, env_clear, clear=False):
+        scheduler = await build_scheduler(mock_engine)
+
+    try:
+        assert scheduler.get_job("juno_weekly_sweeper") is None, (
+            "juno_weekly_sweeper MUST NOT register when "
+            "JUNO_SWEEPER_CRON_ENABLED is unset/false (JSWEEP-01)"
+        )
+        ids = [j.id for j in scheduler.get_jobs()]
+        assert "juno_weekly_sweeper" not in ids
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_juno_sweeper_cron_enabled_registers_job():
+    """JSWEEP-01 — When JUNO_SWEEPER_CRON_ENABLED=true, build_scheduler()
+    registers exactly one juno_weekly_sweeper job at Sun 08:00 PT.
+
+    Mirrors the v3.0 Phase 10 JUNO_CRON_ENABLED-enabled assertion shape.
+    """
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "8"}),
+    ), patch.dict(os.environ, {
+        "JUNO_CRON_ENABLED": "true",
+        "JUNO_SWEEPER_CRON_ENABLED": "true",
+    }):
+        scheduler = await build_scheduler(mock_engine)
+
+    try:
+        job = scheduler.get_job("juno_weekly_sweeper")
+        assert job is not None, (
+            "juno_weekly_sweeper MUST register when "
+            "JUNO_SWEEPER_CRON_ENABLED=true (JSWEEP-01)"
+        )
+        # Trigger spec: Sunday 08:00 America/Los_Angeles
+        trigger = job.trigger
+        # CronTrigger str() includes the field values; for robustness, sniff multiple ways
+        fields = {f.name: str(f) for f in trigger.fields}
+        assert "sun" in fields.get("day_of_week", "").lower() or "6" in fields.get("day_of_week", ""), (
+            f"juno_weekly_sweeper trigger day_of_week must be 'sun', got {fields.get('day_of_week')!r}"
+        )
+        assert fields.get("hour") == "8", (
+            f"juno_weekly_sweeper trigger hour must be 8, got {fields.get('hour')!r}"
+        )
+        assert fields.get("minute") == "0", (
+            f"juno_weekly_sweeper trigger minute must be 0, got {fields.get('minute')!r}"
+        )
+        tz_name = str(getattr(trigger, "timezone", ""))
+        assert "Los_Angeles" in tz_name, (
+            f"juno_weekly_sweeper trigger timezone must be America/Los_Angeles, got {tz_name!r}"
+        )
+        # Total registered job count is 5 with both env gates flipped
+        ids = sorted(j.id for j in scheduler.get_jobs())
+        expected = sorted([
+            "daily_summary",
+            "daily_summary_prune",
+            "weekly_sweeper",
+            "juno_daily_summary",
+            "juno_weekly_sweeper",  # v3.1 Phase 15 addition
+        ])
+        assert ids == expected, f"expected {expected}, got {ids}"
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+@pytest.mark.asyncio
+async def test_juno_sweeper_cron_independent_of_juno_daily_summary_gate():
+    """JSWEEP-01 — The two Juno env gates are INDEPENDENT.
+
+    Setting JUNO_SWEEPER_CRON_ENABLED=true while JUNO_CRON_ENABLED is false
+    registers ONLY the sweeper (not the daily summary). Mitigates the typo
+    scenario where one env var name is wrong but the other should still
+    function correctly.
+    """
+    mock_engine = MagicMock()
+    with patch(
+        "worker._read_schedule_config",
+        new=AsyncMock(return_value={"morning_digest_schedule_hour": "8"}),
+    ), patch.dict(os.environ, {
+        "JUNO_CRON_ENABLED": "false",
+        "JUNO_SWEEPER_CRON_ENABLED": "true",
+    }):
+        scheduler = await build_scheduler(mock_engine)
+
+    try:
+        ids = {j.id for j in scheduler.get_jobs()}
+        assert "juno_weekly_sweeper" in ids, (
+            "juno_weekly_sweeper MUST register when JUNO_SWEEPER_CRON_ENABLED=true "
+            "(independent of JUNO_CRON_ENABLED)"
+        )
+        assert "juno_daily_summary" not in ids, (
+            "juno_daily_summary MUST NOT register when JUNO_CRON_ENABLED=false "
+            "(independent of JUNO_SWEEPER_CRON_ENABLED)"
+        )
+    finally:
+        if scheduler.running:
+            scheduler.shutdown(wait=False)
+
+
+def test_juno_sweeper_lock_id_is_1021_and_unique():
+    """OPS-02 — JOB_LOCK_IDS['juno_weekly_sweeper'] is 1021 AND no duplicates.
+
+    Lock 1021 was reserved in Phase 9 D-01; Phase 15 plan 15-06 wires the
+    registration but does NOT modify the JOB_LOCK_IDS dict. This test is a
+    sanity check on the reservation + the OPS-02 uniqueness invariant.
+    """
+    from worker import JOB_LOCK_IDS
+
+    assert JOB_LOCK_IDS["juno_weekly_sweeper"] == 1021, (
+        f"juno_weekly_sweeper lock ID must be 1021 (Phase 9 D-01 reservation), "
+        f"got {JOB_LOCK_IDS['juno_weekly_sweeper']}"
+    )
+    # OPS-02 — all lock IDs unique
+    assert len(set(JOB_LOCK_IDS.values())) == len(JOB_LOCK_IDS), (
+        f"JOB_LOCK_IDS has duplicate values: {JOB_LOCK_IDS}"
+    )
