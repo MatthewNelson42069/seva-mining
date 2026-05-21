@@ -37,7 +37,12 @@ async def token_set(token: str, next: str = "/"):
         key="seva_auth_token",
         value=token,
         httponly=True,
-        samesite="lax",
+        # SameSite=None required for cross-site cookie delivery on AJAX/fetch
+        # calls from Vercel frontend (seva-mining-smm.vercel.app) to Railway
+        # backend (api-production-230c.up.railway.app) — different eTLD+1.
+        # `Secure` (already set below) is mandatory whenever SameSite=None.
+        # Lax was the original spec but blocked cross-site fetches → 403 loop.
+        samesite="none",
         secure=True,
         max_age=31536000,
     )

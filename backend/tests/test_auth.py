@@ -35,7 +35,10 @@ async def test_token_set_valid_sets_cookie_and_redirects(client):
     assert "seva_auth_token=" in set_cookie
     assert token in set_cookie
     assert "httponly" in set_cookie.lower()
-    assert "samesite=lax" in set_cookie.lower()
+    # SameSite=None required for cross-site cookie delivery on the
+    # Vercel-frontend → Railway-backend boundary (different eTLD+1).
+    # `Secure` (asserted below) is mandatory whenever SameSite=None.
+    assert "samesite=none" in set_cookie.lower()
     assert "secure" in set_cookie.lower()
     assert "max-age=31536000" in set_cookie.lower()
 
