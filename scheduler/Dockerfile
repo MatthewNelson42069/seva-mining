@@ -17,6 +17,7 @@ RUN uv sync --no-dev
 COPY worker.py .
 COPY config.py .
 COPY database.py .
+COPY anthropic_client.py .
 COPY agents/ ./agents/
 COPY models/ ./models/
 COPY services/ ./services/
