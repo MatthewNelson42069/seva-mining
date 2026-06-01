@@ -19,7 +19,9 @@ COPY config.py .
 COPY database.py .
 COPY anthropic_client.py .
 COPY agents/ ./agents/
+COPY companies/ ./companies/
 COPY models/ ./models/
+COPY queries/ ./queries/
 COPY services/ ./services/
 COPY seed_content_data.py .
 
